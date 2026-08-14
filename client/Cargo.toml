@@ -5,7 +5,9 @@ edition = "2024"
 
 [dependencies]
 cpal = "0.18.1"
+futures-util = "0.3.34"
 ring = "0.17.14"
 tokio = { version = "1.53.1", features = ["full"] }
+tokio-tungstenite = "0.30.0"
 webrtc = "0.20.2"
 zeroize = "1.9.0"

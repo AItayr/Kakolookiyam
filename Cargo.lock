@@ -377,8 +377,10 @@ name = "client"
 version = "0.1.0"
 dependencies = [
  "cpal",
+ "futures-util",
  "ring",
  "tokio",
+ "tokio-tungstenite",
  "webrtc",
  "zeroize",
 ]
