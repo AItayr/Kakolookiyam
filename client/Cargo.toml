@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+audiopus = "0.2.0"
 bytes = "1.12.1"
 cpal = "0.18.1"
 futures-util = "0.3.34"

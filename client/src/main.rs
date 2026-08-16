@@ -1,3 +1,5 @@
+#![allow(unused_mut)] // Masque les avertissements inoffensifs du compilateur
+
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use futures_util::{StreamExt, SinkExt};
 use std::sync::Arc;
@@ -54,10 +56,7 @@ fn detect_microphone() {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🛡️ Lancement du client SecureP2P...");
 
-    // Test matériel audio
     detect_microphone();
-
-    // On vérifie si ce terminal a été lancé avec l'argument "--caller"
     let is_caller = std::env::args().any(|a| a == "--caller");
 
     // ==========================================
@@ -78,9 +77,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let peer_connection = Arc::new(api.new_peer_connection(config).await?);
     let (tx_signal, mut rx_signal) = tokio::sync::mpsc::channel::<Signal>(32);
 
-    // ==========================================
-    // ÉCOUTEUR D'ÉVÉNEMENTS ICE
-    // ==========================================
     let tx_ice = tx_signal.clone();
     peer_connection.on_ice_candidate(Box::new(move |c: Option<RTCIceCandidate>| {
         let tx_ice = tx_ice.clone();
@@ -94,25 +90,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }));
 
     // ==========================================
-    // RÉCEPTION DU FLUX AUDIO DISTANT
+    // CANAL DE COMMUNICATION POUR LES HAUT-PARLEURS
     // ==========================================
+    let (tx_speaker, rx_speaker) = std::sync::mpsc::channel::<Vec<i16>>();
+
     peer_connection.on_track(Box::new(move |track, _receiver, _transceiver| {
+        let tx_speaker = tx_speaker.clone();
         Box::pin(async move {
             println!("🔊 [P2P] Flux audio distant détecté ! Réception de la voix en cours...");
 
             tokio::spawn(async move {
+                // Le décodeur Opus recrache en Stéréo (2 canaux centrés si la source est Mono)
+                let mut decoder = audiopus::coder::Decoder::new(
+                    audiopus::SampleRate::Hz48000,
+                    audiopus::Channels::Stereo
+                ).expect("Erreur création décodeur Opus");
+
                 let track = track;
-                let mut buf = vec![0u8; 1500];
-                while let Ok((_, _)) = track.read(&mut buf).await {
-                    println!("🎧 Paquet audio distant reçu sur la piste !");
+                while let Ok((rtp_packet, _)) = track.read_rtp().await {
+                    let mut decoded_pcm = vec![0i16; 1920 * 2];
+                    if let Ok(len) = decoder.decode(Some(rtp_packet.payload.as_ref()), &mut decoded_pcm, false) {
+                        let total_samples = len * 2;
+                        decoded_pcm.truncate(total_samples);
+                        let _ = tx_speaker.send(decoded_pcm);
+                    }
                 }
             });
         })
     }));
 
-    // ==========================================
-    // CRÉATION DE LA PISTE AUDIO LOCALE (OPUS)
-    // ==========================================
     let audio_track = StdArc::new(TrackLocalStaticSample::new(
         RTCRtpCodecCapability {
             mime_type: "audio/opus".to_owned(),
@@ -124,12 +130,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "kakolookiyam_voice".to_owned(),
     ));
 
-    // On ajoute cette piste au pont P2P
     let rtp_sender = peer_connection
         .add_track(StdArc::clone(&audio_track) as StdArc<dyn webrtc::track::track_local::TrackLocal + Send + Sync>)
         .await?;
 
-    // Maintenance des paquets RTCP en arrière-plan
     tokio::spawn(async move {
         let mut rtcp_buf = vec![0u8; 1500];
         while let Ok((_, _)) = rtp_sender.read(&mut rtcp_buf).await {}
@@ -192,17 +196,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok((ws_stream, _)) => {
             println!("✅ Connecté au serveur de signalisation !");
 
-            // ==========================================
-            // CAPTURE MICROPHONE (CANAL SYNCHRone PUR)
-            // ==========================================
             let audio_track_clone = Arc::clone(&audio_track);
-            let (tx_audio, rx_audio) = std::sync::mpsc::channel::<Vec<u8>>();
+            let (tx_audio, mut rx_audio) = tokio::sync::mpsc::channel::<Vec<u8>>(500);
 
-            // Tâche asynchrone Tokio qui récupère les blocs et les écrit dans WebRTC
             tokio::spawn(async move {
-                while let Ok(samples_u8) = rx_audio.recv() {
+                while let Some(opus_packet) = rx_audio.recv().await {
                     let sample_data = webrtc::media::Sample {
-                        data: bytes::Bytes::from(samples_u8),
+                        data: bytes::Bytes::from(opus_packet),
                         duration: std::time::Duration::from_millis(20),
                         ..Default::default()
                     };
@@ -210,44 +210,202 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             });
 
-            // Thread natif pur pour CPAL (sans aucun appel au contexte Tokio)
             std::thread::spawn(move || {
                 use cpal::traits::{DeviceTrait, StreamTrait};
                 let host = cpal::default_host();
-                let device = match host.default_input_device() {
+
+                // 1. Initialisation du MICROPHONE
+                let mic_device = match host.default_input_device() {
                     Some(d) => d,
                     None => return,
                 };
-                let config = match device.default_input_config() {
+                let mic_supported_config = match mic_device.default_input_config() {
                     Ok(c) => c,
                     Err(_) => return,
                 };
+                let mic_config: cpal::StreamConfig = mic_supported_config.into();
+                let mic_channels = mic_config.channels as usize;
 
                 println!("🎙️ Démarrage de la capture audio en direct du microphone...");
 
-                let err_fn = move |_err| {};
-                let tx_audio_clone = tx_audio;
+                let tx_audio_f32 = tx_audio.clone();
+                let tx_audio_i16 = tx_audio.clone();
+                let err_fn_mic = |err| eprintln!("⚠️ Erreur micro : {}", err);
 
-                if let Ok(stream) = device.build_input_stream(
-                    config.into(),
-                    move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                        let mut samples_u8 = Vec::with_capacity(data.len() * 2);
-                        for &sample in data {
-                            samples_u8.extend_from_slice(&sample.to_le_bytes());
-                        }
-                        let _ = tx_audio_clone.send(samples_u8);
+                // CORRECTION : On FORCE l'encodeur en MONO (recentrage parfait de la voix)
+                let opus_channels = audiopus::Channels::Mono;
+                let chunk_size = 960; // 20ms à 48kHz en Mono = exactement 960 échantillons
+
+                let create_encoder = || {
+                    audiopus::coder::Encoder::new(
+                        audiopus::SampleRate::Hz48000,
+                        opus_channels,
+                        audiopus::Application::Voip
+                    ).expect("Erreur création encodeur Opus")
+                };
+
+                let mic_stream_opt = match mic_supported_config.sample_format() {
+                    cpal::SampleFormat::F32 => {
+                        let mut encoder = create_encoder();
+                        let mut mic_buffer = Vec::new();
+                        mic_device.build_input_stream(
+                            mic_config.clone(),
+                            move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                                // DOWNMIX : On additionne les canaux de la carte son (G + D)
+                                for frame in data.chunks(mic_channels) {
+                                    let sum: f32 = frame.iter().sum();
+                                    let mono_sample = sum.clamp(-1.0, 1.0); // Anti-saturation
+                                    mic_buffer.push((mono_sample * i16::MAX as f32) as i16);
+                                }
+
+                                while mic_buffer.len() >= chunk_size {
+                                    let frame: Vec<i16> = mic_buffer.drain(..chunk_size).collect();
+                                    let mut encoded = vec![0u8; 1500];
+                                    if let Ok(len) = encoder.encode(&frame, &mut encoded) {
+                                        encoded.truncate(len);
+                                        let _ = tx_audio_f32.blocking_send(encoded);
+                                    }
+                                }
+                            },
+                            err_fn_mic,
+                            None,
+                        ).ok()
                     },
-                    err_fn,
-                    None,
-                ) {
-                    let _ = stream.play();
+                    cpal::SampleFormat::I16 => {
+                        let mut encoder = create_encoder();
+                        let mut mic_buffer = Vec::new();
+                        mic_device.build_input_stream(
+                            mic_config.clone(),
+                            move |data: &[i16], _: &cpal::InputCallbackInfo| {
+                                // DOWNMIX : On additionne les canaux de la carte son (G + D)
+                                for frame in data.chunks(mic_channels) {
+                                    let sum: i32 = frame.iter().map(|&s| s as i32).sum();
+                                    let mono_sample = sum.clamp(i16::MIN as i32, i16::MAX as i32) as i16;
+                                    mic_buffer.push(mono_sample);
+                                }
+
+                                while mic_buffer.len() >= chunk_size {
+                                    let frame: Vec<i16> = mic_buffer.drain(..chunk_size).collect();
+                                    let mut encoded = vec![0u8; 1500];
+                                    if let Ok(len) = encoder.encode(&frame, &mut encoded) {
+                                        encoded.truncate(len);
+                                        let _ = tx_audio_i16.blocking_send(encoded);
+                                    }
+                                }
+                            },
+                            err_fn_mic,
+                            None,
+                        ).ok()
+                    },
+                    _ => None,
+                };
+
+                let mic_stream = match mic_stream_opt {
+                    Some(s) => s,
+                    None => return,
+                };
+
+                // 2. Initialisation des HAUT-PARLEURS
+                let spk_device = match host.default_output_device() {
+                    Some(d) => d,
+                    None => return,
+                };
+                let spk_supported_config = match spk_device.default_output_config() {
+                    Ok(c) => c,
+                    Err(_) => return,
+                };
+                let spk_config: cpal::StreamConfig = spk_supported_config.into();
+                let spk_channels = spk_config.channels as usize;
+
+                println!("🔈 Initialisation des haut-parleurs...");
+
+                let rx_speaker_arc = std::sync::Arc::new(std::sync::Mutex::new(rx_speaker));
+                let rx_spk_f32 = std::sync::Arc::clone(&rx_speaker_arc);
+                let rx_spk_i16 = std::sync::Arc::clone(&rx_speaker_arc);
+                let err_fn_spk = |err| eprintln!("⚠️ Erreur haut-parleur : {}", err);
+
+                let spk_stream_opt = match spk_supported_config.sample_format() {
+                    cpal::SampleFormat::F32 => {
+                        let mut spk_buffer: std::collections::VecDeque<i16> = std::collections::VecDeque::new();
+                        spk_device.build_output_stream(
+                            spk_config.clone(),
+                            move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                                while let Ok(pcm_chunk) = rx_spk_f32.lock().unwrap().try_recv() {
+                                    spk_buffer.extend(pcm_chunk);
+                                }
+
+                                // ANTI-DÉLAI
+                                if spk_buffer.len() > 14400 {
+                                    let excess = spk_buffer.len() - 14400;
+                                    spk_buffer.drain(0..excess);
+                                }
+
+                                for frame in data.chunks_mut(spk_channels) {
+                                    let l = spk_buffer.pop_front().unwrap_or(0);
+                                    let r = spk_buffer.pop_front().unwrap_or(0);
+
+                                    let l_f32 = l as f32 / i16::MAX as f32;
+                                    let r_f32 = r as f32 / i16::MAX as f32;
+
+                                    if spk_channels == 1 {
+                                        frame[0] = (l_f32 + r_f32) / 2.0;
+                                    } else if spk_channels >= 2 {
+                                        frame[0] = l_f32; // Oreille gauche
+                                        frame[1] = r_f32; // Oreille droite
+                                        for s in frame.iter_mut().skip(2) { *s = 0.0; }
+                                    }
+                                }
+                            },
+                            err_fn_spk,
+                            None,
+                        ).ok()
+                    },
+                    cpal::SampleFormat::I16 => {
+                        let mut spk_buffer: std::collections::VecDeque<i16> = std::collections::VecDeque::new();
+                        spk_device.build_output_stream(
+                            spk_config.clone(),
+                            move |data: &mut [i16], _: &cpal::OutputCallbackInfo| {
+                                while let Ok(pcm_chunk) = rx_spk_i16.lock().unwrap().try_recv() {
+                                    spk_buffer.extend(pcm_chunk);
+                                }
+
+                                // ANTI-DÉLAI
+                                if spk_buffer.len() > 14400 {
+                                    let excess = spk_buffer.len() - 14400;
+                                    spk_buffer.drain(0..excess);
+                                }
+
+                                for frame in data.chunks_mut(spk_channels) {
+                                    let l = spk_buffer.pop_front().unwrap_or(0);
+                                    let r = spk_buffer.pop_front().unwrap_or(0);
+
+                                    if spk_channels == 1 {
+                                        frame[0] = ((l as i32 + r as i32) / 2) as i16;
+                                    } else if spk_channels >= 2 {
+                                        frame[0] = l;
+                                        frame[1] = r;
+                                        for s in frame.iter_mut().skip(2) { *s = 0; }
+                                    }
+                                }
+                            },
+                            err_fn_spk,
+                            None,
+                        ).ok()
+                    },
+                    _ => None,
+                };
+
+                let _ = mic_stream.play();
+                if let Some(s) = &spk_stream_opt {
+                    let _ = s.play();
+                    println!("🔈 Lecture audio sur les haut-parleurs PRÊTE !");
                 }
 
                 std::thread::park();
             });
 
+            // Boucle principale WebSocket
             let (mut ws_sender, mut ws_receiver) = ws_stream.split();
-
             tokio::spawn(async move {
                 while let Some(msg) = rx_signal.recv().await {
                     if let Ok(json_msg) = serde_json::to_string(&msg) {
@@ -257,32 +415,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
 
             let tx_ws = tx_signal.clone();
-
             while let Some(Ok(response)) = ws_receiver.next().await {
                 if let Ok(text) = response.into_text() {
                     if let Ok(signal) = serde_json::from_str::<Signal>(&text) {
                         match signal {
                             Signal::Offer { sdp } => {
                                 if is_caller { continue; }
-
-                                println!("📥 [Signal] Offre SDP reçue !");
                                 let mut desc = RTCSessionDescription::default();
                                 desc.sdp_type = RTCSdpType::Offer;
                                 desc.sdp = sdp;
-
                                 if peer_connection.set_remote_description(desc).await.is_ok() {
                                     if let Ok(answer) = peer_connection.create_answer(None).await {
                                         if peer_connection.set_local_description(answer.clone()).await.is_ok() {
                                             let _ = tx_ws.send(Signal::Answer { sdp: answer.sdp }).await;
-                                            println!("🚀 Réponse SDP (Answer) envoyée !");
                                         }
                                     }
                                 }
                             },
                             Signal::Answer { sdp } => {
                                 if !is_caller { continue; }
-
-                                println!("📥 [Signal] Réponse SDP reçue !");
                                 let mut desc = RTCSessionDescription::default();
                                 desc.sdp_type = RTCSdpType::Answer;
                                 desc.sdp = sdp;
@@ -290,10 +441,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             },
                             Signal::Ice { candidate } => {
                                 if peer_connection.remote_description().await.is_some() {
-                                    let ice_init = RTCIceCandidateInit {
-                                        candidate,
-                                        ..Default::default()
-                                    };
+                                    let ice_init = RTCIceCandidateInit { candidate, ..Default::default() };
                                     let _ = peer_connection.add_ice_candidate(ice_init).await;
                                 }
                             },
