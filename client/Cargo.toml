@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 audiopus = "0.2.0"
+base64 = "0.23.1"
 bytes = "1.12.1"
 cpal = "0.18.1"
 futures-util = "0.3.34"

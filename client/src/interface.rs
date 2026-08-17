@@ -1,20 +1,20 @@
-use iced::widget::{button, column, text, text_input, Container};
-use iced::{Application, Command, Element, Theme, Subscription};
+use iced::widget::{button, column, row, text, text_input, Container};
+use iced::{clipboard, Application, Command, Element, Theme, Subscription};
 use tokio::sync::mpsc::{UnboundedSender, UnboundedReceiver};
 use tokio::sync::Mutex;
 use std::sync::Arc;
 
-// Notre structure Flags contient maintenant les DEUX câbles
 pub struct Flags {
     pub tx_network: UnboundedSender<String>,
     pub rx_network: UnboundedReceiver<String>,
+    pub my_local_id: String, // On reçoit notre ID au démarrage
 }
 
 pub struct KakolookiyamApp {
+    my_local_id: String, // On stocke notre ID
     peer_id_input: String,
     status_message: String,
     tx_network: UnboundedSender<String>,
-    // On emballe le récepteur dans un Arc<Mutex> pour pouvoir l'écouter en boucle
     rx_network: Arc<Mutex<Option<UnboundedReceiver<String>>>>,
 }
 
@@ -22,7 +22,8 @@ pub struct KakolookiyamApp {
 pub enum Message {
     PeerIdChanged(String),
     ConnectClicked,
-    NetworkEvent(String), // Nouveau message pour mettre à jour l'UI !
+    NetworkEvent(String),
+    CopyIdClicked, // Action du bouton Copier
 }
 
 impl Application for KakolookiyamApp {
@@ -34,6 +35,7 @@ impl Application for KakolookiyamApp {
     fn new(flags: Self::Flags) -> (Self, Command<Message>) {
         (
             Self {
+                my_local_id: flags.my_local_id, // On assigne l'ID
                 peer_id_input: String::new(),
                 status_message: "⏳ Prêt à appeler...".to_owned(),
                 tx_network: flags.tx_network,
@@ -49,16 +51,15 @@ impl Application for KakolookiyamApp {
 
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
-            Message::PeerIdChanged(val) => {
-                self.peer_id_input = val;
-            }
+            Message::PeerIdChanged(val) => self.peer_id_input = val,
             Message::ConnectClicked => {
-                self.status_message = format!("🔗 Génération de l'appel vers : {}...", self.peer_id_input);
+                self.status_message = format!("🔗 Négociation cryptographique avec : {}...", self.peer_id_input);
                 let _ = self.tx_network.send(self.peer_id_input.clone());
             }
-            // Quand le réseau nous parle, on met simplement à jour le texte !
-            Message::NetworkEvent(msg) => {
-                self.status_message = msg;
+            Message::NetworkEvent(msg) => self.status_message = msg,
+            Message::CopyIdClicked => {
+                // Copie l'ID dans le presse-papiers de Windows/Linux/Mac
+                return clipboard::write(self.my_local_id.clone());
             }
         }
         Command::none()
@@ -66,17 +67,24 @@ impl Application for KakolookiyamApp {
 
     fn view(&self) -> Element<'_, Message> {
         let title = text("🛡️ Kakolookiyam P2P").size(28);
+
+        // Affichage de ton ID Cryptographique et du bouton Copier sur la même ligne
+        let my_id_display = text(format!("🔑 Mon ID : {}", self.my_local_id)).size(16);
+        let copy_button = button("Copier").on_press(Message::CopyIdClicked);
+        let identity_row = row![my_id_display, copy_button].spacing(10);
+
         let status = text(&self.status_message);
 
-        let input = text_input("Entrer l'identifiant de l'ami...", &self.peer_id_input)
+        let input = text_input("Entrer l'ID (Clé Publique) de l'ami...", &self.peer_id_input)
             .on_input(Message::PeerIdChanged)
             .padding(10);
 
-        let connect_button = button("Lancer l'appel")
+        let connect_button = button("Lancer l'appel sécurisé")
             .on_press(Message::ConnectClicked);
 
         let content = column![
             title,
+            identity_row,
             status,
             input,
             connect_button,
@@ -90,10 +98,8 @@ impl Application for KakolookiyamApp {
             .into()
     }
 
-    // L'oreille de notre interface : elle écoute le câble en continu
     fn subscription(&self) -> Subscription<Message> {
         struct NetworkSub;
-
         iced::subscription::unfold(
             std::any::TypeId::of::<NetworkSub>(),
             self.rx_network.clone(),
@@ -106,10 +112,9 @@ impl Application for KakolookiyamApp {
                         None
                     }
                 };
-
                 match msg {
                     Some(text) => (Message::NetworkEvent(text), rx_mutex),
-                    None => std::future::pending().await, // On patiente s'il n'y a rien
+                    None => std::future::pending().await,
                 }
             }
         )

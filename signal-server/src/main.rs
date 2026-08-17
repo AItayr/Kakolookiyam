@@ -1,60 +1,91 @@
-use std::io::Error;
-use futures_util::{StreamExt, SinkExt};
-use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::broadcast;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::net::TcpListener;
+use tokio::sync::{mpsc, Mutex};
 use tokio_tungstenite::accept_async;
+use futures_util::{StreamExt, SinkExt};
+use serde::{Deserialize, Serialize};
 
-#[tokio::main]
-async fn main() -> Result<(), Error> {
-    // Le serveur écoute sur le port 8080 en local pour l'instant
-    let addr = "127.0.0.1:8080";
-    let listener = TcpListener::bind(&addr).await?;
-    println!("Serveur de signalisation 'aveugle' démarré sur : {}", addr);
-
-    // Création d'un canal de diffusion (broadcast) d'une capacité de 16 messages.
-    // Dès qu'un message est diffusé, il est oublié de la RAM.
-    let (tx, _rx) = broadcast::channel(16);
-
-    // Boucle infinie qui écoute les nouvelles connexions entrantes
-    while let Ok((stream, _)) = listener.accept().await {
-        let tx = tx.clone();
-        tokio::spawn(accept_connection(stream, tx));
-    }
-    
-    Ok(())
+// La structure de nos messages avec expéditeur et destinataire
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "type")]
+enum Signal {
+    Register { id: String },
+    Offer { sdp: String, sender_id: String, target_id: String },
+    Answer { sdp: String, sender_id: String, target_id: String },
+    Ice { candidate: String, sender_id: String, target_id: String },
+    Ping { msg: String }
 }
 
-async fn accept_connection(stream: TcpStream, tx: broadcast::Sender<String>) {
-    // On accepte la connexion WebSocket (SANS logger l'adresse IP entrante)
-    if let Ok(ws_stream) = accept_async(stream).await {
-        let (mut sender, mut receiver) = ws_stream.split();
-        let mut rx = tx.subscribe();
+// Dictionnaire sécurisé liant une Clé Publique à un "câble" de transmission WebSocket
+type Clients = Arc<Mutex<HashMap<String, mpsc::UnboundedSender<String>>>>;
 
-        // Tâche 1 : Recevoir les messages du serveur et les envoyer au client
-        let mut send_task = tokio::spawn(async move {
-            while let Ok(msg) = rx.recv().await {
-                // Utilisation de .into() pour la nouvelle version de Tungstenite
-                if sender.send(tokio_tungstenite::tungstenite::Message::Text(msg.into())).await.is_err() {
-                    break;
-                }
+#[tokio::main]
+async fn main() {
+    let addr = "127.0.0.1:8080";
+    let listener = TcpListener::bind(addr).await.expect("Impossible de lier le port");
+    println!("📮 Serveur de signalisation (Facteur Privé) démarré sur : {}", addr);
+
+    let clients: Clients = Arc::new(Mutex::new(HashMap::new()));
+
+    while let Ok((stream, _)) = listener.accept().await {
+        let clients_clone = clients.clone();
+        tokio::spawn(async move {
+            if let Ok(ws_stream) = accept_async(stream).await {
+                handle_connection(ws_stream, clients_clone).await;
             }
         });
-
-        // Tâche 2 : Recevoir les messages de ce client et les diffuser aveuglément aux autres
-        let mut recv_task = tokio::spawn(async move {
-            while let Some(Ok(msg)) = receiver.next().await {
-                if let Ok(text) = msg.into_text() {
-                    // Le serveur sert uniquement de relai instantané. Aucun stockage !
-                    // On convertit le Utf8Bytes en String classique pour notre canal
-                    let _ = tx.send(text.to_string());
-                }
-            }
-        });
-
-        // Si l'une des tâches s'arrête (ex: déconnexion), on coupe l'autre proprement
-        tokio::select! {
-            _ = &mut send_task => recv_task.abort(),
-            _ = &mut recv_task => send_task.abort(),
-        };
     }
+}
+
+async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>, clients: Clients) {
+    let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+    let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+
+    let mut client_id = String::new();
+
+    // Tâche d'arrière-plan pour envoyer les messages au client
+    let send_task = tokio::spawn(async move {
+        while let Some(msg) = rx.recv().await {
+            if ws_sender.send(tokio_tungstenite::tungstenite::protocol::Message::Text(msg.into())).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    // Écoute des messages entrants
+    while let Some(Ok(msg)) = ws_receiver.next().await {
+        if let Ok(text) = msg.into_text() {
+            if let Ok(signal) = serde_json::from_str::<Signal>(&text) {
+                match signal {
+                    // 1. Enregistrement de la clé publique du client
+                    Signal::Register { id } => {
+                        println!("📝 Nouvel utilisateur enregistré : {}", id);
+                        client_id = id.clone();
+                        clients.lock().await.insert(id, tx.clone());
+                    },
+
+                    // 2. Routage cryptographique privé
+                    Signal::Offer { target_id, .. } | Signal::Answer { target_id, .. } | Signal::Ice { target_id, .. } => {
+                        let clients_guard = clients.lock().await;
+                        if let Some(target_tx) = clients_guard.get(&target_id) {
+                            println!("📫 Routage secret d'un message vers : {}", target_id);
+                            // CORRECTION ICI : Ajout de .to_string()
+                            let _ = target_tx.send(text.to_string());
+                        } else {
+                            println!("⚠️ Destinataire introuvable ou hors-ligne : {}", target_id);
+                        }
+                    },
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    // Si le client quitte l'application, on efface sa trace du serveur (Zéro-Trace)
+    if !client_id.is_empty() {
+        println!("❌ Utilisateur déconnecté : {}", client_id);
+        clients.lock().await.remove(&client_id);
+    }
+    send_task.abort();
 }

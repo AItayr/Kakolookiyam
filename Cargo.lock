@@ -284,6 +284,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "base64"
+version = "0.23.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
+
+[[package]]
 name = "base64ct"
 version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -606,6 +612,7 @@ name = "client"
 version = "0.1.0"
 dependencies = [
  "audiopus",
+ "base64 0.23.1",
  "bytes",
  "cpal",
  "futures-util",
@@ -3019,7 +3026,7 @@ version = "3.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d30c53c26bc5b31a98cd02d20f25a7c8567146caf63ed593a9d87b2775291be"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "serde_core",
 ]
 
@@ -3807,6 +3814,8 @@ name = "signal-server"
 version = "0.1.0"
 dependencies = [
  "futures-util",
+ "serde",
+ "serde_json",
  "tokio",
  "tokio-tungstenite",
 ]
@@ -4047,7 +4056,7 @@ version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e3b8d5ad1dd4c8cd0595440f26521a71dd593cb5873ee8e06b91510b7d97269"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "crc",
  "lazy_static",
  "md-5",
@@ -4444,7 +4453,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d99249a493335eb44c4d7943a8751b22561a82c9903d8eb2d29780b3927880a7"
 dependencies = [
  "async-trait",
- "base64",
+ "base64 0.22.1",
  "futures",
  "log",
  "md-5",
