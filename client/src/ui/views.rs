@@ -1,13 +1,27 @@
-use iced::widget::{button, column, row, text, text_input, Container};
-use iced::{Alignment, Element};
+use iced::widget::{button, column, container, row, text, text_input, Container, Scrollable};
+use iced::{Alignment, Background, Border, Color, Element, Shadow, Theme};
 
+use crate::crypto;
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
 
-// Nous ajoutons ces fonctions graphiques à notre structure KakolookiyamApp
-impl KakolookiyamApp {
+struct ErrorContainerStyle;
 
+impl container::StyleSheet for ErrorContainerStyle {
+    type Style = Theme;
+    fn appearance(&self, _style: &Self::Style) -> container::Appearance {
+        container::Appearance {
+            text_color: Some(Color::from_rgb(0.9, 0.15, 0.15)),
+            background: Some(Background::Color(Color::from_rgb(1.0, 0.9, 0.9))),
+            border: Border { color: Color::from_rgb(0.9, 0.15, 0.15), width: 1.5, radius: 5.0.into() },
+            shadow: Shadow::default(),
+        }
+    }
+}
+
+impl KakolookiyamApp {
     pub(crate) fn clear_auth_fields(&mut self) {
+        self.pseudo_input.clear();
         self.password_input.clear();
         self.password_confirm_input.clear();
         self.auth_error = None;
@@ -16,92 +30,77 @@ impl KakolookiyamApp {
     pub(crate) fn view_welcome(&self) -> Element<'_, Message> {
         let title = text("Kakolookiyam").size(45);
         let subtitle = text("Communication P2P Zéro-Trace").size(18);
-
-        let btn_create = button("Créer un nouveau compte (Coffre-fort local)")
-            .on_press(Message::GoToCreateAccount)
-            .padding(15);
-
-        let btn_login = button("Se connecter (Déverrouiller un compte existant)")
-            .on_press(Message::GoToLogin)
-            .padding(15);
-
-        let content = column![title, subtitle, btn_create, btn_login]
-            .spacing(25)
-            .padding(60)
-            .align_items(Alignment::Center);
-
+        let btn_create = button("Créer un nouveau compte (Coffre-fort local)").on_press(Message::GoToCreateAccount).padding(15);
+        let btn_login = button("Se connecter (Déverrouiller un compte existant)").on_press(Message::GoToLogin).padding(15);
+        let content = column![title, subtitle, btn_create, btn_login].spacing(25).padding(60).align_items(Alignment::Center);
         Container::new(content).center_x().center_y().into()
     }
 
     pub(crate) fn view_create_account(&self) -> Element<'_, Message> {
         let title = text("🔐 Créer un compte").size(35);
-        let info = text("Ce mot de passe chiffrera votre clé locale. Ne le perdez pas !");
+        let info = text("Votre mot de passe chiffrera votre clé privée et votre pseudo.");
+        let pseudo_input = text_input("Choisissez un pseudo...", &self.pseudo_input).on_input(Message::PseudoChanged).padding(15);
+        let pass_input = text_input("Nouveau mot de passe (min. 12 car., Maj, Min, Chiffre, Spécial)...", &self.password_input).on_input(Message::PasswordChanged).secure(true).padding(15);
+        let pass_confirm = text_input("Confirmez le mot de passe...", &self.password_confirm_input).on_input(Message::PasswordConfirmChanged).secure(true).padding(15);
 
-        let pass_input = text_input("Nouveau mot de passe...", &self.password_input)
-            .on_input(Message::PasswordChanged)
-            .secure(true).padding(15);
-
-        let pass_confirm = text_input("Confirmez le mot de passe...", &self.password_confirm_input)
-            .on_input(Message::PasswordConfirmChanged)
-            .secure(true).padding(15);
-
-        let mut col = column![title, info, pass_input, pass_confirm].spacing(20);
+        let mut col = column![title, info, pseudo_input, pass_input, pass_confirm].spacing(20);
 
         if let Some(err) = &self.auth_error {
-            col = col.push(text(err));
+            let error_box = container(text(format!("❌ Erreur : {}", err)).size(14).style(Color::from_rgb(0.9, 0.15, 0.15)))
+                .padding(12).width(iced::Length::Fill).style(iced::theme::Container::Custom(Box::new(ErrorContainerStyle)));
+            col = col.push(error_box);
         }
 
         let btn_submit = button("Créer et Chiffrer").on_press(Message::SubmitCreateAccount).padding(12);
         let btn_back = button("Retour").on_press(Message::BackToWelcome).padding(12);
-
-        let buttons = row![btn_back, btn_submit].spacing(15);
-        col = col.push(buttons).align_items(Alignment::Center);
+        col = col.push(row![btn_back, btn_submit].spacing(15)).align_items(Alignment::Center);
 
         Container::new(col).center_x().center_y().into()
     }
 
     pub(crate) fn view_login(&self) -> Element<'_, Message> {
         let title = text("🔓 Déverrouiller le coffre-fort").size(35);
-
-        let pass_input = text_input("Votre mot de passe maître...", &self.password_input)
-            .on_input(Message::PasswordChanged)
-            .secure(true).padding(15);
+        let pass_input = text_input("Votre mot de passe maître...", &self.password_input).on_input(Message::PasswordChanged).secure(true).padding(15);
 
         let mut col = column![title, pass_input].spacing(20);
 
         if let Some(err) = &self.auth_error {
-            col = col.push(text(err));
+            let error_box = container(text(format!("❌ Erreur : {}", err)).size(14).style(Color::from_rgb(0.9, 0.15, 0.15)))
+                .padding(12).width(iced::Length::Fill).style(iced::theme::Container::Custom(Box::new(ErrorContainerStyle)));
+            col = col.push(error_box);
         }
 
         let btn_submit = button("Déverrouiller").on_press(Message::SubmitLogin).padding(12);
         let btn_back = button("Retour").on_press(Message::BackToWelcome).padding(12);
-
-        let buttons = row![btn_back, btn_submit].spacing(15);
-        col = col.push(buttons).align_items(Alignment::Center);
+        col = col.push(row![btn_back, btn_submit].spacing(15)).align_items(Alignment::Center);
 
         Container::new(col).center_x().center_y().into()
     }
 
     pub(crate) fn view_unlocked(&self) -> Element<'_, Message> {
-        let title = text("🛡️ Kakolookiyam P2P").size(28);
+        let vd = self.vault_data.as_ref().unwrap();
+        let my_id = crypto::derive_public_id(&vd.private_key);
 
-        let my_id_display = text(format!("🔑 Mon ID : {}", self.my_local_id)).size(16);
-        let copy_button = button("Copier").on_press(Message::CopyIdClicked);
-        let identity_row = row![my_id_display, copy_button].spacing(10);
-
+        let title = text(format!("🛡️ Bonjour {} !", vd.pseudo)).size(28);
+        let identity_row = row![text(format!("🔑 Mon ID : {}", my_id)).size(16), button("Copier").on_press(Message::CopyIdClicked)].spacing(10);
         let status = text(&self.status_message);
 
-        let input = text_input("Entrer l'ID (Clé Publique) de l'ami...", &self.peer_id_input)
-            .on_input(Message::PeerIdChanged)
-            .padding(10);
+        // NOUVEAU : Carnet d'adresses Automatique
+        let mut contacts_col = column![text("📔 Vos Contacts").size(20)].spacing(10);
+        for (id, pseudo) in &vd.contacts {
+            let contact_row = row![
+                text(format!("👤 {}", pseudo)).size(16),
+                button("📞 Appeler").on_press(Message::CallContact(id.clone()))
+            ].spacing(15).align_items(Alignment::Center);
+            contacts_col = contacts_col.push(contact_row);
+        }
 
-        let connect_button = button("Lancer l'appel sécurisé")
-            .on_press(Message::ConnectClicked);
+        let input = text_input("Entrer l'ID (Clé Publique) d'un nouvel ami...", &self.peer_id_input).on_input(Message::PeerIdChanged).padding(10);
+        let connect_button = button("Lancer l'appel sécurisé").on_press(Message::ConnectClicked);
+        let lock_button = button("🔒 Verrouiller / Se déconnecter").on_press(Message::LockSession).padding(10);
 
-        let content = column![title, identity_row, status, input, connect_button]
-            .spacing(20)
-            .padding(40)
-            .align_items(Alignment::Center);
+        let content = column![title, identity_row, status, Scrollable::new(contacts_col), input, connect_button, lock_button]
+            .spacing(20).padding(40).align_items(Alignment::Center);
 
         Container::new(content).center_x().center_y().into()
     }

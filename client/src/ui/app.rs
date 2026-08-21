@@ -1,5 +1,6 @@
-use iced::{clipboard, Application, Command, Element, Subscription, Theme};
+use iced::{clipboard, time, Application, Command, Element, Event, Subscription, Theme};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
 
@@ -16,24 +17,25 @@ pub enum AppState {
 pub struct Flags {
     pub tx_network: UnboundedSender<String>,
     pub rx_network: UnboundedReceiver<String>,
-    pub tx_identity: std::sync::mpsc::Sender<String>, // Le canal pour débloquer le moteur P2P
+    pub tx_identity: std::sync::mpsc::Sender<(String, String)>,
 }
 
 pub struct KakolookiyamApp {
     pub(crate) state: AppState,
-
-    // Champs d'authentification
+    pub(crate) pseudo_input: String,
     pub(crate) password_input: String,
     pub(crate) password_confirm_input: String,
     pub(crate) auth_error: Option<String>,
 
-    // Champs de l'application
-    pub(crate) my_local_id: String,
+    pub(crate) master_password: Option<String>,
+    pub(crate) vault_data: Option<crypto::VaultData>,
+
     pub(crate) peer_id_input: String,
     pub(crate) status_message: String,
     pub(crate) tx_network: UnboundedSender<String>,
     pub(crate) rx_network: Arc<Mutex<Option<UnboundedReceiver<String>>>>,
-    pub(crate) tx_identity: Option<std::sync::mpsc::Sender<String>>,
+    pub(crate) tx_identity: Option<std::sync::mpsc::Sender<(String, String)>>,
+    pub(crate) idle_seconds: u32,
 }
 
 impl Application for KakolookiyamApp {
@@ -43,121 +45,135 @@ impl Application for KakolookiyamApp {
     type Flags = Flags;
 
     fn new(flags: Self::Flags) -> (Self, Command<Message>) {
-        // Détection automatique : Si vault.kak existe -> Login, sinon -> Welcome
-        let initial_state = if crypto::vault_exists() {
-            AppState::Login
-        } else {
-            AppState::Welcome
-        };
-
+        let initial_state = if crypto::vault_exists() { AppState::Login } else { AppState::Welcome };
         (
             Self {
                 state: initial_state,
+                pseudo_input: String::new(),
                 password_input: String::new(),
                 password_confirm_input: String::new(),
                 auth_error: None,
-
-                my_local_id: String::new(), // Initialisé à vide (chargé au déverrouillage)
+                master_password: None,
+                vault_data: None,
                 peer_id_input: String::new(),
                 status_message: "⏳ Prêt à appeler...".to_owned(),
                 tx_network: flags.tx_network,
                 rx_network: Arc::new(Mutex::new(Some(flags.rx_network))),
                 tx_identity: Some(flags.tx_identity),
+                idle_seconds: 0,
             },
             Command::none(),
         )
     }
 
-    fn title(&self) -> String {
-        String::from("Kakolookiyam - Secure P2P")
-    }
+    fn title(&self) -> String { String::from("Kakolookiyam - Secure P2P") }
 
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
-            // --- NAVIGATION ---
-            Message::GoToCreateAccount => {
-                self.clear_auth_fields();
-                self.state = AppState::CreateAccount;
-            }
-            Message::GoToLogin => {
+            Message::GoToCreateAccount => { self.clear_auth_fields(); self.state = AppState::CreateAccount; }
+            Message::GoToLogin => { self.clear_auth_fields(); self.state = AppState::Login; }
+            Message::BackToWelcome => { self.clear_auth_fields(); self.state = AppState::Welcome; }
+            Message::LockSession => {
+                self.master_password = None;
+                self.vault_data = None;
                 self.clear_auth_fields();
                 self.state = AppState::Login;
+                self.status_message = "⏳ Prêt à appeler...".to_owned();
+                self.idle_seconds = 0;
             }
-            Message::BackToWelcome => {
-                self.clear_auth_fields();
-                self.state = AppState::Welcome;
+            Message::TickInactivity => {
+                if matches!(self.state, AppState::Unlocked) {
+                    self.idle_seconds += 1;
+                    if self.idle_seconds >= 300 { return Command::perform(async {}, |_| Message::LockSession); }
+                } else { self.idle_seconds = 0; }
             }
-
-            // --- SAISIE ---
-            Message::PasswordChanged(val) => {
-                self.password_input = val;
-                self.auth_error = None;
-            }
-            Message::PasswordConfirmChanged(val) => {
-                self.password_confirm_input = val;
-                self.auth_error = None;
+            // NOUVEAU : On remet à zéro l'inactivité quand on bouge la souris !
+            Message::ResetInactivity => {
+                self.idle_seconds = 0;
             }
 
-            // --- VALIDATION ET CRYPTOGRAPHIE ---
+            Message::PseudoChanged(val) => { self.idle_seconds = 0; self.pseudo_input = val; self.auth_error = None; }
+            Message::PasswordChanged(val) => { self.idle_seconds = 0; self.password_input = val; self.auth_error = None; }
+            Message::PasswordConfirmChanged(val) => { self.idle_seconds = 0; self.password_confirm_input = val; self.auth_error = None; }
+
             Message::SubmitCreateAccount => {
-                if self.password_input.is_empty() {
-                    self.auth_error = Some("Le mot de passe ne peut pas être vide.".to_string());
-                } else if self.password_input != self.password_confirm_input {
-                    self.auth_error = Some("Les mots de passe ne correspondent pas.".to_string());
-                } else {
-                    // 1. Génération de clé sécurisée (OsRng)
-                    let secret_key = crypto::generate_secure_secret();
-
-                    // 2. Chiffrement et sauvegarde dans le coffre-fort
-                    match crypto::create_vault(&self.password_input, &secret_key) {
+                self.idle_seconds = 0;
+                let trimmed = self.pseudo_input.trim();
+                if trimmed.is_empty() { self.auth_error = Some("Veuillez choisir un pseudo.".into()); }
+                else if self.password_input != self.password_confirm_input { self.auth_error = Some("Mots de passe distincts.".into()); }
+                else {
+                    let v_data = crypto::VaultData {
+                        private_key: crypto::generate_secure_secret(),
+                        pseudo: trimmed.to_string(),
+                        contacts: std::collections::HashMap::new(),
+                    };
+                    match crypto::save_vault(&self.password_input, &v_data) {
                         Ok(_) => {
-                            self.my_local_id = crypto::derive_public_id(&secret_key);
+                            self.master_password = Some(self.password_input.clone());
+                            self.vault_data = Some(v_data.clone());
                             self.state = AppState::Unlocked;
                             self.clear_auth_fields();
-
-                            // 3. Envoi de l'identité au thread P2P pour démarrer le réseau
                             if let Some(tx) = self.tx_identity.take() {
-                                let _ = tx.send(self.my_local_id.clone());
+                                let id = crypto::derive_public_id(&v_data.private_key);
+                                let _ = tx.send((id, v_data.pseudo));
                             }
                         }
-                        Err(e) => {
-                            self.auth_error = Some(e.to_string());
-                        }
+                        Err(e) => self.auth_error = Some(e.to_string()),
                     }
                 }
             }
             Message::SubmitLogin => {
-                if self.password_input.is_empty() {
-                    self.auth_error = Some("Veuillez entrer un mot de passe.".to_string());
-                } else {
-                    // Déchiffrement du coffre-fort
-                    match crypto::unlock_vault(&self.password_input) {
-                        Ok(decrypted_key) => {
-                            self.my_local_id = crypto::derive_public_id(&decrypted_key);
-                            self.state = AppState::Unlocked;
-                            self.clear_auth_fields();
-
-                            // Envoi de l'identité au thread P2P pour démarrer le réseau
-                            if let Some(tx) = self.tx_identity.take() {
-                                let _ = tx.send(self.my_local_id.clone());
-                            }
-                        }
-                        Err(e) => {
-                            self.auth_error = Some(e.to_string());
+                self.idle_seconds = 0;
+                match crypto::unlock_vault(&self.password_input) {
+                    Ok(v_data) => {
+                        self.master_password = Some(self.password_input.clone());
+                        self.vault_data = Some(v_data.clone());
+                        self.state = AppState::Unlocked;
+                        self.clear_auth_fields();
+                        if let Some(tx) = self.tx_identity.take() {
+                            let id = crypto::derive_public_id(&v_data.private_key);
+                            let _ = tx.send((id, v_data.pseudo));
                         }
                     }
+                    Err(e) => self.auth_error = Some(e.to_string()),
                 }
             }
-
-            // --- LOGIQUE DES APPELS ---
-            Message::PeerIdChanged(val) => self.peer_id_input = val,
+            Message::PeerIdChanged(val) => { self.idle_seconds = 0; self.peer_id_input = val; }
             Message::ConnectClicked => {
+                self.idle_seconds = 0;
                 self.status_message = format!("🔗 Négociation avec : {}...", self.peer_id_input);
                 let _ = self.tx_network.send(self.peer_id_input.clone());
             }
-            Message::NetworkEvent(msg) => self.status_message = msg,
+            Message::CallContact(id) => {
+                self.idle_seconds = 0;
+                self.peer_id_input = id.clone();
+                self.status_message = format!("🔗 Négociation avec le contact...");
+                let _ = self.tx_network.send(id);
+            }
+            Message::NetworkEvent(msg) => {
+                self.idle_seconds = 0;
+                if msg.starts_with("CONTACT:") {
+                    let parts: Vec<&str> = msg.splitn(3, ':').collect();
+                    if parts.len() == 3 {
+                        let c_id = parts[1].to_string();
+                        let c_pseudo = parts[2].to_string();
+
+                        if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
+                            if !vd.contacts.contains_key(&c_id) {
+                                vd.contacts.insert(c_id, c_pseudo);
+                                let _ = crypto::save_vault(pwd, vd);
+                            }
+                        }
+                    }
+                } else {
+                    self.status_message = msg;
+                }
+            }
             Message::CopyIdClicked => {
-                return clipboard::write(self.my_local_id.clone());
+                self.idle_seconds = 0;
+                if let Some(vd) = &self.vault_data {
+                    return clipboard::write(crypto::derive_public_id(&vd.private_key));
+                }
             }
         }
         Command::none()
@@ -174,23 +190,25 @@ impl Application for KakolookiyamApp {
 
     fn subscription(&self) -> Subscription<Message> {
         struct NetworkSub;
-        iced::subscription::unfold(
+        let network_subscription = iced::subscription::unfold(
             std::any::TypeId::of::<NetworkSub>(),
             self.rx_network.clone(),
             |rx_mutex| async move {
                 let msg = {
                     let mut guard = rx_mutex.lock().await;
-                    if let Some(rx) = guard.as_mut() {
-                        rx.recv().await
-                    } else {
-                        None
-                    }
+                    if let Some(rx) = guard.as_mut() { rx.recv().await } else { None }
                 };
-                match msg {
-                    Some(text) => (Message::NetworkEvent(text), rx_mutex),
-                    None => std::future::pending().await,
-                }
+                match msg { Some(text) => (Message::NetworkEvent(text), rx_mutex), None => std::future::pending().await }
             },
-        )
+        );
+
+        let timer_subscription = time::every(Duration::from_secs(1)).map(|_| Message::TickInactivity);
+
+        // CORRECTION : On envoie ResetInactivity au lieu de TickInactivity !
+        let event_subscription = iced::event::listen_with(|event, _status| {
+            match event { Event::Keyboard(_) | Event::Mouse(_) => Some(Message::ResetInactivity), _ => None }
+        });
+
+        Subscription::batch(vec![network_subscription, timer_subscription, event_subscription])
     }
 }
