@@ -5,7 +5,7 @@ pub enum Message {
     BackToWelcome,
     LockSession,
     TickInactivity,
-    ResetInactivity, // <-- NOUVEAU : Pour remettre le compteur à zéro
+    ResetInactivity,
 
     PseudoChanged(String),
     PasswordChanged(String),
@@ -17,6 +17,14 @@ pub enum Message {
     PeerIdChanged(String),
     ConnectClicked,
     CallContact(String),
+
+    AcceptCall(String, String),
+    RejectCall(String),
+
+    // NOUVEAU : Commandes pour l'appel en cours
+    HangUpCall,
+    ToggleMute,
+
     NetworkEvent(String),
     CopyIdClicked,
 }

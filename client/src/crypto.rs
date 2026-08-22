@@ -11,15 +11,33 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::fs;
-use std::path::Path;
-
-const VAULT_FILE: &str = "vault.kak";
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct VaultData {
     pub private_key: [u8; 32],
     pub pseudo: String,
-    pub contacts: HashMap<String, String>, // Clé Publique -> Pseudo
+    pub contacts: HashMap<String, String>,
+}
+
+// NOUVEAU : Génère un nom de fichier sécurisé basé sur le pseudo
+pub fn get_vault_file(pseudo: &str) -> String {
+    // On ne garde que les lettres et chiffres pour éviter les failles d'injection (ex: "../")
+    let safe_pseudo: String = pseudo.chars().filter(|c| c.is_alphanumeric()).collect();
+    format!("vault_{}.kak", safe_pseudo.to_lowercase())
+}
+
+// NOUVEAU : Détecte s'il existe au moins un coffre-fort dans le dossier
+pub fn any_vault_exists() -> bool {
+    if let Ok(entries) = std::fs::read_dir(".") {
+        for entry in entries.flatten() {
+            if let Some(name) = entry.file_name().to_str() {
+                if name.starts_with("vault_") && name.ends_with(".kak") {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 pub fn validate_password(password: &str) -> Result<(), &'static str> {
@@ -45,11 +63,6 @@ fn derive_key(password: &str, salt: &SaltString) -> [u8; 32] {
     key
 }
 
-pub fn vault_exists() -> bool {
-    Path::new(VAULT_FILE).exists()
-}
-
-/// Écrase et sauvegarde le coffre-fort entier chiffré
 pub fn save_vault(password: &str, data: &VaultData) -> Result<(), &'static str> {
     validate_password(password)?;
     let salt = SaltString::generate(&mut OsRng);
@@ -67,12 +80,17 @@ pub fn save_vault(password: &str, data: &VaultData) -> Result<(), &'static str> 
     file_data.extend_from_slice(&nonce);
     file_data.extend_from_slice(&ciphertext);
 
-    fs::write(VAULT_FILE, file_data).map_err(|_| "Erreur IO")?;
+    // NOUVEAU : On sauvegarde dans le fichier spécifique au pseudo
+    let vault_file = get_vault_file(&data.pseudo);
+    fs::write(vault_file, file_data).map_err(|_| "Erreur IO")?;
     Ok(())
 }
 
-pub fn unlock_vault(password: &str) -> Result<VaultData, &'static str> {
-    let file_data = fs::read(VAULT_FILE).map_err(|_| "Impossible de lire le coffre")?;
+// NOUVEAU : On demande le pseudo pour savoir quel fichier ouvrir
+pub fn unlock_vault(pseudo: &str, password: &str) -> Result<VaultData, &'static str> {
+    let vault_file = get_vault_file(pseudo);
+
+    let file_data = fs::read(&vault_file).map_err(|_| "Profil introuvable ou mot de passe incorrect.")?;
     if file_data.len() < 4 { return Err("Corrompu"); }
 
     let mut salt_len_bytes = [0u8; 4];
@@ -87,7 +105,7 @@ pub fn unlock_vault(password: &str) -> Result<VaultData, &'static str> {
 
     let key = derive_key(password, &salt);
     let cipher = ChaCha20Poly1305::new(&key.into());
-    let decrypted = cipher.decrypt(nonce, ciphertext).map_err(|_| "Mot de passe incorrect")?;
+    let decrypted = cipher.decrypt(nonce, ciphertext).map_err(|_| "Mot de passe incorrect.")?;
 
     let vault_data: VaultData = serde_json::from_slice(&decrypted).map_err(|_| "JSON invalide")?;
     Ok(vault_data)

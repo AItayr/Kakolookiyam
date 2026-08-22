@@ -60,9 +60,12 @@ impl KakolookiyamApp {
 
     pub(crate) fn view_login(&self) -> Element<'_, Message> {
         let title = text("🔓 Déverrouiller le coffre-fort").size(35);
+
+        // NOUVEAU : On demande le pseudo pour savoir quel fichier .kak lire !
+        let pseudo_input = text_input("Votre pseudo...", &self.pseudo_input).on_input(Message::PseudoChanged).padding(15);
         let pass_input = text_input("Votre mot de passe maître...", &self.password_input).on_input(Message::PasswordChanged).secure(true).padding(15);
 
-        let mut col = column![title, pass_input].spacing(20);
+        let mut col = column![title, pseudo_input, pass_input].spacing(20);
 
         if let Some(err) = &self.auth_error {
             let error_box = container(text(format!("❌ Erreur : {}", err)).size(14).style(Color::from_rgb(0.9, 0.15, 0.15)))
@@ -78,6 +81,32 @@ impl KakolookiyamApp {
     }
 
     pub(crate) fn view_unlocked(&self) -> Element<'_, Message> {
+        if let Some((_active_id, active_pseudo)) = &self.active_call {
+            let title = text("📞 Appel en cours").size(40);
+            let subtitle = text(format!("En communication sécurisée avec {}", active_pseudo)).size(25);
+
+            let mute_text = if self.is_muted { "🎙️ Activer le micro" } else { "🔇 Couper le micro (Mute)" };
+            let btn_mute = button(mute_text).on_press(Message::ToggleMute).padding(20);
+            let btn_hangup = button("❌ Raccrocher").on_press(Message::HangUpCall).padding(20);
+
+            let buttons = row![btn_mute, btn_hangup].spacing(40);
+            let content = column![title, subtitle, buttons].spacing(40).align_items(Alignment::Center);
+            return Container::new(content).center_x().center_y().into();
+        }
+
+        if let Some((caller_id, caller_pseudo, sdp)) = &self.incoming_call {
+            let title = text("🔔 Appel entrant !").size(40);
+            let subtitle = text(format!("{} souhaite communiquer avec vous.", caller_pseudo)).size(25);
+            let timer_text = text(format!("(Rejet automatique dans {}s)", 15 - self.incoming_call_timer)).size(16);
+
+            let btn_accept = button("✅ Décrocher").on_press(Message::AcceptCall(caller_id.clone(), sdp.clone())).padding(15);
+            let btn_reject = button("❌ Rejeter").on_press(Message::RejectCall(caller_id.clone())).padding(15);
+
+            let buttons = row![btn_reject, btn_accept].spacing(30);
+            let content = column![title, subtitle, timer_text, buttons].spacing(25).padding(60).align_items(Alignment::Center);
+            return Container::new(content).center_x().center_y().into();
+        }
+
         let vd = self.vault_data.as_ref().unwrap();
         let my_id = crypto::derive_public_id(&vd.private_key);
 
@@ -85,7 +114,6 @@ impl KakolookiyamApp {
         let identity_row = row![text(format!("🔑 Mon ID : {}", my_id)).size(16), button("Copier").on_press(Message::CopyIdClicked)].spacing(10);
         let status = text(&self.status_message);
 
-        // NOUVEAU : Carnet d'adresses Automatique
         let mut contacts_col = column![text("📔 Vos Contacts").size(20)].spacing(10);
         for (id, pseudo) in &vd.contacts {
             let contact_row = row![

@@ -35,7 +35,12 @@ pub struct KakolookiyamApp {
     pub(crate) tx_network: UnboundedSender<String>,
     pub(crate) rx_network: Arc<Mutex<Option<UnboundedReceiver<String>>>>,
     pub(crate) tx_identity: Option<std::sync::mpsc::Sender<(String, String)>>,
+
     pub(crate) idle_seconds: u32,
+    pub(crate) incoming_call: Option<(String, String, String)>,
+    pub(crate) incoming_call_timer: u32,
+    pub(crate) active_call: Option<(String, String)>,
+    pub(crate) is_muted: bool,
 }
 
 impl Application for KakolookiyamApp {
@@ -45,7 +50,8 @@ impl Application for KakolookiyamApp {
     type Flags = Flags;
 
     fn new(flags: Self::Flags) -> (Self, Command<Message>) {
-        let initial_state = if crypto::vault_exists() { AppState::Login } else { AppState::Welcome };
+        // NOUVEAU : On cherche s'il y a des fichiers .kak dans le dossier
+        let initial_state = if crypto::any_vault_exists() { AppState::Login } else { AppState::Welcome };
         (
             Self {
                 state: initial_state,
@@ -61,6 +67,10 @@ impl Application for KakolookiyamApp {
                 rx_network: Arc::new(Mutex::new(Some(flags.rx_network))),
                 tx_identity: Some(flags.tx_identity),
                 idle_seconds: 0,
+                incoming_call: None,
+                incoming_call_timer: 0,
+                active_call: None,
+                is_muted: false,
             },
             Command::none(),
         )
@@ -76,22 +86,34 @@ impl Application for KakolookiyamApp {
             Message::LockSession => {
                 self.master_password = None;
                 self.vault_data = None;
+                self.incoming_call = None;
+                self.incoming_call_timer = 0;
+                self.active_call = None;
+                self.is_muted = false;
                 self.clear_auth_fields();
                 self.state = AppState::Login;
                 self.status_message = "⏳ Prêt à appeler...".to_owned();
                 self.idle_seconds = 0;
             }
             Message::TickInactivity => {
-                if matches!(self.state, AppState::Unlocked) {
+                if self.incoming_call.is_some() {
+                    self.incoming_call_timer += 1;
+                    if self.incoming_call_timer >= 15 {
+                        if let Some((id, _, _)) = self.incoming_call.take() {
+                            let _ = self.tx_network.send(format!("REJECT:{}", id));
+                            self.status_message = "Appel manqué.".to_string();
+                        }
+                        self.incoming_call_timer = 0;
+                    }
+                }
+                else if matches!(self.state, AppState::Unlocked) {
                     self.idle_seconds += 1;
                     if self.idle_seconds >= 300 { return Command::perform(async {}, |_| Message::LockSession); }
-                } else { self.idle_seconds = 0; }
+                } else {
+                    self.idle_seconds = 0;
+                }
             }
-            // NOUVEAU : On remet à zéro l'inactivité quand on bouge la souris !
-            Message::ResetInactivity => {
-                self.idle_seconds = 0;
-            }
-
+            Message::ResetInactivity => { self.idle_seconds = 0; }
             Message::PseudoChanged(val) => { self.idle_seconds = 0; self.pseudo_input = val; self.auth_error = None; }
             Message::PasswordChanged(val) => { self.idle_seconds = 0; self.password_input = val; self.auth_error = None; }
             Message::PasswordConfirmChanged(val) => { self.idle_seconds = 0; self.password_confirm_input = val; self.auth_error = None; }
@@ -99,7 +121,12 @@ impl Application for KakolookiyamApp {
             Message::SubmitCreateAccount => {
                 self.idle_seconds = 0;
                 let trimmed = self.pseudo_input.trim();
+
+                // NOUVEAU : On vérifie si ce profil existe déjà
+                let potential_file = crypto::get_vault_file(trimmed);
+
                 if trimmed.is_empty() { self.auth_error = Some("Veuillez choisir un pseudo.".into()); }
+                else if std::path::Path::new(&potential_file).exists() { self.auth_error = Some("Ce profil existe déjà sur cet ordinateur.".into()); }
                 else if self.password_input != self.password_confirm_input { self.auth_error = Some("Mots de passe distincts.".into()); }
                 else {
                     let v_data = crypto::VaultData {
@@ -124,31 +151,71 @@ impl Application for KakolookiyamApp {
             }
             Message::SubmitLogin => {
                 self.idle_seconds = 0;
-                match crypto::unlock_vault(&self.password_input) {
-                    Ok(v_data) => {
-                        self.master_password = Some(self.password_input.clone());
-                        self.vault_data = Some(v_data.clone());
-                        self.state = AppState::Unlocked;
-                        self.clear_auth_fields();
-                        if let Some(tx) = self.tx_identity.take() {
-                            let id = crypto::derive_public_id(&v_data.private_key);
-                            let _ = tx.send((id, v_data.pseudo));
+                let trimmed = self.pseudo_input.trim();
+
+                // NOUVEAU : Vérification stricte du pseudo et du mot de passe
+                if trimmed.is_empty() {
+                    self.auth_error = Some("Veuillez entrer votre pseudo.".to_string());
+                } else if self.password_input.is_empty() {
+                    self.auth_error = Some("Veuillez entrer un mot de passe.".to_string());
+                } else {
+                    match crypto::unlock_vault(trimmed, &self.password_input) {
+                        Ok(v_data) => {
+                            self.master_password = Some(self.password_input.clone());
+                            self.vault_data = Some(v_data.clone());
+                            self.state = AppState::Unlocked;
+                            self.clear_auth_fields();
+                            if let Some(tx) = self.tx_identity.take() {
+                                let id = crypto::derive_public_id(&v_data.private_key);
+                                let _ = tx.send((id, v_data.pseudo));
+                            }
                         }
+                        Err(e) => self.auth_error = Some(e.to_string()),
                     }
-                    Err(e) => self.auth_error = Some(e.to_string()),
                 }
             }
+
+            // ... [Le reste du fichier concernant les appels P2P reste identique] ...
             Message::PeerIdChanged(val) => { self.idle_seconds = 0; self.peer_id_input = val; }
             Message::ConnectClicked => {
                 self.idle_seconds = 0;
-                self.status_message = format!("🔗 Négociation avec : {}...", self.peer_id_input);
-                let _ = self.tx_network.send(self.peer_id_input.clone());
+                self.status_message = format!("🔗 En attente de l'interlocuteur...");
+                let _ = self.tx_network.send(format!("CALL:{}", self.peer_id_input));
             }
             Message::CallContact(id) => {
                 self.idle_seconds = 0;
                 self.peer_id_input = id.clone();
-                self.status_message = format!("🔗 Négociation avec le contact...");
-                let _ = self.tx_network.send(id);
+                self.status_message = format!("🔗 En attente de l'interlocuteur...");
+                let _ = self.tx_network.send(format!("CALL:{}", id));
+            }
+            Message::AcceptCall(id, sdp) => {
+                self.idle_seconds = 0;
+                self.incoming_call = None;
+                self.incoming_call_timer = 0;
+                self.status_message = format!("🔗 Connexion sécurisée en cours...");
+                let _ = self.tx_network.send(format!("ACCEPT:{}:{}", id, sdp));
+            }
+            Message::RejectCall(id) => {
+                self.idle_seconds = 0;
+                self.incoming_call = None;
+                self.incoming_call_timer = 0;
+                self.status_message = format!("❌ Appel rejeté.");
+                let _ = self.tx_network.send(format!("REJECT:{}", id));
+            }
+            Message::HangUpCall => {
+                self.idle_seconds = 0;
+                if let Some((id, _)) = self.active_call.take() {
+                    let _ = self.tx_network.send(format!("HANGUP:{}", id));
+                    self.status_message = "Appel terminé.".to_string();
+                }
+                self.is_muted = false;
+                let _ = self.tx_network.send("MUTE:off".to_string());
+            }
+            Message::ToggleMute => {
+                self.idle_seconds = 0;
+                self.is_muted = !self.is_muted;
+                if self.is_muted { let _ = self.tx_network.send("MUTE:on".to_string()); }
+                else { let _ = self.tx_network.send("MUTE:off".to_string()); }
             }
             Message::NetworkEvent(msg) => {
                 self.idle_seconds = 0;
@@ -157,7 +224,6 @@ impl Application for KakolookiyamApp {
                     if parts.len() == 3 {
                         let c_id = parts[1].to_string();
                         let c_pseudo = parts[2].to_string();
-
                         if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
                             if !vd.contacts.contains_key(&c_id) {
                                 vd.contacts.insert(c_id, c_pseudo);
@@ -165,9 +231,46 @@ impl Application for KakolookiyamApp {
                             }
                         }
                     }
-                } else {
-                    self.status_message = msg;
                 }
+                else if msg.starts_with("INCOMING_CALL:") {
+                    let parts: Vec<&str> = msg.splitn(3, ':').collect();
+                    if parts.len() == 3 {
+                        let caller_id = parts[1].to_string();
+                        let sdp = parts[2].to_string();
+                        let caller_pseudo = if let Some(vd) = &self.vault_data {
+                            vd.contacts.get(&caller_id).cloned().unwrap_or_else(|| "Inconnu".to_string())
+                        } else { "Inconnu".to_string() };
+
+                        self.incoming_call_timer = 0;
+                        self.incoming_call = Some((caller_id, caller_pseudo, sdp));
+                    }
+                }
+                else if msg.starts_with("CALL_ACTIVE:") {
+                    let id = msg.trim_start_matches("CALL_ACTIVE:").to_string();
+                    let pseudo = if let Some(vd) = &self.vault_data {
+                        vd.contacts.get(&id).cloned().unwrap_or_else(|| "Ami".to_string())
+                    } else { "Ami".to_string() };
+                    self.active_call = Some((id, pseudo));
+                }
+                else if msg.starts_with("CALL_ENDED:") {
+                    let id = msg.trim_start_matches("CALL_ENDED:").to_string();
+                    if let Some((active_id, _)) = &self.active_call {
+                        if active_id == &id {
+                            self.active_call = None;
+                            self.is_muted = false;
+                            let _ = self.tx_network.send("MUTE:off".to_string());
+                            self.status_message = "L'interlocuteur a raccroché.".to_string();
+                        }
+                    }
+                    if let Some((inc_id, _, _)) = &self.incoming_call {
+                        if inc_id == &id {
+                            self.incoming_call = None;
+                            self.incoming_call_timer = 0;
+                            self.status_message = "L'appelant a raccroché.".to_string();
+                        }
+                    }
+                }
+                else { self.status_message = msg; }
             }
             Message::CopyIdClicked => {
                 self.idle_seconds = 0;
@@ -203,8 +306,6 @@ impl Application for KakolookiyamApp {
         );
 
         let timer_subscription = time::every(Duration::from_secs(1)).map(|_| Message::TickInactivity);
-
-        // CORRECTION : On envoie ResetInactivity au lieu de TickInactivity !
         let event_subscription = iced::event::listen_with(|event, _status| {
             match event { Event::Keyboard(_) | Event::Mouse(_) => Some(Message::ResetInactivity), _ => None }
         });
