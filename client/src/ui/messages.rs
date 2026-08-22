@@ -21,9 +21,12 @@ pub enum Message {
     AcceptCall(String, String),
     RejectCall(String),
 
-    // NOUVEAU : Commandes pour l'appel en cours
     HangUpCall,
     ToggleMute,
+
+    // --- NOUVEAU : Messages pour le Chat P2P ---
+    ChatInputChanged(String),
+    SendChatMessage,
 
     NetworkEvent(String),
     CopyIdClicked,

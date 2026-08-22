@@ -41,6 +41,10 @@ pub struct KakolookiyamApp {
     pub(crate) incoming_call_timer: u32,
     pub(crate) active_call: Option<(String, String)>,
     pub(crate) is_muted: bool,
+
+    // --- NOUVEAU : État du Chat P2P ---
+    pub(crate) chat_input: String,
+    pub(crate) chat_history: Vec<(String, String)>, // (Auteur, Message)
 }
 
 impl Application for KakolookiyamApp {
@@ -50,7 +54,6 @@ impl Application for KakolookiyamApp {
     type Flags = Flags;
 
     fn new(flags: Self::Flags) -> (Self, Command<Message>) {
-        // NOUVEAU : On cherche s'il y a des fichiers .kak dans le dossier
         let initial_state = if crypto::any_vault_exists() { AppState::Login } else { AppState::Welcome };
         (
             Self {
@@ -71,6 +74,8 @@ impl Application for KakolookiyamApp {
                 incoming_call_timer: 0,
                 active_call: None,
                 is_muted: false,
+                chat_input: String::new(),
+                chat_history: Vec::new(),
             },
             Command::none(),
         )
@@ -83,6 +88,7 @@ impl Application for KakolookiyamApp {
             Message::GoToCreateAccount => { self.clear_auth_fields(); self.state = AppState::CreateAccount; }
             Message::GoToLogin => { self.clear_auth_fields(); self.state = AppState::Login; }
             Message::BackToWelcome => { self.clear_auth_fields(); self.state = AppState::Welcome; }
+
             Message::LockSession => {
                 self.master_password = None;
                 self.vault_data = None;
@@ -90,6 +96,10 @@ impl Application for KakolookiyamApp {
                 self.incoming_call_timer = 0;
                 self.active_call = None;
                 self.is_muted = false;
+                // NOUVEAU : Destruction sécurisée de la mémoire du chat
+                self.chat_input.clear();
+                self.chat_history.clear();
+
                 self.clear_auth_fields();
                 self.state = AppState::Login;
                 self.status_message = "⏳ Prêt à appeler...".to_owned();
@@ -121,8 +131,6 @@ impl Application for KakolookiyamApp {
             Message::SubmitCreateAccount => {
                 self.idle_seconds = 0;
                 let trimmed = self.pseudo_input.trim();
-
-                // NOUVEAU : On vérifie si ce profil existe déjà
                 let potential_file = crypto::get_vault_file(trimmed);
 
                 if trimmed.is_empty() { self.auth_error = Some("Veuillez choisir un pseudo.".into()); }
@@ -153,7 +161,6 @@ impl Application for KakolookiyamApp {
                 self.idle_seconds = 0;
                 let trimmed = self.pseudo_input.trim();
 
-                // NOUVEAU : Vérification stricte du pseudo et du mot de passe
                 if trimmed.is_empty() {
                     self.auth_error = Some("Veuillez entrer votre pseudo.".to_string());
                 } else if self.password_input.is_empty() {
@@ -175,7 +182,6 @@ impl Application for KakolookiyamApp {
                 }
             }
 
-            // ... [Le reste du fichier concernant les appels P2P reste identique] ...
             Message::PeerIdChanged(val) => { self.idle_seconds = 0; self.peer_id_input = val; }
             Message::ConnectClicked => {
                 self.idle_seconds = 0;
@@ -209,6 +215,9 @@ impl Application for KakolookiyamApp {
                     self.status_message = "Appel terminé.".to_string();
                 }
                 self.is_muted = false;
+                // NOUVEAU : On vide le chat quand on raccroche
+                self.chat_input.clear();
+                self.chat_history.clear();
                 let _ = self.tx_network.send("MUTE:off".to_string());
             }
             Message::ToggleMute => {
@@ -217,9 +226,44 @@ impl Application for KakolookiyamApp {
                 if self.is_muted { let _ = self.tx_network.send("MUTE:on".to_string()); }
                 else { let _ = self.tx_network.send("MUTE:off".to_string()); }
             }
+
+            // --- NOUVEAU : Logique de la saisie de texte ---
+            Message::ChatInputChanged(val) => {
+                self.idle_seconds = 0;
+                self.chat_input = val;
+            }
+            Message::SendChatMessage => {
+                self.idle_seconds = 0;
+                let text = self.chat_input.trim().to_string();
+                if !text.is_empty() {
+                    if let Some((target_id, _)) = &self.active_call {
+                        // Envoi de la commande structurée au moteur réseau
+                        let _ = self.tx_network.send(format!("CHAT_SEND:{}:{}", target_id, text));
+                        // Ajout visuel local
+                        self.chat_history.push(("Moi".to_string(), text));
+                        self.chat_input.clear();
+                    }
+                }
+            }
+
             Message::NetworkEvent(msg) => {
                 self.idle_seconds = 0;
-                if msg.starts_with("CONTACT:") {
+
+                // --- NOUVEAU : Interception d'un message entrant P2P ---
+                if msg.starts_with("CHAT_RECV:") {
+                    let parts: Vec<&str> = msg.splitn(3, ':').collect();
+                    if parts.len() == 3 {
+                        let sender_id = parts[1].to_string();
+                        let text = parts[2].to_string();
+
+                        let sender_pseudo = if let Some(vd) = &self.vault_data {
+                            vd.contacts.get(&sender_id).cloned().unwrap_or_else(|| "Inconnu".to_string())
+                        } else { "Inconnu".to_string() };
+
+                        self.chat_history.push((sender_pseudo, text));
+                    }
+                }
+                else if msg.starts_with("CONTACT:") {
                     let parts: Vec<&str> = msg.splitn(3, ':').collect();
                     if parts.len() == 3 {
                         let c_id = parts[1].to_string();
@@ -251,6 +295,10 @@ impl Application for KakolookiyamApp {
                         vd.contacts.get(&id).cloned().unwrap_or_else(|| "Ami".to_string())
                     } else { "Ami".to_string() };
                     self.active_call = Some((id, pseudo));
+
+                    // On purge le chat pour être sûr d'avoir un écran propre à chaque nouvel appel
+                    self.chat_input.clear();
+                    self.chat_history.clear();
                 }
                 else if msg.starts_with("CALL_ENDED:") {
                     let id = msg.trim_start_matches("CALL_ENDED:").to_string();
@@ -259,6 +307,8 @@ impl Application for KakolookiyamApp {
                             self.active_call = None;
                             self.is_muted = false;
                             let _ = self.tx_network.send("MUTE:off".to_string());
+                            self.chat_input.clear();
+                            self.chat_history.clear();
                             self.status_message = "L'interlocuteur a raccroché.".to_string();
                         }
                     }

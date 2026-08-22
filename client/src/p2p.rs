@@ -41,6 +41,8 @@ async fn create_peer_connection(
     tx_speaker: std::sync::mpsc::Sender<Vec<i16>>,
     tx_signal: tokio::sync::mpsc::Sender<Signal>,
     tx_ui: UnboundedSender<String>,
+    // NOUVEAU : Canal pour remonter le DataChannel au thread principal
+    tx_dc: UnboundedSender<(String, Arc<RTCDataChannel>)>,
 ) -> Result<Arc<RTCPeerConnection>, Box<dyn std::error::Error>> {
 
     let config = RTCConfiguration {
@@ -102,6 +104,7 @@ async fn create_peer_connection(
 
     let target_id_msg = target_id.clone();
     let tx_ui_msg = tx_ui.clone();
+    let tx_dc_clone = tx_dc.clone();
 
     pc.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
         let d_clone = Arc::clone(&d);
@@ -109,10 +112,11 @@ async fn create_peer_connection(
         let target_msg_clone = target_id_msg.clone();
         let tx_ui_msg_clone = tx_ui_msg.clone();
 
+        // On transmet le canal de données au main loop pour l'envoi manuel
+        let _ = tx_dc_clone.send((target_msg_clone.clone(), Arc::clone(&d)));
+
         Box::pin(async move {
             let d_open = Arc::clone(&d_clone);
-
-            // CORRECTION: Clones explicites protégés pour la première closure
             let p_open = pseudo_to_send.clone();
             let tgt_open = target_msg_clone.clone();
             let tx_open = tx_ui_msg_clone.clone();
@@ -128,7 +132,6 @@ async fn create_peer_connection(
                 })
             }));
 
-            // Les clones d'origine restent disponibles ici
             d_clone.on_message(Box::new(move |msg: DataChannelMessage| {
                 let text = String::from_utf8_lossy(&msg.data);
                 if text.starts_with("{\"type\":\"pseudo\"") {
@@ -138,6 +141,9 @@ async fn create_peer_connection(
                             return Box::pin(async move {});
                         }
                     }
+                } else {
+                    // NOUVEAU : Interception du Chat P2P
+                    let _ = tx_ui_msg_clone.send(format!("CHAT_RECV:{}:{}", target_msg_clone, text));
                 }
                 Box::pin(async move {})
             }));
@@ -188,20 +194,33 @@ pub async fn start_p2p(
     let (tx_signal, mut rx_signal) = tokio::sync::mpsc::channel::<Signal>(32);
     let mut peers: HashMap<String, Arc<RTCPeerConnection>> = HashMap::new();
 
+    // NOUVEAU : Gestion des DataChannels pour pouvoir envoyer du texte à la volée
+    let (tx_dc, mut rx_dc) = tokio::sync::mpsc::unbounded_channel::<(String, Arc<RTCDataChannel>)>();
+    let mut data_channels: HashMap<String, Arc<RTCDataChannel>> = HashMap::new();
+
     loop {
         tokio::select! {
+            // NOUVEAU : Récupération asynchrone des DataChannels créés
+            Some((tgt, dc)) = rx_dc.recv() => {
+                data_channels.insert(tgt, dc);
+            }
             Some(cmd) = rx_ui.recv() => {
                 if cmd.starts_with("CALL:") {
                     let target_id = cmd.trim_start_matches("CALL:").to_string();
                     if target_id.trim().is_empty() || peers.contains_key(&target_id) { continue; }
-                    let pc = create_peer_connection(&api, target_id.clone(), my_local_id.clone(), my_pseudo.clone(), Arc::clone(&audio_track), tx_speaker.clone(), tx_signal.clone(), tx_ui.clone()).await?;
+
+                    let pc = create_peer_connection(&api, target_id.clone(), my_local_id.clone(), my_pseudo.clone(), Arc::clone(&audio_track), tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone()).await?;
 
                     let data_channel = pc.create_data_channel("secure_text", None).await?;
+
+                    // NOUVEAU : On stocke directement le channel de l'appelant
+                    data_channels.insert(target_id.clone(), Arc::clone(&data_channel));
+
                     let d_open = Arc::clone(&data_channel);
                     let p = my_pseudo.clone();
-
                     let tgt_id_open = target_id.clone();
                     let tx_ui_open = tx_ui.clone();
+
                     data_channel.on_open(Box::new(move || {
                         let p2 = p.clone();
                         let tgt = tgt_id_open.clone();
@@ -210,6 +229,25 @@ pub async fn start_p2p(
                             let _ = tx.send(format!("CALL_ACTIVE:{}", tgt));
                             let _ = d_open.send_text(format!("{{\"type\":\"pseudo\",\"value\":\"{}\"}}", p2)).await;
                         })
+                    }));
+
+                    // CORRECTION : L'appelant doit aussi écouter les messages entrants !
+                    let tgt_id_msg = target_id.clone();
+                    let tx_ui_msg = tx_ui.clone();
+                    data_channel.on_message(Box::new(move |msg: DataChannelMessage| {
+                        let text = String::from_utf8_lossy(&msg.data);
+                        if text.starts_with("{\"type\":\"pseudo\"") {
+                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                                if let Some(friend_pseudo) = json["value"].as_str() {
+                                    let _ = tx_ui_msg.send(format!("CONTACT:{}:{}", tgt_id_msg, friend_pseudo));
+                                    return Box::pin(async move {});
+                                }
+                            }
+                        } else {
+                            // C'est un message du chat !
+                            let _ = tx_ui_msg.send(format!("CHAT_RECV:{}:{}", tgt_id_msg, text));
+                        }
+                        Box::pin(async move {})
                     }));
 
                     let offer = pc.create_offer(None).await?;
@@ -226,7 +264,7 @@ pub async fn start_p2p(
                         let pc = if let Some(pc) = peers.get(&sender_id) {
                             Arc::clone(pc)
                         } else {
-                            let pc = create_peer_connection(&api, sender_id.clone(), my_local_id.clone(), my_pseudo.clone(), Arc::clone(&audio_track), tx_speaker.clone(), tx_signal.clone(), tx_ui.clone()).await?;
+                            let pc = create_peer_connection(&api, sender_id.clone(), my_local_id.clone(), my_pseudo.clone(), Arc::clone(&audio_track), tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone()).await?;
                             peers.insert(sender_id.clone(), Arc::clone(&pc));
                             pc
                         };
@@ -251,12 +289,24 @@ pub async fn start_p2p(
                     if let Some(pc) = peers.remove(&target_id) {
                         let _ = pc.close().await;
                     }
+                    data_channels.remove(&target_id); // NOUVEAU : Nettoyage RAM
                 }
                 else if cmd == "MUTE:on" {
                     is_muted.store(true, Ordering::Relaxed);
                 }
                 else if cmd == "MUTE:off" {
                     is_muted.store(false, Ordering::Relaxed);
+                }
+                // NOUVEAU : Ordre d'envoi d'un message textuel P2P
+                else if cmd.starts_with("CHAT_SEND:") {
+                    let parts: Vec<&str> = cmd.splitn(3, ':').collect();
+                    if parts.len() == 3 {
+                        let target_id = parts[1];
+                        let text = parts[2];
+                        if let Some(dc) = data_channels.get(target_id) {
+                            let _ = dc.send_text(text.to_string()).await;
+                        }
+                    }
                 }
             }
             Some(signal) = rx_signal.recv() => {
