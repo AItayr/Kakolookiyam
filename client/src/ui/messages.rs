@@ -4,6 +4,7 @@ pub enum Message {
     GoToLogin,
     BackToWelcome,
     LockSession,
+    ForceDisconnect(String), // NOUVEAU : Message d'erreur personnalisé
     TickInactivity,
     ResetInactivity,
 
@@ -24,7 +25,9 @@ pub enum Message {
     HangUpCall,
     ToggleMute,
 
-    // --- NOUVEAU : Messages pour le Chat P2P ---
+    SelectChat(String),
+    DeselectChat,
+
     ChatInputChanged(String),
     SendChatMessage,
 
