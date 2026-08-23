@@ -160,8 +160,8 @@ pub async fn start_p2p(
     tx_speaker: std::sync::mpsc::Sender<Vec<i16>>,
     mut rx_ui: UnboundedReceiver<String>,
     tx_ui: UnboundedSender<String>,
-    my_local_id: String,
-    my_pseudo: String,
+    mut my_local_id: String, // CORRECTION : Variables rendues mutables !
+    mut my_pseudo: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
 
     let mut m = MediaEngine::default();
@@ -211,8 +211,13 @@ pub async fn start_p2p(
             }
             Some(cmd) = rx_ui.recv() => {
                 if cmd.starts_with("REGISTER:") {
-                    let id = cmd.trim_start_matches("REGISTER:").to_string();
-                    let _ = tx_signal.send(Signal::Register { id }).await;
+                    let parts: Vec<&str> = cmd.splitn(3, ':').collect();
+                    if parts.len() == 3 {
+                        // CORRECTION : Le moteur réseau guérit de son amnésie !
+                        my_local_id = parts[1].to_string();
+                        my_pseudo = parts[2].to_string();
+                        let _ = tx_signal.send(Signal::Register { id: my_local_id.clone() }).await;
+                    }
                 }
                 else if cmd.starts_with("LOGOUT:") {
                     let id = cmd.trim_start_matches("LOGOUT:").to_string();
@@ -273,19 +278,8 @@ pub async fn start_p2p(
                     let parts: Vec<&str> = cmd.splitn(3, ':').collect();
                     if parts.len() == 3 {
                         let sender_id = parts[1].to_string();
-                        let sdp = parts[2].to_string();
-
-                        let pc = if let Some(pc) = peers.get(&sender_id) {
-                            Arc::clone(pc)
-                        } else {
-                            let pc = create_peer_connection(&api, sender_id.clone(), my_local_id.clone(), my_pseudo.clone(), Some(Arc::clone(&audio_track)), tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), true).await?;
-                            peers.insert(sender_id.clone(), Arc::clone(&pc));
-                            pc
-                        };
-
-                        let mut desc = RTCSessionDescription::default();
-                        desc.sdp_type = RTCSdpType::Offer; desc.sdp = sdp;
-                        if pc.set_remote_description(desc).await.is_ok() {
+                        // CORRECTION : Plus besoin de créer le PC, il est déjà prêt !
+                        if let Some(pc) = peers.get(&sender_id) {
                             if let Ok(answer) = pc.create_answer(None).await {
                                 if pc.set_local_description(answer.clone()).await.is_ok() {
                                     let _ = tx_signal.send(Signal::Answer { sdp: answer.sdp, sender_id: my_local_id.clone(), target_id: sender_id }).await;
@@ -384,16 +378,23 @@ pub async fn start_p2p(
                             if let Ok(signal) = serde_json::from_str::<Signal>(&text) {
                                 match signal {
                                     Signal::Offer { sdp, sender_id, .. } => {
-                                        // NOUVEAU : Auto-guérison, on écrase l'ancienne session
                                         if let Some(old_pc) = peers.remove(&sender_id) {
                                             let _ = old_pc.close().await;
                                         }
                                         data_channels.remove(&sender_id);
 
+                                        // CORRECTION : On crée le PC immédiatement pour ne perdre aucun paquet ICE !
+                                        let pc = create_peer_connection(&api, sender_id.clone(), my_local_id.clone(), my_pseudo.clone(), Some(Arc::clone(&audio_track)), tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), true).await.unwrap();
+                                        peers.insert(sender_id.clone(), Arc::clone(&pc));
+
+                                        let mut desc = RTCSessionDescription::default();
+                                        desc.sdp_type = RTCSdpType::Offer;
+                                        desc.sdp = sdp.clone();
+                                        let _ = pc.set_remote_description(desc).await;
+
                                         let _ = tx_ui.send(format!("INCOMING_CALL:{}:{}", sender_id, sdp));
                                     }
                                     Signal::ChatOffer { sdp, sender_id, .. } => {
-                                        // NOUVEAU : Auto-guérison, on écrase l'ancienne session
                                         if let Some(old_pc) = peers.remove(&sender_id) {
                                             let _ = old_pc.close().await;
                                         }

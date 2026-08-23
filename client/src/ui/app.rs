@@ -180,7 +180,8 @@ impl Application for KakolookiyamApp {
                             if let Some(tx) = self.tx_identity.take() {
                                 let _ = tx.send((id.clone(), v_data.pseudo.clone()));
                             } else {
-                                let _ = self.tx_network.send(format!("REGISTER:{}", id));
+                                // CORRECTION : On passe l'ID ET le Pseudo pour réinitialiser le moteur réseau
+                                let _ = self.tx_network.send(format!("REGISTER:{}:{}", id, v_data.pseudo));
                             }
                             self.vault_data = Some(v_data);
                         }
@@ -207,7 +208,8 @@ impl Application for KakolookiyamApp {
                             if let Some(tx) = self.tx_identity.take() {
                                 let _ = tx.send((id.clone(), v_data.pseudo.clone()));
                             } else {
-                                let _ = self.tx_network.send(format!("REGISTER:{}", id));
+                                // CORRECTION : On passe l'ID ET le Pseudo pour réinitialiser le moteur réseau
+                                let _ = self.tx_network.send(format!("REGISTER:{}:{}", id, v_data.pseudo));
                             }
                             self.vault_data = Some(v_data);
                         }
@@ -393,7 +395,6 @@ impl Application for KakolookiyamApp {
                 else if msg.starts_with("CALL_ENDED:") {
                     let id = msg.trim_start_matches("CALL_ENDED:").to_string();
 
-                    // NOUVEAU : On ordonne explicitement au moteur de purger la mémoire
                     let _ = self.tx_network.send(format!("HANGUP:{}", id));
 
                     if let Some((active_id, _)) = &self.active_call {
