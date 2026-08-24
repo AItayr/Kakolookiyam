@@ -4,7 +4,7 @@ pub enum Message {
     GoToLogin,
     BackToWelcome,
     LockSession,
-    ForceDisconnect(String), // NOUVEAU : Message d'erreur personnalisé
+    ForceDisconnect(String),
     TickInactivity,
     ResetInactivity,
 
@@ -27,6 +27,14 @@ pub enum Message {
 
     SelectChat(String),
     DeselectChat,
+
+    OpenFileDialog,
+    FileSelected(Option<String>),
+    FileRead(Option<(String, Vec<u8>)>),
+
+    // --- NOUVEAU : Ouverture et Déchiffrement des Fichiers ---
+    OpenMedia(String, [u8; 32], String),
+    MediaSaved(String),
 
     ChatInputChanged(String),
     SendChatMessage,

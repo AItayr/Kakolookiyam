@@ -44,6 +44,7 @@ async fn create_peer_connection(
     tx_signal: tokio::sync::mpsc::Sender<Signal>,
     tx_ui: UnboundedSender<String>,
     tx_dc: UnboundedSender<(String, Arc<RTCDataChannel>)>,
+    tx_chunks: UnboundedSender<(String, String)>, // NOUVEAU : Canal pour décharger les fichiers lourds
     is_call: bool,
 ) -> Result<Arc<RTCPeerConnection>, Box<dyn std::error::Error>> {
 
@@ -109,12 +110,14 @@ async fn create_peer_connection(
     let target_id_msg = target_id.clone();
     let tx_ui_msg = tx_ui.clone();
     let tx_dc_clone = tx_dc.clone();
+    let tx_chunks_clone = tx_chunks.clone();
 
     pc.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
         let d_clone = Arc::clone(&d);
         let pseudo_to_send = my_pseudo.clone();
         let target_msg_clone = target_id_msg.clone();
         let tx_ui_msg_clone = tx_ui_msg.clone();
+        let tx_chunks_inner = tx_chunks_clone.clone();
 
         let _ = tx_dc_clone.send((target_msg_clone.clone(), Arc::clone(&d)));
 
@@ -144,7 +147,12 @@ async fn create_peer_connection(
                             return Box::pin(async move {});
                         }
                     }
-                } else {
+                }
+                // NOUVEAU : Interception des paquets de fichiers sans bloquer l'UI
+                else if text.starts_with("FILE_META:") || text.starts_with("FILE_CHUNK:") {
+                    let _ = tx_chunks_inner.send((target_msg_clone.clone(), text.into_owned()));
+                }
+                else {
                     let _ = tx_ui_msg_clone.send(format!("CHAT_RECV:{}:{}", target_msg_clone, text));
                 }
                 Box::pin(async move {})
@@ -160,7 +168,7 @@ pub async fn start_p2p(
     tx_speaker: std::sync::mpsc::Sender<Vec<i16>>,
     mut rx_ui: UnboundedReceiver<String>,
     tx_ui: UnboundedSender<String>,
-    mut my_local_id: String, // CORRECTION : Variables rendues mutables !
+    mut my_local_id: String,
     mut my_pseudo: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
 
@@ -204,8 +212,69 @@ pub async fn start_p2p(
     let (tx_dc, mut rx_dc) = tokio::sync::mpsc::unbounded_channel::<(String, Arc<RTCDataChannel>)>();
     let mut data_channels: HashMap<String, Arc<RTCDataChannel>> = HashMap::new();
 
+    // NOUVEAU : Canal et Stockage pour réassembler les fichiers à la volée
+    let (tx_chunks, mut rx_chunks) = tokio::sync::mpsc::unbounded_channel::<(String, String)>();
+    let mut incoming_files: HashMap<String, (usize, usize, Vec<String>, String)> = HashMap::new();
+
     loop {
         tokio::select! {
+            // --- NOUVEAU : RÉASSEMBLAGE DES FICHIERS ---
+            Some((sender_id, text)) = rx_chunks.recv() => {
+                if text.starts_with("FILE_META:") {
+                    let parts: Vec<&str> = text.splitn(4, ':').collect();
+                    if parts.len() == 4 {
+                        let filename = parts[1];
+                        let key = parts[2];
+                        let total: usize = parts[3].parse().unwrap_or(0);
+                        incoming_files.insert(format!("{}:{}", sender_id, filename), (total, 0, vec![String::new(); total], key.to_string()));
+                    }
+                }
+                else if text.starts_with("FILE_CHUNK:") {
+                    let parts: Vec<&str> = text.splitn(4, ':').collect();
+                    if parts.len() == 4 {
+                        let filename = parts[1];
+                        let index: usize = parts[2].parse().unwrap_or(0);
+                        let b64_data = parts[3];
+                        let file_id = format!("{}:{}", sender_id, filename);
+
+                        if let Some((total, received, chunks, file_key)) = incoming_files.get_mut(&file_id) {
+                            if index < *total && chunks[index].is_empty() {
+                                chunks[index] = b64_data.to_string();
+                                *received += 1;
+
+                                // TOUS LES MORCEAUX SONT LÀ !
+                                if *received == *total {
+                                    let chunks_owned = std::mem::take(chunks);
+                                    let sender_owned = sender_id.clone();
+                                    let filename_owned = filename.to_string();
+                                    let key_owned = file_key.clone();
+                                    let my_pseudo_clone = my_pseudo.clone();
+                                    let tx_ui_clone = tx_ui.clone();
+
+                                    tokio::spawn(async move {
+                                        use base64::prelude::*;
+                                        let mut enc_data = Vec::new();
+                                        for c in chunks_owned {
+                                            if let Ok(bytes) = BASE64_STANDARD.decode(&c) {
+                                                enc_data.extend(bytes);
+                                            }
+                                        }
+                                        let media_dir = format!("media_{}", my_pseudo_clone);
+                                        let _ = tokio::fs::create_dir_all(&media_dir).await;
+                                        let save_path = format!("{}/{}", media_dir, filename_owned);
+                                        let _ = tokio::fs::write(&save_path, enc_data).await;
+
+                                        let _ = tx_ui_clone.send(format!("FILE_RECV:{}:{}:{}:{}", sender_owned, filename_owned, key_owned, save_path));
+                                    });
+
+                                    incoming_files.remove(&file_id);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             Some((tgt, dc)) = rx_dc.recv() => {
                 data_channels.insert(tgt, dc);
             }
@@ -213,7 +282,6 @@ pub async fn start_p2p(
                 if cmd.starts_with("REGISTER:") {
                     let parts: Vec<&str> = cmd.splitn(3, ':').collect();
                     if parts.len() == 3 {
-                        // CORRECTION : Le moteur réseau guérit de son amnésie !
                         my_local_id = parts[1].to_string();
                         my_pseudo = parts[2].to_string();
                         let _ = tx_signal.send(Signal::Register { id: my_local_id.clone() }).await;
@@ -230,11 +298,16 @@ pub async fn start_p2p(
                 }
                 else if cmd.starts_with("CALL:") {
                     let target_id = cmd.trim_start_matches("CALL:").to_string();
-                    if target_id.trim().is_empty() || peers.contains_key(&target_id) { continue; }
+                    if target_id.trim().is_empty() { continue; }
 
-                    let pc = create_peer_connection(&api, target_id.clone(), my_local_id.clone(), my_pseudo.clone(), Some(Arc::clone(&audio_track)), tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), true).await?;
+                    if let Some(old_pc) = peers.remove(&target_id) {
+                        let _ = old_pc.close().await;
+                    }
+                    data_channels.remove(&target_id);
 
-                    let data_channel = pc.create_data_channel("secure_text", None).await?;
+                    let pc = create_peer_connection(&api, target_id.clone(), my_local_id.clone(), my_pseudo.clone(), Some(Arc::clone(&audio_track)), tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), tx_chunks.clone(), true).await.unwrap();
+
+                    let data_channel = pc.create_data_channel("secure_text", None).await.unwrap();
                     data_channels.insert(target_id.clone(), Arc::clone(&data_channel));
 
                     let d_open = Arc::clone(&data_channel);
@@ -254,6 +327,7 @@ pub async fn start_p2p(
 
                     let tgt_id_msg = target_id.clone();
                     let tx_ui_msg = tx_ui.clone();
+                    let tx_chunks_inner = tx_chunks.clone();
                     data_channel.on_message(Box::new(move |msg: DataChannelMessage| {
                         let text = String::from_utf8_lossy(&msg.data);
                         if text.starts_with("{\"type\":\"pseudo\"") {
@@ -263,14 +337,18 @@ pub async fn start_p2p(
                                     return Box::pin(async move {});
                                 }
                             }
-                        } else {
+                        }
+                        else if text.starts_with("FILE_META:") || text.starts_with("FILE_CHUNK:") {
+                            let _ = tx_chunks_inner.send((tgt_id_msg.clone(), text.into_owned()));
+                        }
+                        else {
                             let _ = tx_ui_msg.send(format!("CHAT_RECV:{}:{}", tgt_id_msg, text));
                         }
                         Box::pin(async move {})
                     }));
 
-                    let offer = pc.create_offer(None).await?;
-                    pc.set_local_description(offer.clone()).await?;
+                    let offer = pc.create_offer(None).await.unwrap();
+                    pc.set_local_description(offer.clone()).await.unwrap();
                     let _ = tx_signal.send(Signal::Offer { sdp: offer.sdp, sender_id: my_local_id.clone(), target_id: target_id.clone() }).await;
                     peers.insert(target_id, pc);
                 }
@@ -278,8 +356,19 @@ pub async fn start_p2p(
                     let parts: Vec<&str> = cmd.splitn(3, ':').collect();
                     if parts.len() == 3 {
                         let sender_id = parts[1].to_string();
-                        // CORRECTION : Plus besoin de créer le PC, il est déjà prêt !
-                        if let Some(pc) = peers.get(&sender_id) {
+                        let sdp = parts[2].to_string();
+
+                        if let Some(old_pc) = peers.remove(&sender_id) {
+                            let _ = old_pc.close().await;
+                        }
+                        data_channels.remove(&sender_id);
+
+                        let pc = create_peer_connection(&api, sender_id.clone(), my_local_id.clone(), my_pseudo.clone(), Some(Arc::clone(&audio_track)), tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), tx_chunks.clone(), true).await.unwrap();
+                        peers.insert(sender_id.clone(), Arc::clone(&pc));
+
+                        let mut desc = RTCSessionDescription::default();
+                        desc.sdp_type = RTCSdpType::Offer; desc.sdp = sdp;
+                        if pc.set_remote_description(desc).await.is_ok() {
                             if let Ok(answer) = pc.create_answer(None).await {
                                 if pc.set_local_description(answer.clone()).await.is_ok() {
                                     let _ = tx_signal.send(Signal::Answer { sdp: answer.sdp, sender_id: my_local_id.clone(), target_id: sender_id }).await;
@@ -290,7 +379,9 @@ pub async fn start_p2p(
                 }
                 else if cmd.starts_with("REJECT:") {
                     let sender_id = cmd.trim_start_matches("REJECT:").to_string();
-                    peers.remove(&sender_id);
+                    if let Some(pc) = peers.remove(&sender_id) {
+                        let _ = pc.close().await;
+                    }
                 }
                 else if cmd.starts_with("HANGUP:") {
                     let target_id = cmd.trim_start_matches("HANGUP:").to_string();
@@ -314,11 +405,13 @@ pub async fn start_p2p(
                         if let Some(dc) = data_channels.get(&target_id) {
                             let _ = dc.send_text(text).await;
                         } else {
-                            if peers.contains_key(&target_id) { continue; }
+                            if let Some(old_pc) = peers.remove(&target_id) {
+                                let _ = old_pc.close().await;
+                            }
 
-                            let pc = create_peer_connection(&api, target_id.clone(), my_local_id.clone(), my_pseudo.clone(), None, tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), false).await?;
+                            let pc = create_peer_connection(&api, target_id.clone(), my_local_id.clone(), my_pseudo.clone(), None, tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), tx_chunks.clone(), false).await.unwrap();
 
-                            let data_channel = pc.create_data_channel("secure_text", None).await?;
+                            let data_channel = pc.create_data_channel("secure_text", None).await.unwrap();
                             data_channels.insert(target_id.clone(), Arc::clone(&data_channel));
 
                             let d_open = Arc::clone(&data_channel);
@@ -337,6 +430,7 @@ pub async fn start_p2p(
 
                             let tgt_id_msg = target_id.clone();
                             let tx_ui_msg = tx_ui.clone();
+                            let tx_chunks_inner = tx_chunks.clone();
                             data_channel.on_message(Box::new(move |msg: DataChannelMessage| {
                                 let text = String::from_utf8_lossy(&msg.data);
                                 if text.starts_with("{\"type\":\"pseudo\"") {
@@ -346,16 +440,51 @@ pub async fn start_p2p(
                                             return Box::pin(async move {});
                                         }
                                     }
-                                } else {
+                                }
+                                else if text.starts_with("FILE_META:") || text.starts_with("FILE_CHUNK:") {
+                                    let _ = tx_chunks_inner.send((tgt_id_msg.clone(), text.into_owned()));
+                                }
+                                else {
                                     let _ = tx_ui_msg.send(format!("CHAT_RECV:{}:{}", tgt_id_msg, text));
                                 }
                                 Box::pin(async move {})
                             }));
 
-                            let offer = pc.create_offer(None).await?;
-                            pc.set_local_description(offer.clone()).await?;
+                            let offer = pc.create_offer(None).await.unwrap();
+                            pc.set_local_description(offer.clone()).await.unwrap();
                             let _ = tx_signal.send(Signal::ChatOffer { sdp: offer.sdp, sender_id: my_local_id.clone(), target_id: target_id.clone() }).await;
                             peers.insert(target_id, pc);
+                        }
+                    }
+                }
+                // --- NOUVEAU : DÉCOUPE ET ENVOI DES FICHIERS ---
+                else if cmd.starts_with("FILE_SEND:") {
+                    let parts: Vec<&str> = cmd.splitn(5, ':').collect();
+                    if parts.len() == 5 {
+                        let target_id = parts[1].to_string();
+                        let filename = parts[2].to_string();
+                        let key_b64 = parts[3].to_string();
+                        let enc_path = parts[4].to_string();
+
+                        if let Some(dc) = data_channels.get(&target_id) {
+                            let dc_clone = Arc::clone(dc);
+                            tokio::spawn(async move {
+                                use base64::prelude::*;
+                                if let Ok(enc_data) = tokio::fs::read(&enc_path).await {
+                                    let chunk_size = 16384; // 16 Ko par paquet
+                                    let chunks: Vec<&[u8]> = enc_data.chunks(chunk_size).collect();
+
+                                    // 1. On annonce le fichier
+                                    let _ = dc_clone.send_text(format!("FILE_META:{}:{}:{}", filename, key_b64, chunks.len())).await;
+
+                                    // 2. On envoie les morceaux avec un mini-délai pour ne pas saturer le réseau
+                                    for (i, chunk) in chunks.iter().enumerate() {
+                                        let b64 = BASE64_STANDARD.encode(chunk);
+                                        let _ = dc_clone.send_text(format!("FILE_CHUNK:{}:{}:{}", filename, i, b64)).await;
+                                        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+                                    }
+                                }
+                            });
                         }
                     }
                 }
@@ -378,20 +507,6 @@ pub async fn start_p2p(
                             if let Ok(signal) = serde_json::from_str::<Signal>(&text) {
                                 match signal {
                                     Signal::Offer { sdp, sender_id, .. } => {
-                                        if let Some(old_pc) = peers.remove(&sender_id) {
-                                            let _ = old_pc.close().await;
-                                        }
-                                        data_channels.remove(&sender_id);
-
-                                        // CORRECTION : On crée le PC immédiatement pour ne perdre aucun paquet ICE !
-                                        let pc = create_peer_connection(&api, sender_id.clone(), my_local_id.clone(), my_pseudo.clone(), Some(Arc::clone(&audio_track)), tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), true).await.unwrap();
-                                        peers.insert(sender_id.clone(), Arc::clone(&pc));
-
-                                        let mut desc = RTCSessionDescription::default();
-                                        desc.sdp_type = RTCSdpType::Offer;
-                                        desc.sdp = sdp.clone();
-                                        let _ = pc.set_remote_description(desc).await;
-
                                         let _ = tx_ui.send(format!("INCOMING_CALL:{}:{}", sender_id, sdp));
                                     }
                                     Signal::ChatOffer { sdp, sender_id, .. } => {
@@ -400,7 +515,7 @@ pub async fn start_p2p(
                                         }
                                         data_channels.remove(&sender_id);
 
-                                        let pc = create_peer_connection(&api, sender_id.clone(), my_local_id.clone(), my_pseudo.clone(), None, tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), false).await.unwrap();
+                                        let pc = create_peer_connection(&api, sender_id.clone(), my_local_id.clone(), my_pseudo.clone(), None, tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), tx_chunks.clone(), false).await.unwrap();
                                         peers.insert(sender_id.clone(), Arc::clone(&pc));
 
                                         let mut desc = RTCSessionDescription::default();

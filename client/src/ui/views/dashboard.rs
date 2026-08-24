@@ -56,8 +56,23 @@ impl KakolookiyamApp {
                 for msg in history {
                     let is_me = msg.author == "Moi";
                     let color = if is_me { Color::from_rgb(0.2, 0.5, 0.8) } else { Color::from_rgb(0.8, 0.5, 0.2) };
-                    let msg_text = text(format!("{}: {}", msg.author, msg.content)).size(16).style(color);
-                    chat_messages = chat_messages.push(msg_text);
+
+                    if msg.is_media {
+                        let key = msg.media_key.unwrap_or([0u8; 32]);
+                        let path = msg.media_path.clone().unwrap_or_default();
+
+                        let media_row = row![
+                            text(format!("{}: {}", msg.author, msg.content)).size(16).style(color),
+                            button("📂 Extraire & Ouvrir")
+                                .on_press(Message::OpenMedia(msg.content.clone(), key, path))
+                                .padding(5)
+                        ].spacing(10).align_items(Alignment::Center);
+
+                        chat_messages = chat_messages.push(media_row);
+                    } else {
+                        let msg_text = text(format!("{}: {}", msg.author, msg.content)).size(16).style(color);
+                        chat_messages = chat_messages.push(msg_text);
+                    }
                 }
             } else {
                 chat_messages = chat_messages.push(text("Aucun message. Soyez le premier à écrire !").style(Color::from_rgb(0.6, 0.6, 0.6)));
@@ -65,7 +80,22 @@ impl KakolookiyamApp {
 
             let chat_scroll = Scrollable::new(chat_messages).height(Length::Fill).width(Length::Fill);
 
+            // --- NOUVEAU : Affichage dynamique des statuts et erreurs dans le chat ---
+            let status_display = if !self.status_message.is_empty() {
+                let text_color = if self.status_message.starts_with('❌') {
+                    Color::from_rgb(0.9, 0.1, 0.1) // Rouge
+                } else if self.status_message.starts_with('✅') {
+                    Color::from_rgb(0.1, 0.7, 0.1) // Vert
+                } else {
+                    Color::from_rgb(0.5, 0.5, 0.5) // Gris
+                };
+                text(&self.status_message).style(text_color).size(14)
+            } else {
+                text("").size(0)
+            };
+
             let input_row = row![
+                button("📎").on_press(Message::OpenFileDialog).padding(10),
                 text_input(format!("Envoyer un message chiffré à {}...", target_name).as_str(), &self.chat_input)
                     .on_input(Message::ChatInputChanged)
                     .on_submit(Message::SendChatMessage)
@@ -74,7 +104,8 @@ impl KakolookiyamApp {
                 button("Envoyer").on_press(Message::SendChatMessage).padding(10)
             ].spacing(10);
 
-            column![header, Rule::horizontal(10), chat_scroll, input_row].spacing(15).width(Length::Fill).height(Length::Fill)
+            // On ajoute status_display juste au-dessus de la barre de saisie
+            column![header, Rule::horizontal(10), chat_scroll, status_display, input_row].spacing(15).width(Length::Fill).height(Length::Fill)
 
         } else {
             column![
