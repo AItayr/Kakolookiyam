@@ -48,4 +48,9 @@ pub enum Message {
     AddSpecificMemberToGroup(String),
     DeleteGroup,
     CopyContactId(String),
+
+    // --- ÉTAPES 1 & 2 : Aperçu RAM & Multithreading ---
+    PreviewMedia(String, [u8; 32]),
+    PreviewMediaLoaded(Option<Vec<u8>>),
+    ClosePreview,
 }

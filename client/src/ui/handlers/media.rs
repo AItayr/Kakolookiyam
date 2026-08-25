@@ -51,7 +51,6 @@ impl KakolookiyamApp {
 
                                 let mut broadcast_cmd = Command::none();
 
-                                // --- CORRECTION : Distribution espacée pour les groupes ---
                                 if target_id.starts_with("grp_") {
                                     if let Some(group) = vd.groups.get(&target_id) {
                                         let net_filename = format!("{}|{}", target_id, file_name.clone());
@@ -88,7 +87,7 @@ impl KakolookiyamApp {
 
                                 self.chat_history.push(("Moi".to_string(), format!("📎 Fichier partagé : {}", file_name)));
 
-                                return broadcast_cmd; // On valide l'exécution asynchrone
+                                return broadcast_cmd;
                             }
                         }
                     }
@@ -102,7 +101,13 @@ impl KakolookiyamApp {
 
                     if let Some(dest_path) = dest {
                         let dest_path_str = dest_path.path().to_string_lossy().to_string();
-                        if let Ok(decrypted_data) = crate::crypto::decrypt_media(&path, &key) {
+
+                        // --- ÉTAPE 2 : MULTITHREADING SUR L'EXTRACTION ---
+                        let decrypted_data_res = tokio::task::spawn_blocking(move || {
+                            crate::crypto::decrypt_media(&path, &key)
+                        }).await.unwrap();
+
+                        if let Ok(decrypted_data) = decrypted_data_res {
                             let _ = tokio::fs::write(&dest_path_str, decrypted_data).await;
                             #[cfg(target_os = "windows")]
                             let _ = std::process::Command::new("cmd").args(["/c", "start", "", &dest_path_str]).spawn();
@@ -119,6 +124,35 @@ impl KakolookiyamApp {
                 self.idle_seconds = 0;
                 self.status_message = msg;
             }
+
+            // --- ÉTAPES 1 & 2 : APERÇU RAM MULTITHREADÉ ---
+            Message::PreviewMedia(path, key) => {
+                self.idle_seconds = 0;
+                self.status_message = "⏳ Chargement sécurisé de l'aperçu...".to_string();
+
+                return Command::perform(async move {
+                    // La cryptographie lourde est envoyée sur un autre thread pour libérer l'UI
+                    let res = tokio::task::spawn_blocking(move || {
+                        crate::crypto::decrypt_media(&path, &key)
+                    }).await.unwrap();
+                    res.ok() // Retourne Option<Vec<u8>>
+                }, Message::PreviewMediaLoaded);
+            }
+            Message::PreviewMediaLoaded(data_opt) => {
+                self.idle_seconds = 0;
+                if let Some(decrypted_bytes) = data_opt {
+                    self.media_preview = Some(iced::widget::image::Handle::from_memory(decrypted_bytes));
+                    self.status_message = "✅ Aperçu média chargé en mémoire RAM (Zéro-Trace).".to_string();
+                } else {
+                    self.status_message = "❌ Impossible de générer l'aperçu.".to_string();
+                }
+            }
+            Message::ClosePreview => {
+                self.idle_seconds = 0;
+                self.media_preview = None;
+                self.status_message = "✅ Aperçu fermé (Données purgées de la RAM).".to_string();
+            }
+
             _ => {}
         }
         Command::none()

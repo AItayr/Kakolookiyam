@@ -86,7 +86,6 @@ impl KakolookiyamApp {
                         group_controls = group_controls.push(quick_add_row);
                     }
 
-                    // --- NOUVEAU : Bouton pour lancer l'appel de groupe ---
                     let btn_call_group = button("📞 Appeler le serveur")
                         .on_press(Message::CallContact(target_id.clone()))
                         .padding(10);
@@ -104,62 +103,92 @@ impl KakolookiyamApp {
                 ].spacing(10));
             }
 
-            let mut chat_messages = column![].spacing(10);
-            if let Some(history) = vd.chat_history.get(target_id) {
-                for msg in history {
-                    let is_me = msg.author == "Moi";
-                    let color = if is_me { Color::from_rgb(0.2, 0.5, 0.8) } else { Color::from_rgb(0.8, 0.5, 0.2) };
+            // --- ÉTAPE 1 : Rendu de l'image SI APERÇU ACTIF ---
+            if let Some(handle) = &self.media_preview {
+                let img = iced::widget::image(handle.clone())
+                    .width(Length::Fill)
+                    .height(Length::Fill);
 
-                    if msg.is_media {
-                        let key = msg.media_key.unwrap_or([0u8; 32]);
-                        let path = msg.media_path.clone().unwrap_or_default();
+                let close_btn = button("Fermer l'aperçu (Purger la RAM)")
+                    .on_press(Message::ClosePreview)
+                    .padding(15);
 
-                        let media_row = row![
-                            text(format!("{}: {}", msg.author, msg.content)).size(16).style(color),
-                            button("📂 Extraire & Ouvrir")
-                                .on_press(Message::OpenMedia(msg.content.clone(), key, path))
-                                .padding(5)
-                        ].spacing(10).align_items(Alignment::Center);
+                column![
+                    header,
+                    Rule::horizontal(10),
+                    close_btn,
+                    Container::new(img).center_x().center_y().width(Length::Fill).height(Length::Fill)
+                ].spacing(15).width(Length::Fill).height(Length::Fill)
 
-                        chat_messages = chat_messages.push(media_row);
-                    } else {
-                        let msg_text = text(format!("{}: {}", msg.author, msg.content)).size(16).style(color);
-                        chat_messages = chat_messages.push(msg_text);
-                    }
-                }
             } else {
-                chat_messages = chat_messages.push(text("Aucun message. Soyez le premier à écrire !").style(Color::from_rgb(0.6, 0.6, 0.6)));
-            }
+                let mut chat_messages = column![].spacing(10);
+                if let Some(history) = vd.chat_history.get(target_id) {
+                    for msg in history {
+                        let is_me = msg.author == "Moi";
+                        let color = if is_me { Color::from_rgb(0.2, 0.5, 0.8) } else { Color::from_rgb(0.8, 0.5, 0.2) };
 
-            let chat_scroll = Scrollable::new(chat_messages).height(Length::Fill).width(Length::Fill);
+                        if msg.is_media {
+                            let key = msg.media_key.unwrap_or([0u8; 32]);
+                            let path = msg.media_path.clone().unwrap_or_default();
 
-            let input_row = row![
-                button("📎").on_press(Message::OpenFileDialog).padding(10),
-                text_input(format!("Envoyer à {}...", target_name).as_str(), &self.chat_input)
-                    .on_input(Message::ChatInputChanged)
-                    .on_submit(Message::SendChatMessage)
-                    .padding(10)
-                    .width(Length::Fill),
-                button("Envoyer").on_press(Message::SendChatMessage).padding(10)
-            ].spacing(10);
+                            let is_image = msg.content.to_lowercase().contains(".png") || msg.content.to_lowercase().contains(".jpg");
 
-            let mut chat_column = column![header, Rule::horizontal(10), chat_scroll]
-                .spacing(15)
-                .width(Length::Fill)
-                .height(Length::Fill);
+                            let mut media_row = row![
+                                text(format!("{}: {}", msg.author, msg.content)).size(16).style(color),
+                                button("📂 Extraire & Ouvrir")
+                                    .on_press(Message::OpenMedia(msg.content.clone(), key, path.clone()))
+                                    .padding(5)
+                            ].spacing(10).align_items(Alignment::Center);
 
-            if !self.status_message.is_empty() {
-                let text_color = if self.status_message.starts_with('❌') {
-                    Color::from_rgb(0.9, 0.1, 0.1)
-                } else if self.status_message.starts_with('✅') {
-                    Color::from_rgb(0.1, 0.7, 0.1)
+                            // --- NOUVEAU BOUTON APERÇU ---
+                            if is_image {
+                                media_row = media_row.push(
+                                    button("👁️ Aperçu Zéro-Trace")
+                                    .on_press(Message::PreviewMedia(path, key))
+                                    .padding(5)
+                                );
+                            }
+
+                            chat_messages = chat_messages.push(media_row);
+                        } else {
+                            let msg_text = text(format!("{}: {}", msg.author, msg.content)).size(16).style(color);
+                            chat_messages = chat_messages.push(msg_text);
+                        }
+                    }
                 } else {
-                    Color::from_rgb(0.5, 0.5, 0.5)
-                };
-                chat_column = chat_column.push(text(&self.status_message).style(text_color).size(14));
-            }
+                    chat_messages = chat_messages.push(text("Aucun message. Soyez le premier à écrire !").style(Color::from_rgb(0.6, 0.6, 0.6)));
+                }
 
-            chat_column.push(input_row)
+                let chat_scroll = Scrollable::new(chat_messages).height(Length::Fill).width(Length::Fill);
+
+                let input_row = row![
+                    button("📎").on_press(Message::OpenFileDialog).padding(10),
+                    text_input(format!("Envoyer à {}...", target_name).as_str(), &self.chat_input)
+                        .on_input(Message::ChatInputChanged)
+                        .on_submit(Message::SendChatMessage)
+                        .padding(10)
+                        .width(Length::Fill),
+                    button("Envoyer").on_press(Message::SendChatMessage).padding(10)
+                ].spacing(10);
+
+                let mut chat_column = column![header, Rule::horizontal(10), chat_scroll]
+                    .spacing(15)
+                    .width(Length::Fill)
+                    .height(Length::Fill);
+
+                if !self.status_message.is_empty() {
+                    let text_color = if self.status_message.starts_with('❌') {
+                        Color::from_rgb(0.9, 0.1, 0.1)
+                    } else if self.status_message.starts_with('✅') {
+                        Color::from_rgb(0.1, 0.7, 0.1)
+                    } else {
+                        Color::from_rgb(0.5, 0.5, 0.5)
+                    };
+                    chat_column = chat_column.push(text(&self.status_message).style(text_color).size(14));
+                }
+
+                chat_column.push(input_row)
+            }
 
         } else {
             column![

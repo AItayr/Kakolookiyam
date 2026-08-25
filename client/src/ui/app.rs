@@ -48,6 +48,9 @@ pub struct KakolookiyamApp {
 
     pub(crate) new_group_input: String,
     pub(crate) new_member_input: String,
+
+    // --- ÉTAPE 1 : APERÇU RAM ---
+    pub(crate) media_preview: Option<iced::widget::image::Handle>,
 }
 
 impl Application for KakolookiyamApp {
@@ -82,6 +85,7 @@ impl Application for KakolookiyamApp {
                 chat_history: Vec::new(),
                 new_group_input: String::new(),
                 new_member_input: String::new(),
+                media_preview: None,
             },
             Command::none(),
         )
@@ -90,6 +94,11 @@ impl Application for KakolookiyamApp {
     fn title(&self) -> String { String::from("Kakolookiyam - Secure P2P") }
 
     fn update(&mut self, message: Message) -> Command<Message> {
+        // Zéro-Trace : Purge de la RAM en cas de verrouillage
+        if matches!(message, Message::LockSession | Message::ForceDisconnect(_)) {
+            self.media_preview = None;
+        }
+
         match message {
             Message::GoToCreateAccount | Message::GoToLogin | Message::BackToWelcome |
             Message::LockSession | Message::ForceDisconnect(_) | Message::TickInactivity |
@@ -97,7 +106,6 @@ impl Application for KakolookiyamApp {
             Message::PasswordConfirmChanged(_) | Message::SubmitCreateAccount | Message::SubmitLogin
             => self.handle_auth(message),
 
-            // Routage propre, sans les fantômes !
             Message::PeerIdChanged(_) | Message::ConnectClicked | Message::CallContact(_) |
             Message::AcceptCall(_, _) | Message::RejectCall(_) | Message::HangUpCall |
             Message::ToggleMute
@@ -107,8 +115,10 @@ impl Application for KakolookiyamApp {
             Message::SendChatMessage | Message::CopyIdClicked | Message::CopyContactId(_)
             => self.handle_chat(message),
 
+            // Routage des nouvelles commandes médias
             Message::OpenFileDialog | Message::FileSelected(_) | Message::FileRead(_) |
-            Message::OpenMedia(_, _, _) | Message::MediaSaved(_)
+            Message::OpenMedia(_, _, _) | Message::MediaSaved(_) |
+            Message::PreviewMedia(_, _) | Message::PreviewMediaLoaded(_) | Message::ClosePreview
             => self.handle_media(message),
 
             Message::NewGroupInputChanged(_) | Message::CreateGroup | Message::NewMemberInputChanged(_) |
