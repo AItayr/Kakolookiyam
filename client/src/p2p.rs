@@ -22,6 +22,22 @@ use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use std::sync::Arc as StdArc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
+const CHUNK_SIZE: usize = 8192;
+
+#[derive(Clone)]
+pub struct OutgoingTransfer {
+    pub file_data: Vec<u8>,
+    pub total_chunks: usize,
+}
+
+#[derive(Clone)]
+pub struct IncomingTransfer {
+    pub key_b64: String,
+    pub total_chunks: usize,
+    pub received_chunks: usize,
+    pub chunks: Vec<String>,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 enum Signal {
@@ -44,7 +60,7 @@ async fn create_peer_connection(
     tx_signal: tokio::sync::mpsc::Sender<Signal>,
     tx_ui: UnboundedSender<String>,
     tx_dc: UnboundedSender<(String, Arc<RTCDataChannel>)>,
-    tx_chunks: UnboundedSender<(String, String)>, // NOUVEAU : Canal pour décharger les fichiers lourds
+    tx_chunks: UnboundedSender<(String, String)>,
     is_call: bool,
 ) -> Result<Arc<RTCPeerConnection>, Box<dyn std::error::Error>> {
 
@@ -60,8 +76,10 @@ async fn create_peer_connection(
         let tx = tx_ui_state.clone();
         let tgt = tgt_state.clone();
         Box::pin(async move {
+            // --- CORRECTION DU SABOTAGE ---
+            // On a retiré RTCPeerConnectionState::Closed.
+            // Si le PC ferme parce qu'on le remplace localement, il ne criera plus "CALL_ENDED" !
             if state == RTCPeerConnectionState::Failed ||
-               state == RTCPeerConnectionState::Closed ||
                state == RTCPeerConnectionState::Disconnected {
                 let _ = tx.send(format!("CALL_ENDED:{}", tgt));
             }
@@ -110,14 +128,14 @@ async fn create_peer_connection(
     let target_id_msg = target_id.clone();
     let tx_ui_msg = tx_ui.clone();
     let tx_dc_clone = tx_dc.clone();
-    let tx_chunks_clone = tx_chunks.clone();
+    let tx_chunks_inner = tx_chunks.clone();
 
     pc.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
         let d_clone = Arc::clone(&d);
         let pseudo_to_send = my_pseudo.clone();
         let target_msg_clone = target_id_msg.clone();
         let tx_ui_msg_clone = tx_ui_msg.clone();
-        let tx_chunks_inner = tx_chunks_clone.clone();
+        let tx_chunks_clone = tx_chunks_inner.clone();
 
         let _ = tx_dc_clone.send((target_msg_clone.clone(), Arc::clone(&d)));
 
@@ -140,19 +158,18 @@ async fn create_peer_connection(
 
             d_clone.on_message(Box::new(move |msg: DataChannelMessage| {
                 let text = String::from_utf8_lossy(&msg.data);
-                if text.starts_with("{\"type\":\"pseudo\"") {
+
+                if text.starts_with("SYS:FILE_META:") || text.starts_with("SYS:ACK_META:") || text.starts_with("SYS:FILE_CHUNK:") || text.starts_with("SYS:ACK_CHUNK:") {
+                    let _ = tx_chunks_clone.send((target_msg_clone.clone(), text.into_owned()));
+                }
+                else if text.starts_with("{\"type\":\"pseudo\"") {
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
                         if let Some(friend_pseudo) = json["value"].as_str() {
                             let _ = tx_ui_msg_clone.send(format!("CONTACT:{}:{}", target_msg_clone, friend_pseudo));
                             return Box::pin(async move {});
                         }
                     }
-                }
-                // NOUVEAU : Interception des paquets de fichiers sans bloquer l'UI
-                else if text.starts_with("FILE_META:") || text.starts_with("FILE_CHUNK:") {
-                    let _ = tx_chunks_inner.send((target_msg_clone.clone(), text.into_owned()));
-                }
-                else {
+                } else {
                     let _ = tx_ui_msg_clone.send(format!("CHAT_RECV:{}:{}", target_msg_clone, text));
                 }
                 Box::pin(async move {})
@@ -212,63 +229,121 @@ pub async fn start_p2p(
     let (tx_dc, mut rx_dc) = tokio::sync::mpsc::unbounded_channel::<(String, Arc<RTCDataChannel>)>();
     let mut data_channels: HashMap<String, Arc<RTCDataChannel>> = HashMap::new();
 
-    // NOUVEAU : Canal et Stockage pour réassembler les fichiers à la volée
     let (tx_chunks, mut rx_chunks) = tokio::sync::mpsc::unbounded_channel::<(String, String)>();
-    let mut incoming_files: HashMap<String, (usize, usize, Vec<String>, String)> = HashMap::new();
+    let mut outgoing_files: HashMap<String, OutgoingTransfer> = HashMap::new();
+    let mut incoming_files: HashMap<String, IncomingTransfer> = HashMap::new();
 
     loop {
         tokio::select! {
-            // --- NOUVEAU : RÉASSEMBLAGE DES FICHIERS ---
             Some((sender_id, text)) = rx_chunks.recv() => {
-                if text.starts_with("FILE_META:") {
-                    let parts: Vec<&str> = text.splitn(4, ':').collect();
-                    if parts.len() == 4 {
-                        let filename = parts[1];
-                        let key = parts[2];
+                if text.starts_with("SYS:FILE_META:") {
+                    let parts: Vec<&str> = text.splitn(5, ':').collect();
+                    if parts.len() == 5 {
+                        let filename = parts[2].to_string();
                         let total: usize = parts[3].parse().unwrap_or(0);
-                        incoming_files.insert(format!("{}:{}", sender_id, filename), (total, 0, vec![String::new(); total], key.to_string()));
+                        let key_b64 = parts[4].to_string();
+
+                        let file_id = format!("{}_{}", sender_id, filename);
+                        incoming_files.insert(file_id, IncomingTransfer {
+                            key_b64,
+                            total_chunks: total,
+                            received_chunks: 0,
+                            chunks: vec![String::new(); total],
+                        });
+
+                        if let Some(dc) = data_channels.get(&sender_id) {
+                            let _ = dc.send_text(format!("SYS:ACK_META:{}", filename)).await;
+                        }
                     }
                 }
-                else if text.starts_with("FILE_CHUNK:") {
-                    let parts: Vec<&str> = text.splitn(4, ':').collect();
-                    if parts.len() == 4 {
-                        let filename = parts[1];
-                        let index: usize = parts[2].parse().unwrap_or(0);
-                        let b64_data = parts[3];
-                        let file_id = format!("{}:{}", sender_id, filename);
+                else if text.starts_with("SYS:ACK_META:") {
+                    let filename = text.trim_start_matches("SYS:ACK_META:");
+                    let transfer_key = format!("{}_{}", sender_id, filename);
 
-                        if let Some((total, received, chunks, file_key)) = incoming_files.get_mut(&file_id) {
-                            if index < *total && chunks[index].is_empty() {
-                                chunks[index] = b64_data.to_string();
-                                *received += 1;
+                    if let Some(transfer) = outgoing_files.get(&transfer_key) {
+                        let start = 0;
+                        let end = std::cmp::min(start + CHUNK_SIZE, transfer.file_data.len());
+                        let chunk_data = &transfer.file_data[start..end];
 
-                                // TOUS LES MORCEAUX SONT LÀ !
-                                if *received == *total {
-                                    let chunks_owned = std::mem::take(chunks);
-                                    let sender_owned = sender_id.clone();
+                        use base64::prelude::*;
+                        let b64 = BASE64_STANDARD.encode(chunk_data);
+                        if let Some(dc) = data_channels.get(&sender_id) {
+                            let _ = dc.send_text(format!("SYS:FILE_CHUNK:{}:0:{}", filename, b64)).await;
+                        }
+                    }
+                }
+                else if text.starts_with("SYS:FILE_CHUNK:") {
+                    let parts: Vec<&str> = text.splitn(5, ':').collect();
+                    if parts.len() == 5 {
+                        let filename = parts[2];
+                        let index: usize = parts[3].parse().unwrap_or(0);
+                        let b64_data = parts[4];
+
+                        let file_id = format!("{}_{}", sender_id, filename);
+                        if let Some(transfer) = incoming_files.get_mut(&file_id) {
+                            if index < transfer.total_chunks && transfer.chunks[index].is_empty() {
+                                transfer.chunks[index] = b64_data.to_string();
+                                transfer.received_chunks += 1;
+
+                                if let Some(dc) = data_channels.get(&sender_id) {
+                                    let _ = dc.send_text(format!("SYS:ACK_CHUNK:{}:{}", filename, index)).await;
+                                }
+
+                                if transfer.received_chunks == transfer.total_chunks {
+                                    let chunks_owned = std::mem::take(&mut transfer.chunks);
                                     let filename_owned = filename.to_string();
-                                    let key_owned = file_key.clone();
-                                    let my_pseudo_clone = my_pseudo.clone();
+                                    let key_owned = transfer.key_b64.clone();
+                                    let sender_owned = sender_id.clone();
                                     let tx_ui_clone = tx_ui.clone();
+                                    let my_pseudo_clone = my_pseudo.clone();
 
                                     tokio::spawn(async move {
                                         use base64::prelude::*;
-                                        let mut enc_data = Vec::new();
+                                        let mut full_data = Vec::new();
                                         for c in chunks_owned {
                                             if let Ok(bytes) = BASE64_STANDARD.decode(&c) {
-                                                enc_data.extend(bytes);
+                                                full_data.extend(bytes);
                                             }
                                         }
                                         let media_dir = format!("media_{}", my_pseudo_clone);
                                         let _ = tokio::fs::create_dir_all(&media_dir).await;
-                                        let save_path = format!("{}/{}", media_dir, filename_owned);
-                                        let _ = tokio::fs::write(&save_path, enc_data).await;
 
-                                        let _ = tx_ui_clone.send(format!("FILE_RECV:{}:{}:{}:{}", sender_owned, filename_owned, key_owned, save_path));
+                                        let safe_filename = filename_owned.replace('|', "_");
+                                        let save_path = format!("{}/{}", media_dir, safe_filename);
+
+                                        if tokio::fs::write(&save_path, full_data).await.is_ok() {
+                                            let _ = tx_ui_clone.send(format!("FILE_RECV:{}:{}:{}:{}", sender_owned, filename_owned, key_owned, save_path));
+                                        }
                                     });
-
                                     incoming_files.remove(&file_id);
                                 }
+                            }
+                        }
+                    }
+                }
+                else if text.starts_with("SYS:ACK_CHUNK:") {
+                    let parts: Vec<&str> = text.splitn(4, ':').collect();
+                    if parts.len() == 4 {
+                        let filename = parts[2];
+                        let ack_index: usize = parts[3].parse().unwrap_or(0);
+                        let transfer_key = format!("{}_{}", sender_id, filename);
+
+                        if let Some(transfer) = outgoing_files.get_mut(&transfer_key) {
+                            let next_index = ack_index + 1;
+                            if next_index < transfer.total_chunks {
+                                let start = next_index * CHUNK_SIZE;
+                                if start < transfer.file_data.len() {
+                                    let end = std::cmp::min(start + CHUNK_SIZE, transfer.file_data.len());
+                                    let chunk_data = &transfer.file_data[start..end];
+
+                                    use base64::prelude::*;
+                                    let b64 = BASE64_STANDARD.encode(chunk_data);
+                                    if let Some(dc) = data_channels.get(&sender_id) {
+                                        let _ = dc.send_text(format!("SYS:FILE_CHUNK:{}:{}:{}", filename, next_index, b64)).await;
+                                    }
+                                }
+                            } else {
+                                outgoing_files.remove(&transfer_key);
                             }
                         }
                     }
@@ -285,6 +360,9 @@ pub async fn start_p2p(
                         my_local_id = parts[1].to_string();
                         my_pseudo = parts[2].to_string();
                         let _ = tx_signal.send(Signal::Register { id: my_local_id.clone() }).await;
+                    } else if parts.len() == 2 {
+                        my_local_id = parts[1].to_string();
+                        let _ = tx_signal.send(Signal::Register { id: my_local_id.clone() }).await;
                     }
                 }
                 else if cmd.starts_with("LOGOUT:") {
@@ -295,6 +373,8 @@ pub async fn start_p2p(
                         let _ = pc.close().await;
                     }
                     data_channels.clear();
+                    outgoing_files.clear();
+                    incoming_files.clear();
                 }
                 else if cmd.starts_with("CALL:") {
                     let target_id = cmd.trim_start_matches("CALL:").to_string();
@@ -330,16 +410,16 @@ pub async fn start_p2p(
                     let tx_chunks_inner = tx_chunks.clone();
                     data_channel.on_message(Box::new(move |msg: DataChannelMessage| {
                         let text = String::from_utf8_lossy(&msg.data);
-                        if text.starts_with("{\"type\":\"pseudo\"") {
+                        if text.starts_with("SYS:FILE_META:") || text.starts_with("SYS:ACK_META:") || text.starts_with("SYS:FILE_CHUNK:") || text.starts_with("SYS:ACK_CHUNK:") {
+                            let _ = tx_chunks_inner.send((tgt_id_msg.clone(), text.into_owned()));
+                        }
+                        else if text.starts_with("{\"type\":\"pseudo\"") {
                             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
                                 if let Some(friend_pseudo) = json["value"].as_str() {
                                     let _ = tx_ui_msg.send(format!("CONTACT:{}:{}", tgt_id_msg, friend_pseudo));
                                     return Box::pin(async move {});
                                 }
                             }
-                        }
-                        else if text.starts_with("FILE_META:") || text.starts_with("FILE_CHUNK:") {
-                            let _ = tx_chunks_inner.send((tgt_id_msg.clone(), text.into_owned()));
                         }
                         else {
                             let _ = tx_ui_msg.send(format!("CHAT_RECV:{}:{}", tgt_id_msg, text));
@@ -433,16 +513,16 @@ pub async fn start_p2p(
                             let tx_chunks_inner = tx_chunks.clone();
                             data_channel.on_message(Box::new(move |msg: DataChannelMessage| {
                                 let text = String::from_utf8_lossy(&msg.data);
-                                if text.starts_with("{\"type\":\"pseudo\"") {
+                                if text.starts_with("SYS:FILE_META:") || text.starts_with("SYS:ACK_META:") || text.starts_with("SYS:FILE_CHUNK:") || text.starts_with("SYS:ACK_CHUNK:") {
+                                    let _ = tx_chunks_inner.send((tgt_id_msg.clone(), text.into_owned()));
+                                }
+                                else if text.starts_with("{\"type\":\"pseudo\"") {
                                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
                                         if let Some(friend_pseudo) = json["value"].as_str() {
                                             let _ = tx_ui_msg.send(format!("CONTACT:{}:{}", tgt_id_msg, friend_pseudo));
                                             return Box::pin(async move {});
                                         }
                                     }
-                                }
-                                else if text.starts_with("FILE_META:") || text.starts_with("FILE_CHUNK:") {
-                                    let _ = tx_chunks_inner.send((tgt_id_msg.clone(), text.into_owned()));
                                 }
                                 else {
                                     let _ = tx_ui_msg.send(format!("CHAT_RECV:{}:{}", tgt_id_msg, text));
@@ -457,8 +537,7 @@ pub async fn start_p2p(
                         }
                     }
                 }
-                // --- NOUVEAU : DÉCOUPE ET ENVOI DES FICHIERS ---
-                else if cmd.starts_with("FILE_SEND:") {
+                else if cmd.starts_with("FILE_SEND_INIT:") {
                     let parts: Vec<&str> = cmd.splitn(5, ':').collect();
                     if parts.len() == 5 {
                         let target_id = parts[1].to_string();
@@ -466,25 +545,68 @@ pub async fn start_p2p(
                         let key_b64 = parts[3].to_string();
                         let enc_path = parts[4].to_string();
 
-                        if let Some(dc) = data_channels.get(&target_id) {
-                            let dc_clone = Arc::clone(dc);
-                            tokio::spawn(async move {
-                                use base64::prelude::*;
-                                if let Ok(enc_data) = tokio::fs::read(&enc_path).await {
-                                    let chunk_size = 16384; // 16 Ko par paquet
-                                    let chunks: Vec<&[u8]> = enc_data.chunks(chunk_size).collect();
+                        if let Ok(file_data) = tokio::fs::read(&enc_path).await {
+                            let total_chunks = (file_data.len() + CHUNK_SIZE - 1) / CHUNK_SIZE;
 
-                                    // 1. On annonce le fichier
-                                    let _ = dc_clone.send_text(format!("FILE_META:{}:{}:{}", filename, key_b64, chunks.len())).await;
-
-                                    // 2. On envoie les morceaux avec un mini-délai pour ne pas saturer le réseau
-                                    for (i, chunk) in chunks.iter().enumerate() {
-                                        let b64 = BASE64_STANDARD.encode(chunk);
-                                        let _ = dc_clone.send_text(format!("FILE_CHUNK:{}:{}:{}", filename, i, b64)).await;
-                                        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
-                                    }
-                                }
+                            let transfer_key = format!("{}_{}", target_id, filename);
+                            outgoing_files.insert(transfer_key, OutgoingTransfer {
+                                file_data,
+                                total_chunks,
                             });
+
+                            let meta_msg = format!("SYS:FILE_META:{}:{}:{}", filename, total_chunks, key_b64);
+
+                            if let Some(dc) = data_channels.get(&target_id) {
+                                let _ = dc.send_text(meta_msg).await;
+                            } else {
+                                if peers.contains_key(&target_id) { continue; }
+
+                                let pc = create_peer_connection(&api, target_id.clone(), my_local_id.clone(), my_pseudo.clone(), None, tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), tx_chunks.clone(), false).await.unwrap();
+
+                                let data_channel = pc.create_data_channel("secure_text", None).await.unwrap();
+                                data_channels.insert(target_id.clone(), Arc::clone(&data_channel));
+
+                                let d_open = Arc::clone(&data_channel);
+                                let p = my_pseudo.clone();
+                                let m_msg = meta_msg.clone();
+
+                                data_channel.on_open(Box::new(move || {
+                                    let p2 = p.clone();
+                                    let m = m_msg.clone();
+                                    let d = Arc::clone(&d_open);
+                                    Box::pin(async move {
+                                        let _ = d.send_text(format!("{{\"type\":\"pseudo\",\"value\":\"{}\"}}", p2)).await;
+                                        let _ = d.send_text(m).await;
+                                    })
+                                }));
+
+                                let tgt_id_msg = target_id.clone();
+                                let tx_ui_msg = tx_ui.clone();
+                                let tx_chunks_inner = tx_chunks.clone();
+                                data_channel.on_message(Box::new(move |msg: DataChannelMessage| {
+                                    let text = String::from_utf8_lossy(&msg.data);
+                                    if text.starts_with("SYS:FILE_META:") || text.starts_with("SYS:ACK_META:") || text.starts_with("SYS:FILE_CHUNK:") || text.starts_with("SYS:ACK_CHUNK:") {
+                                        let _ = tx_chunks_inner.send((tgt_id_msg.clone(), text.into_owned()));
+                                    }
+                                    else if text.starts_with("{\"type\":\"pseudo\"") {
+                                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                                            if let Some(friend_pseudo) = json["value"].as_str() {
+                                                let _ = tx_ui_msg.send(format!("CONTACT:{}:{}", tgt_id_msg, friend_pseudo));
+                                                return Box::pin(async move {});
+                                            }
+                                        }
+                                    }
+                                    else {
+                                        let _ = tx_ui_msg.send(format!("CHAT_RECV:{}:{}", tgt_id_msg, text));
+                                    }
+                                    Box::pin(async move {})
+                                }));
+
+                                let offer = pc.create_offer(None).await.unwrap();
+                                pc.set_local_description(offer.clone()).await.unwrap();
+                                let _ = tx_signal.send(Signal::ChatOffer { sdp: offer.sdp, sender_id: my_local_id.clone(), target_id: target_id.clone() }).await;
+                                peers.insert(target_id, pc);
+                            }
                         }
                     }
                 }

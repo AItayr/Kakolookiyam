@@ -22,14 +22,13 @@ impl KakolookiyamApp {
                 return Command::perform(async {}, |_| { Message::ForceDisconnect("❌ Serveur injoignable.".to_string()) });
             }
 
-            // --- RESTAURATION DE LA RECEPTION BINAIRE DES FICHIERS ---
             if msg.starts_with("FILE_RECV:") {
                 let parts: Vec<&str> = msg.splitn(5, ':').collect();
                 if parts.len() == 5 {
                     let sender_id = parts[1].to_string();
                     let filename = parts[2].to_string();
                     let key_b64 = parts[3].to_string();
-                    let path = parts[4].to_string(); // Ce path est bien celui généré localement par p2p.rs !
+                    let path = parts[4].to_string();
 
                     use base64::prelude::*;
                     let mut key_bytes = [0u8; 32];
@@ -211,7 +210,10 @@ impl KakolookiyamApp {
 
                 let mut should_end = false;
                 if let Some((active_id, _)) = &self.active_call {
-                    if active_id == &id || active_id.starts_with("grp_") {
+                    // --- CORRECTION DE L'EFFET DOMINO ---
+                    // On ne ferme l'interface de groupe que si TOI tu cliques sur raccrocher.
+                    // Si un simple membre quitte (ou que son tunnel de fond se ferme), on ne détruit pas la conf !
+                    if active_id == &id {
                         should_end = true;
                     }
                 }

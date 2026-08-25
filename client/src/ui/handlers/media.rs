@@ -51,6 +51,7 @@ impl KakolookiyamApp {
 
                                 let mut broadcast_cmd = Command::none();
 
+                                // --- CORRECTION : Distribution espacée pour les groupes ---
                                 if target_id.starts_with("grp_") {
                                     if let Some(group) = vd.groups.get(&target_id) {
                                         let net_filename = format!("{}|{}", target_id, file_name.clone());
@@ -58,12 +59,11 @@ impl KakolookiyamApp {
                                         let members = group.members.clone();
                                         let enc_path_net = enc_path.clone();
 
-                                        // --- ON RESTAURE FILE_SEND MAIS ON GARDE LE DELAI DE 150ms ---
                                         broadcast_cmd = Command::perform(
                                             async move {
                                                 for member_id in members {
                                                     if member_id != my_id {
-                                                        let _ = tx.send(format!("FILE_SEND:{}:{}:{}:{}", member_id, net_filename, key_b64, enc_path_net));
+                                                        let _ = tx.send(format!("FILE_SEND_INIT:{}:{}:{}:{}", member_id, net_filename, key_b64, enc_path_net));
                                                         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
                                                     }
                                                 }
@@ -72,8 +72,7 @@ impl KakolookiyamApp {
                                         );
                                     }
                                 } else {
-                                    // 1-to-1 : Appel classique
-                                    let _ = self.tx_network.send(format!("FILE_SEND:{}:{}:{}:{}", target_id, file_name.clone(), key_b64, enc_path.clone()));
+                                    let _ = self.tx_network.send(format!("FILE_SEND_INIT:{}:{}:{}:{}", target_id, file_name.clone(), key_b64, enc_path.clone()));
                                 }
 
                                 let entry = crate::crypto::MessageEntry {
@@ -89,7 +88,7 @@ impl KakolookiyamApp {
 
                                 self.chat_history.push(("Moi".to_string(), format!("📎 Fichier partagé : {}", file_name)));
 
-                                return broadcast_cmd;
+                                return broadcast_cmd; // On valide l'exécution asynchrone
                             }
                         }
                     }
