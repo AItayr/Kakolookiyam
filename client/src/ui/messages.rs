@@ -31,8 +31,6 @@ pub enum Message {
     OpenFileDialog,
     FileSelected(Option<String>),
     FileRead(Option<(String, Vec<u8>)>),
-
-    // --- NOUVEAU : Ouverture et Déchiffrement des Fichiers ---
     OpenMedia(String, [u8; 32], String),
     MediaSaved(String),
 
@@ -41,4 +39,13 @@ pub enum Message {
 
     NetworkEvent(String),
     CopyIdClicked,
+
+    NewGroupInputChanged(String),
+    CreateGroup,
+    NewMemberInputChanged(String),
+    AddMemberToGroup,
+
+    AddSpecificMemberToGroup(String),
+    DeleteGroup,
+    CopyContactId(String),
 }
