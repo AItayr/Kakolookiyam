@@ -49,8 +49,16 @@ pub struct KakolookiyamApp {
     pub(crate) new_group_input: String,
     pub(crate) new_member_input: String,
 
-    // --- ÉTAPE 1 : APERÇU RAM ---
     pub(crate) media_preview: Option<iced::widget::image::Handle>,
+
+    pub(crate) current_theme: Theme,
+    pub(crate) show_settings: bool,
+    pub(crate) show_group_options: bool,
+
+    // --- Variables d'interface (Paramètres) ---
+    pub(crate) selected_mic: String,
+    pub(crate) selected_speaker: String,
+    pub(crate) active_legal_tab: Option<String>,
 }
 
 impl Application for KakolookiyamApp {
@@ -86,6 +94,12 @@ impl Application for KakolookiyamApp {
                 new_group_input: String::new(),
                 new_member_input: String::new(),
                 media_preview: None,
+                current_theme: Theme::Dark,
+                show_settings: false,
+                show_group_options: false,
+                selected_mic: "Périphérique par défaut (Système)".to_string(),
+                selected_speaker: "Périphérique par défaut (Système)".to_string(),
+                active_legal_tab: None,
             },
             Command::none(),
         )
@@ -93,13 +107,42 @@ impl Application for KakolookiyamApp {
 
     fn title(&self) -> String { String::from("Kakolookiyam - Secure P2P") }
 
+    fn theme(&self) -> Theme {
+        self.current_theme.clone()
+    }
+
     fn update(&mut self, message: Message) -> Command<Message> {
-        // Zéro-Trace : Purge de la RAM en cas de verrouillage
         if matches!(message, Message::LockSession | Message::ForceDisconnect(_)) {
             self.media_preview = None;
+            self.show_settings = false;
+            self.show_group_options = false;
+            self.active_legal_tab = None;
+        }
+
+        if matches!(message, Message::DeselectChat | Message::SelectChat(_) | Message::DeleteGroup) {
+            self.show_group_options = false;
         }
 
         match message {
+            // --- NOUVEAU : Interactions Paramètres ---
+            Message::MicSelected(mic) => { self.selected_mic = mic; return Command::none(); }
+            Message::SpeakerSelected(spk) => { self.selected_speaker = spk; return Command::none(); }
+            Message::ToggleLegal(tab) => {
+                self.active_legal_tab = if self.active_legal_tab.as_deref() == Some(&tab) { None } else { Some(tab) };
+                return Command::none();
+            }
+
+            Message::OpenSettings => { self.idle_seconds = 0; self.show_settings = true; return Command::none(); }
+            Message::CloseSettings => { self.idle_seconds = 0; self.show_settings = false; return Command::none(); }
+            Message::ToggleTheme => {
+                self.idle_seconds = 0;
+                self.current_theme = if self.current_theme == Theme::Dark { Theme::Light } else { Theme::Dark };
+                return Command::none();
+            }
+
+            Message::OpenGroupOptions => { self.idle_seconds = 0; self.show_group_options = true; return Command::none(); }
+            Message::CloseGroupOptions => { self.idle_seconds = 0; self.show_group_options = false; return Command::none(); }
+
             Message::GoToCreateAccount | Message::GoToLogin | Message::BackToWelcome |
             Message::LockSession | Message::ForceDisconnect(_) | Message::TickInactivity |
             Message::ResetInactivity | Message::PseudoChanged(_) | Message::PasswordChanged(_) |
@@ -115,7 +158,6 @@ impl Application for KakolookiyamApp {
             Message::SendChatMessage | Message::CopyIdClicked | Message::CopyContactId(_)
             => self.handle_chat(message),
 
-            // Routage des nouvelles commandes médias
             Message::OpenFileDialog | Message::FileSelected(_) | Message::FileRead(_) |
             Message::OpenMedia(_, _, _) | Message::MediaSaved(_) |
             Message::PreviewMedia(_, _) | Message::PreviewMediaLoaded(_) | Message::ClosePreview

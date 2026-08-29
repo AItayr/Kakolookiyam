@@ -19,11 +19,16 @@ impl KakolookiyamApp {
                         let group_id = format!("grp_{}", hex);
                         let my_id = crate::crypto::derive_public_id(&vd.private_key);
 
-                        vd.groups.insert(group_id.clone(), crate::crypto::GroupData { name, members: vec![my_id] });
+                        vd.groups.insert(group_id.clone(), crate::crypto::GroupData {
+                            name,
+                            members: vec![my_id],
+                        });
+
                         let _ = crate::crypto::save_vault(pwd, vd);
                         self.new_group_input.clear();
                         self.selected_chat = Some(group_id);
                         self.chat_history.clear();
+                        self.show_group_options = false;
                     }
                 }
             }
@@ -35,12 +40,16 @@ impl KakolookiyamApp {
                         if grp_id.starts_with("grp_") {
                             if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
                                 let mut sync_data = None;
+
                                 if let Some(group) = vd.groups.get_mut(grp_id) {
                                     if !group.members.contains(&new_member) {
                                         group.members.push(new_member.clone());
                                         sync_data = Some((group.name.clone(), group.members.clone()));
-                                    } else { self.status_message = "⚠️ Déjà dans le groupe.".to_string(); }
+                                    } else {
+                                        self.status_message = "⚠️ Ce membre est déjà dans le groupe.".to_string();
+                                    }
                                 }
+
                                 if let Some((grp_name, members)) = sync_data {
                                     let _ = crate::crypto::save_vault(pwd, vd);
                                     let members_str = members.join(",");
@@ -50,7 +59,7 @@ impl KakolookiyamApp {
                                             let _ = self.tx_network.send(format!("CHAT_SEND:{}:SYS:GROUP_SYNC:{}:{}:{}", member_id, grp_id, grp_name, members_str));
                                         }
                                     }
-                                    self.status_message = format!("✅ Synchronisé !");
+                                    self.status_message = "✅ Membre invité et synchronisé !".to_string();
                                 }
                                 self.new_member_input.clear();
                             }
@@ -60,14 +69,17 @@ impl KakolookiyamApp {
             }
             Message::AddSpecificMemberToGroup(new_member_id) => {
                 self.idle_seconds = 0;
+                let clean_id = new_member_id.trim().to_string();
                 if let Some(grp_id) = &self.selected_chat {
                     if grp_id.starts_with("grp_") {
                         if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
                             let mut sync_data = None;
                             if let Some(group) = vd.groups.get_mut(grp_id) {
-                                if !group.members.contains(&new_member_id) {
-                                    group.members.push(new_member_id.clone());
+                                if !group.members.contains(&clean_id) {
+                                    group.members.push(clean_id.clone());
                                     sync_data = Some((group.name.clone(), group.members.clone()));
+                                } else {
+                                    self.status_message = "⚠️ Ce membre est déjà dans le groupe.".to_string();
                                 }
                             }
                             if let Some((grp_name, members)) = sync_data {
@@ -79,7 +91,7 @@ impl KakolookiyamApp {
                                         let _ = self.tx_network.send(format!("CHAT_SEND:{}:SYS:GROUP_SYNC:{}:{}:{}", member_id, grp_id, grp_name, members_str));
                                     }
                                 }
-                                self.status_message = format!("✅ Ajouté et synchronisé !");
+                                self.status_message = "✅ Contact ajouté et synchronisé !".to_string();
                             }
                         }
                     }
@@ -87,10 +99,12 @@ impl KakolookiyamApp {
             }
             Message::DeleteGroup => {
                 self.idle_seconds = 0;
-                if let Some(grp_id) = &self.selected_chat {
+                let target_id = self.selected_chat.clone();
+                if let Some(grp_id) = target_id {
                     if grp_id.starts_with("grp_") {
                         if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
-                            if let Some(group) = vd.groups.get(grp_id) {
+
+                            if let Some(group) = vd.groups.get(&grp_id) {
                                 let my_id = crate::crypto::derive_public_id(&vd.private_key);
                                 for member_id in &group.members {
                                     if member_id != &my_id {
@@ -98,11 +112,14 @@ impl KakolookiyamApp {
                                     }
                                 }
                             }
-                            vd.groups.remove(grp_id);
-                            vd.chat_history.remove(grp_id);
+
+                            vd.groups.remove(&grp_id);
+                            vd.chat_history.remove(&grp_id);
                             let _ = crate::crypto::save_vault(pwd, vd);
+
                             self.selected_chat = None;
                             self.chat_history.clear();
+                            self.show_group_options = false;
                             self.status_message = "✅ Groupe quitté avec succès.".to_string();
                         }
                     }

@@ -49,8 +49,19 @@ pub enum Message {
     DeleteGroup,
     CopyContactId(String),
 
-    // --- ÉTAPES 1 & 2 : Aperçu RAM & Multithreading ---
     PreviewMedia(String, [u8; 32]),
     PreviewMediaLoaded(Option<Vec<u8>>),
     ClosePreview,
+
+    OpenSettings,
+    CloseSettings,
+    ToggleTheme,
+
+    OpenGroupOptions,
+    CloseGroupOptions,
+
+    // --- NOUVEAU : Interactions Paramètres ---
+    MicSelected(String),
+    SpeakerSelected(String),
+    ToggleLegal(String),
 }

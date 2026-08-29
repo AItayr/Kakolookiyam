@@ -25,10 +25,10 @@ impl KakolookiyamApp {
             if msg.starts_with("FILE_RECV:") {
                 let parts: Vec<&str> = msg.splitn(5, ':').collect();
                 if parts.len() == 5 {
-                    let sender_id = parts[1].to_string();
-                    let filename = parts[2].to_string();
-                    let key_b64 = parts[3].to_string();
-                    let path = parts[4].to_string();
+                    let sender_id = parts[1].trim().to_string();
+                    let filename = parts[2].trim().to_string();
+                    let key_b64 = parts[3].trim().to_string();
+                    let path = parts[4].trim().to_string();
 
                     use base64::prelude::*;
                     let mut key_bytes = [0u8; 32];
@@ -42,16 +42,12 @@ impl KakolookiyamApp {
                     if filename.contains('|') {
                         let f_parts: Vec<&str> = filename.splitn(2, '|').collect();
                         if f_parts.len() == 2 && f_parts[0].starts_with("grp_") {
-                            target_chat_id = f_parts[0].to_string();
-                            display_filename = f_parts[1].to_string();
+                            target_chat_id = f_parts[0].trim().to_string();
+                            display_filename = f_parts[1].trim().to_string();
                         }
                     }
 
-                    let sender_pseudo = if let Some(vd) = &self.vault_data {
-                        vd.contacts.get(&sender_id).cloned().unwrap_or_else(|| "Inconnu".to_string())
-                    } else {
-                        "Inconnu".to_string()
-                    };
+                    let sender_pseudo = if let Some(vd) = &self.vault_data { vd.contacts.get(&sender_id).cloned().unwrap_or_else(|| "Inconnu".to_string()) } else { "Inconnu".to_string() };
 
                     if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
                         let entry = crypto::MessageEntry {
@@ -63,7 +59,7 @@ impl KakolookiyamApp {
                             media_path: Some(path.clone()),
                         };
                         vd.chat_history.entry(target_chat_id.clone()).or_default().push(entry);
-                        let _ = crate::crypto::save_vault(pwd, vd);
+                        let _ = crypto::save_vault(pwd, vd);
                     }
 
                     let is_currently_viewed = self.selected_chat.as_ref() == Some(&target_chat_id) || self.active_call.as_ref().map(|(id, _)| id) == Some(&target_chat_id);
@@ -75,13 +71,13 @@ impl KakolookiyamApp {
             else if msg.starts_with("CHAT_RECV:") {
                 let parts: Vec<&str> = msg.splitn(3, ':').collect();
                 if parts.len() == 3 {
-                    let sender_id = parts[1].to_string();
+                    let sender_id = parts[1].trim().to_string();
                     let text = parts[2].to_string();
 
                     if text.starts_with("SYS:CALL_CONTEXT:") {
                         let sys_parts: Vec<&str> = text.splitn(3, ':').collect();
                         if sys_parts.len() == 3 {
-                            let grp_id = sys_parts[2].to_string();
+                            let grp_id = sys_parts[2].trim().to_string();
                             if let Some(vd) = &self.vault_data {
                                 if let Some(group) = vd.groups.get(&grp_id) {
                                     self.active_call = Some((grp_id.clone(), group.name.clone()));
@@ -99,9 +95,9 @@ impl KakolookiyamApp {
                     if text.starts_with("SYS:GROUP_SYNC:") {
                         let sys_parts: Vec<&str> = text.splitn(5, ':').collect();
                         if sys_parts.len() == 5 {
-                            let grp_id = sys_parts[2].to_string();
-                            let grp_name = sys_parts[3].to_string();
-                            let members: Vec<String> = sys_parts[4].split(',').map(|s| s.to_string()).collect();
+                            let grp_id = sys_parts[2].trim().to_string();
+                            let grp_name = sys_parts[3].trim().to_string();
+                            let members: Vec<String> = sys_parts[4].split(',').map(|s| s.trim().to_string()).collect();
 
                             if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
                                 let is_new = !vd.groups.contains_key(&grp_id);
@@ -113,15 +109,16 @@ impl KakolookiyamApp {
                         return Command::none();
                     }
 
+                    // --- FORCE DU TRIM POUR LA SUPPRESSION ---
                     if text.starts_with("SYS:GROUP_LEAVE:") {
                         let sys_parts: Vec<&str> = text.splitn(3, ':').collect();
                         if sys_parts.len() == 3 {
-                            let grp_id = sys_parts[2].to_string();
+                            let grp_id = sys_parts[2].trim().to_string();
                             if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
                                 if let Some(group) = vd.groups.get_mut(&grp_id) {
-                                    group.members.retain(|m| m != &sender_id);
+                                    group.members.retain(|m| m.trim() != sender_id);
                                     let _ = crate::crypto::save_vault(pwd, vd);
-                                    self.status_message = format!("🚪 Un membre a quitté le serveur.");
+                                    self.status_message = "🚪 Un membre a quitté le serveur.".to_string();
                                 }
                             }
                         }
@@ -134,7 +131,7 @@ impl KakolookiyamApp {
                     if text.starts_with("SYS:GRP_MSG:") {
                         let sys_parts: Vec<&str> = text.splitn(4, ':').collect();
                         if sys_parts.len() == 4 {
-                            target_chat_id = sys_parts[2].to_string();
+                            target_chat_id = sys_parts[2].trim().to_string();
                             display_text = sys_parts[3].to_string();
                         }
                     }
@@ -151,7 +148,7 @@ impl KakolookiyamApp {
                             media_path: None,
                         };
                         vd.chat_history.entry(target_chat_id.clone()).or_default().push(entry);
-                        let _ = crate::crypto::save_vault(pwd, vd);
+                        let _ = crypto::save_vault(pwd, vd);
                     }
 
                     let is_currently_viewed = self.selected_chat.as_ref() == Some(&target_chat_id) || self.active_call.as_ref().map(|(id, _)| id) == Some(&target_chat_id);
@@ -163,8 +160,8 @@ impl KakolookiyamApp {
             else if msg.starts_with("CONTACT:") {
                 let parts: Vec<&str> = msg.splitn(3, ':').collect();
                 if parts.len() == 3 {
-                    let c_id = parts[1].to_string();
-                    let c_pseudo = parts[2].to_string();
+                    let c_id = parts[1].trim().to_string();
+                    let c_pseudo = parts[2].trim().to_string();
                     if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
                         if !vd.contacts.contains_key(&c_id) {
                             vd.contacts.insert(c_id, c_pseudo);
@@ -176,7 +173,7 @@ impl KakolookiyamApp {
             else if msg.starts_with("INCOMING_CALL:") {
                 let parts: Vec<&str> = msg.splitn(3, ':').collect();
                 if parts.len() == 3 {
-                    let caller_id = parts[1].to_string();
+                    let caller_id = parts[1].trim().to_string();
                     let sdp = parts[2].to_string();
                     let caller_pseudo = if let Some(vd) = &self.vault_data { vd.contacts.get(&caller_id).cloned().unwrap_or_else(|| "Inconnu".to_string()) } else { "Inconnu".to_string() };
 
@@ -185,7 +182,7 @@ impl KakolookiyamApp {
                 }
             }
             else if msg.starts_with("CALL_ACTIVE:") {
-                let id = msg.trim_start_matches("CALL_ACTIVE:").to_string();
+                let id = msg.trim_start_matches("CALL_ACTIVE:").trim().to_string();
 
                 if let Some((active_id, _)) = &self.active_call {
                     if active_id.starts_with("grp_") {
@@ -205,15 +202,12 @@ impl KakolookiyamApp {
                 }
             }
             else if msg.starts_with("CALL_ENDED:") {
-                let id = msg.trim_start_matches("CALL_ENDED:").to_string();
+                let id = msg.trim_start_matches("CALL_ENDED:").trim().to_string();
                 let _ = self.tx_network.send(format!("HANGUP:{}", id));
 
                 let mut should_end = false;
                 if let Some((active_id, _)) = &self.active_call {
-                    // --- CORRECTION DE L'EFFET DOMINO ---
-                    // On ne ferme l'interface de groupe que si TOI tu cliques sur raccrocher.
-                    // Si un simple membre quitte (ou que son tunnel de fond se ferme), on ne détruit pas la conf !
-                    if active_id == &id {
+                    if active_id == &id || active_id.starts_with("grp_") {
                         should_end = true;
                     }
                 }
