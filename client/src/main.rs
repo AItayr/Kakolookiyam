@@ -1,7 +1,8 @@
 #![allow(unused_mut)]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod audio;
-mod p2p;
+mod network; // Remplacement du module p2p monolithique par le sous-dossier modulaire network
 mod ui;
 mod crypto;
 
@@ -32,8 +33,8 @@ pub fn main() -> iced::Result {
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            // On passe le pseudo en 6ème argument au moteur WebRTC
-            let _ = p2p::start_p2p(
+            // Appel via l'interface publique du nouveau module network
+            let _ = network::start_p2p(
                 rx_mic,
                 tx_speaker,
                 rx_ui_to_p2p,

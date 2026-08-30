@@ -127,16 +127,7 @@ impl KakolookiyamApp {
                 let my_pseudo = vd.pseudo.clone();
 
                 return Command::perform(async move {
-                    let mut is_first = true;
-
                     for msg in missing_messages {
-                        // --- CORRECTION DU GOULET D'ÉTRANGLEMENT WEBRTC ---
-                        if is_first {
-                            let _ = tx.send(format!("CHAT_SEND:{}:SYS:SYNC_WAKEUP", requester_id));
-                            tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
-                            is_first = false;
-                        }
-
                         use base64::prelude::*;
                         let safe_content = BASE64_STANDARD.encode(msg.content.as_bytes());
                         let actual_author = if msg.author == "Moi" { &my_pseudo } else { &msg.author };
@@ -152,7 +143,7 @@ impl KakolookiyamApp {
                         } else {
                             let sync_payload = format!("SYS:SYNC_RES:{}:{}:TXT:{}|{}", target_id_for_requester, msg.timestamp, actual_author, safe_content);
                             let _ = tx.send(format!("CHAT_SEND:{}:{}", requester_id, sync_payload));
-                            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                         }
                     }
                 }, |_| Message::ResetInactivity);
