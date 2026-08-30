@@ -4,3 +4,4 @@ pub mod chat;
 pub mod group;
 pub mod media;
 pub mod network;
+pub mod sync;

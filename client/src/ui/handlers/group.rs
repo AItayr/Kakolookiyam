@@ -5,7 +5,10 @@ use crate::ui::messages::Message;
 impl KakolookiyamApp {
     pub(crate) fn handle_group(&mut self, message: Message) -> Command<Message> {
         match message {
-            Message::NewGroupInputChanged(val) => { self.new_group_input = val; }
+            Message::NewGroupInputChanged(val) => {
+                self.new_group_input = val;
+            }
+
             Message::CreateGroup => {
                 let name = self.new_group_input.trim().to_string();
                 if !name.is_empty() {
@@ -13,8 +16,11 @@ impl KakolookiyamApp {
                         use rand::RngCore;
                         let mut random_bytes = [0u8; 8];
                         rand::rngs::OsRng.fill_bytes(&mut random_bytes);
+
                         let mut hex = String::new();
-                        for b in random_bytes { std::fmt::Write::write_fmt(&mut hex, format_args!("{:02x}", b)).unwrap(); }
+                        for b in random_bytes {
+                            std::fmt::Write::write_fmt(&mut hex, format_args!("{:02x}", b)).unwrap();
+                        }
 
                         let group_id = format!("grp_{}", hex);
                         let my_id = crate::crypto::derive_public_id(&vd.private_key);
@@ -25,6 +31,7 @@ impl KakolookiyamApp {
                         });
 
                         let _ = crate::crypto::save_vault(pwd, vd);
+
                         self.new_group_input.clear();
                         self.selected_chat = Some(group_id);
                         self.chat_history.clear();
@@ -32,7 +39,11 @@ impl KakolookiyamApp {
                     }
                 }
             }
-            Message::NewMemberInputChanged(val) => { self.new_member_input = val; }
+
+            Message::NewMemberInputChanged(val) => {
+                self.new_member_input = val;
+            }
+
             Message::AddMemberToGroup => {
                 let new_member = self.new_member_input.trim().to_string();
                 if !new_member.is_empty() {
@@ -54,9 +65,13 @@ impl KakolookiyamApp {
                                     let _ = crate::crypto::save_vault(pwd, vd);
                                     let members_str = members.join(",");
                                     let my_id = crate::crypto::derive_public_id(&vd.private_key);
+
                                     for member_id in &members {
                                         if member_id != &my_id {
-                                            let _ = self.tx_network.send(format!("CHAT_SEND:{}:SYS:GROUP_SYNC:{}:{}:{}", member_id, grp_id, grp_name, members_str));
+                                            let _ = self.tx_network.send(format!(
+                                                "CHAT_SEND:{}:SYS:GROUP_SYNC:{}:{}:{}",
+                                                member_id, grp_id, grp_name, members_str
+                                            ));
                                         }
                                     }
                                     self.status_message = "✅ Membre invité et synchronisé !".to_string();
@@ -67,13 +82,16 @@ impl KakolookiyamApp {
                     }
                 }
             }
+
             Message::AddSpecificMemberToGroup(new_member_id) => {
                 self.idle_seconds = 0;
                 let clean_id = new_member_id.trim().to_string();
+
                 if let Some(grp_id) = &self.selected_chat {
                     if grp_id.starts_with("grp_") {
                         if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
                             let mut sync_data = None;
+
                             if let Some(group) = vd.groups.get_mut(grp_id) {
                                 if !group.members.contains(&clean_id) {
                                     group.members.push(clean_id.clone());
@@ -82,13 +100,18 @@ impl KakolookiyamApp {
                                     self.status_message = "⚠️ Ce membre est déjà dans le groupe.".to_string();
                                 }
                             }
+
                             if let Some((grp_name, members)) = sync_data {
                                 let _ = crate::crypto::save_vault(pwd, vd);
                                 let members_str = members.join(",");
                                 let my_id = crate::crypto::derive_public_id(&vd.private_key);
+
                                 for member_id in &members {
                                     if member_id != &my_id {
-                                        let _ = self.tx_network.send(format!("CHAT_SEND:{}:SYS:GROUP_SYNC:{}:{}:{}", member_id, grp_id, grp_name, members_str));
+                                        let _ = self.tx_network.send(format!(
+                                            "CHAT_SEND:{}:SYS:GROUP_SYNC:{}:{}:{}",
+                                            member_id, grp_id, grp_name, members_str
+                                        ));
                                     }
                                 }
                                 self.status_message = "✅ Contact ajouté et synchronisé !".to_string();
@@ -97,18 +120,22 @@ impl KakolookiyamApp {
                     }
                 }
             }
+
             Message::DeleteGroup => {
                 self.idle_seconds = 0;
                 let target_id = self.selected_chat.clone();
+
                 if let Some(grp_id) = target_id {
                     if grp_id.starts_with("grp_") {
                         if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
-
                             if let Some(group) = vd.groups.get(&grp_id) {
                                 let my_id = crate::crypto::derive_public_id(&vd.private_key);
                                 for member_id in &group.members {
                                     if member_id != &my_id {
-                                        let _ = self.tx_network.send(format!("CHAT_SEND:{}:SYS:GROUP_LEAVE:{}", member_id, grp_id));
+                                        let _ = self.tx_network.send(format!(
+                                            "CHAT_SEND:{}:SYS:GROUP_LEAVE:{}",
+                                            member_id, grp_id
+                                        ));
                                     }
                                 }
                             }

@@ -56,28 +56,43 @@ pub fn any_vault_exists() -> bool {
 }
 
 pub fn validate_password(password: &str) -> Result<(), &'static str> {
-    if password.len() < 12 { return Err("Le mot de passe doit contenir au moins 12 caractères."); }
-    let (mut u, mut l, mut d, mut s) = (false, false, false, false);
-    for c in password.chars() {
-        if c.is_uppercase() { u = true; }
-        else if c.is_lowercase() { l = true; }
-        else if c.is_numeric() { d = true; }
-        else { s = true; }
+    if password.len() < 12 {
+        return Err("Le mot de passe doit contenir au moins 12 caractères.");
     }
-    if u && l && d && s { Ok(()) }
-    else { Err("Il faut au moins 1 Maj, 1 Min, 1 Chiffre et 1 Caractère spécial.") }
+
+    let (mut u, mut l, mut d, mut s) = (false, false, false, false);
+
+    for c in password.chars() {
+        if c.is_uppercase() {
+            u = true;
+        } else if c.is_lowercase() {
+            l = true;
+        } else if c.is_numeric() {
+            d = true;
+        } else {
+            s = true;
+        }
+    }
+
+    if u && l && d && s {
+        Ok(())
+    } else {
+        Err("Il faut au moins 1 Maj, 1 Min, 1 Chiffre et 1 Caractère spécial.")
+    }
 }
 
 fn derive_key(password: &str, salt: &SaltString) -> [u8; 32] {
     let argon2 = Argon2::default();
     let hash = argon2.hash_password(password.as_bytes(), salt).unwrap();
     let mut key = [0u8; 32];
+
     key.copy_from_slice(&hash.hash.unwrap().as_bytes()[..32]);
     key
 }
 
 pub fn save_vault(password: &str, data: &VaultData) -> Result<(), &'static str> {
     validate_password(password)?;
+
     let salt = SaltString::generate(&mut OsRng);
     let key = derive_key(password, &salt);
     let cipher = ChaCha20Poly1305::new(&key.into());
@@ -88,6 +103,7 @@ pub fn save_vault(password: &str, data: &VaultData) -> Result<(), &'static str> 
 
     let salt_bytes = salt.as_str().as_bytes();
     let mut file_data = Vec::new();
+
     file_data.extend_from_slice(&(salt_bytes.len() as u32).to_le_bytes());
     file_data.extend_from_slice(salt_bytes);
     file_data.extend_from_slice(&nonce);
@@ -95,6 +111,7 @@ pub fn save_vault(password: &str, data: &VaultData) -> Result<(), &'static str> 
 
     let vault_file = get_vault_file(&data.pseudo);
     fs::write(vault_file, file_data).map_err(|_| "Erreur IO")?;
+
     Ok(())
 }
 
@@ -102,12 +119,17 @@ pub fn unlock_vault(pseudo: &str, password: &str) -> Result<VaultData, &'static 
     let vault_file = get_vault_file(pseudo);
 
     let file_data = fs::read(&vault_file).map_err(|_| "Profil introuvable ou mot de passe incorrect.")?;
-    if file_data.len() < 4 { return Err("Corrompu"); }
+    if file_data.len() < 4 {
+        return Err("Corrompu");
+    }
 
     let mut salt_len_bytes = [0u8; 4];
     salt_len_bytes.copy_from_slice(&file_data[0..4]);
     let salt_len = u32::from_le_bytes(salt_len_bytes) as usize;
-    if file_data.len() < 4 + salt_len + 12 { return Err("Corrompu"); }
+
+    if file_data.len() < 4 + salt_len + 12 {
+        return Err("Corrompu");
+    }
 
     let salt_str = std::str::from_utf8(&file_data[4..4 + salt_len]).map_err(|_| "Sel invalide")?;
     let salt = SaltString::from_b64(salt_str).map_err(|_| "Sel invalide")?;
@@ -120,31 +142,32 @@ pub fn unlock_vault(pseudo: &str, password: &str) -> Result<VaultData, &'static 
 
     let mut vault_data: VaultData = serde_json::from_slice(&decrypted).map_err(|_| "JSON invalide")?;
 
-    // --- NOUVEAU : LE ROLLOUT SÉCURITÉ DE 30 JOURS ---
+    // --- LE ROLLOUT SÉCURITÉ DE 30 JOURS ---
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
     let thirty_days_sec = 30 * 24 * 60 * 60;
     let mut modified = false;
 
     for (_, history) in vault_data.chat_history.iter_mut() {
         let original_len = history.len();
+
         history.retain(|msg| {
-            // Si le message a plus de 30 jours (ou si le calcul sature dans de rares cas d'horloge)
             if now.saturating_sub(msg.timestamp) > thirty_days_sec {
-                // Si c'est un média, on écrase physiquement le fichier chiffré sur le disque
                 if msg.is_media {
                     if let Some(path) = &msg.media_path {
                         let _ = std::fs::remove_file(path);
                     }
                 }
-                false // On supprime l'entrée de la mémoire
+                false
             } else {
-                true // On garde
+                true
             }
         });
-        if history.len() != original_len { modified = true; }
+
+        if history.len() != original_len {
+            modified = true;
+        }
     }
 
-    // On sauvegarde silencieusement la version nettoyée dans le coffre
     if modified {
         let _ = save_vault(password, &vault_data);
     }
@@ -160,7 +183,9 @@ pub fn generate_secure_secret() -> [u8; 32] {
 
 pub fn derive_public_id(secret: &[u8]) -> String {
     let mut hex = String::new();
-    for byte in secret.iter().take(16) { write!(&mut hex, "{:02x}", byte).unwrap(); }
+    for byte in secret.iter().take(16) {
+        write!(&mut hex, "{:02x}", byte).unwrap();
+    }
     hex
 }
 
@@ -186,7 +211,9 @@ pub fn encrypt_and_save_media(pseudo: &str, file_name: &str, raw_data: &[u8]) ->
 
 pub fn decrypt_media(path: &str, key: &[u8; 32]) -> Result<Vec<u8>, &'static str> {
     let file_data = fs::read(path).map_err(|_| "Impossible de lire le fichier chiffré")?;
-    if file_data.len() < 12 { return Err("Fichier corrompu"); }
+    if file_data.len() < 12 {
+        return Err("Fichier corrompu");
+    }
 
     let nonce = Nonce::from_slice(&file_data[0..12]);
     let ciphertext = &file_data[12..];

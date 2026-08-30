@@ -11,7 +11,7 @@ impl KakolookiyamApp {
         let current_muted = text_muted(&self.current_theme);
         let current_accent = dynamic_accent(&self.current_theme);
 
-        // --- GESTION DE L'OVERLAY LÉGAL (640x480) ---
+        // --- GESTION DE L'OVERLAY LÉGAL ---
         if let Some(tab) = &self.active_legal_tab {
             let (legal_title, legal_text) = match tab.as_str() {
                 "CGU" => ("Conditions d'Utilisation", "Kakolookiyam est fourni 'en l'état'. L'utilisation du réseau P2P et l'échange de fichiers engagent l'entière responsabilité des utilisateurs. Aucun métadonnée n'est stockée sur l'infrastructure de routage."),
@@ -29,11 +29,15 @@ impl KakolookiyamApp {
                         .on_press(Message::ToggleLegal(tab.clone()))
                         .padding(10)
                 ].align_items(Alignment::Center),
+
                 Rule::horizontal(1),
+
                 Scrollable::new(text(legal_text).style(current_text).size(16))
                     .height(Length::Fill)
                     .direction(Direction::Vertical(Properties::new().width(0).scroller_width(0)))
-            ].spacing(20).padding(40);
+            ]
+            .spacing(20)
+            .padding(40);
 
             let modal_box = Container::new(content)
                 .width(Length::Fixed(640.0))
@@ -53,9 +57,15 @@ impl KakolookiyamApp {
         let legal_section = column![
             text("Légal & Mentions").size(20).style(current_accent),
             row![
-                button("Conditions d'Utilisation (CGU)").style(iced::theme::Button::Custom(Box::new(SecondaryButton))).on_press(Message::ToggleLegal("CGU".to_string())).padding(10),
-                button("Confidentialité").style(iced::theme::Button::Custom(Box::new(SecondaryButton))).on_press(Message::ToggleLegal("PRIVACY".to_string())).padding(10),
-                button("Licences (OFL)").style(iced::theme::Button::Custom(Box::new(SecondaryButton))).on_press(Message::ToggleLegal("OFL".to_string())).padding(10),
+                button("Conditions d'Utilisation (CGU)")
+                    .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
+                    .on_press(Message::ToggleLegal("CGU".to_string())).padding(10),
+                button("Confidentialité")
+                    .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
+                    .on_press(Message::ToggleLegal("PRIVACY".to_string())).padding(10),
+                button("Licences (OFL)")
+                    .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
+                    .on_press(Message::ToggleLegal("OFL".to_string())).padding(10),
             ].spacing(15)
         ].spacing(10);
 
@@ -68,6 +78,7 @@ impl KakolookiyamApp {
                     .on_press(Message::CloseSettings)
                     .padding(10)
             ].align_items(Alignment::Center).width(Length::Fill),
+
             Rule::horizontal(1),
 
             text("Général").size(20).style(current_accent),
@@ -77,6 +88,7 @@ impl KakolookiyamApp {
                 .padding(10),
 
             Space::with_height(20),
+
             text("Matériel & Audio").size(20).style(current_accent),
             text("Microphone (Entrée)").style(current_muted),
             mic_picker,

@@ -33,12 +33,10 @@ impl KakolookiyamApp {
                 self.status_message = "⏳ Prêt à appeler...".to_owned();
                 self.idle_seconds = 0;
             }
-
             Message::ForceDisconnect(err_msg) => {
                 let _ = self.handle_auth(Message::LockSession);
                 self.auth_error = Some(err_msg);
             }
-
             Message::TickInactivity => {
                 if self.incoming_call.is_some() {
                     self.incoming_call_timer += 1;
@@ -49,10 +47,11 @@ impl KakolookiyamApp {
                         }
                         self.incoming_call_timer = 0;
                     }
-                }
-                else if matches!(self.state, AppState::Unlocked) {
+                } else if matches!(self.state, AppState::Unlocked) {
                     self.idle_seconds += 1;
-                    if self.idle_seconds >= 300 { return Command::perform(async {}, |_| Message::LockSession); }
+                    if self.idle_seconds >= 300 {
+                        return Command::perform(async {}, |_| Message::LockSession);
+                    }
                 } else {
                     self.idle_seconds = 0;
                 }
@@ -67,10 +66,13 @@ impl KakolookiyamApp {
                 let trimmed = self.pseudo_input.trim();
                 let potential_file = crypto::get_vault_file(trimmed);
 
-                if trimmed.is_empty() { self.auth_error = Some("Veuillez choisir un pseudo.".into()); }
-                else if std::path::Path::new(&potential_file).exists() { self.auth_error = Some("Ce profil existe déjà sur cet ordinateur.".into()); }
-                else if self.password_input != self.password_confirm_input { self.auth_error = Some("Mots de passe distincts.".into()); }
-                else {
+                if trimmed.is_empty() {
+                    self.auth_error = Some("Veuillez choisir un pseudo.".into());
+                } else if std::path::Path::new(&potential_file).exists() {
+                    self.auth_error = Some("Ce profil existe déjà sur cet ordinateur.".into());
+                } else if self.password_input != self.password_confirm_input {
+                    self.auth_error = Some("Mots de passe distincts.".into());
+                } else {
                     let mut v_data = crypto::VaultData {
                         private_key: crypto::generate_secure_secret(),
                         pseudo: trimmed.to_string(),
@@ -86,7 +88,7 @@ impl KakolookiyamApp {
 
                             let id = crypto::derive_public_id(&v_data.private_key);
                             if let Some(tx) = self.tx_identity.take() {
-                                let _ = tx.send((id.clone(), v_data.pseudo.clone()));
+                                let _ = tx.send((id, v_data.pseudo.clone()));
                             } else {
                                 let _ = self.tx_network.send(format!("REGISTER:{}:{}", id, v_data.pseudo));
                             }
@@ -96,7 +98,6 @@ impl KakolookiyamApp {
                     }
                 }
             }
-
             Message::SubmitLogin => {
                 self.idle_seconds = 0;
                 let trimmed = self.pseudo_input.trim();
@@ -113,7 +114,7 @@ impl KakolookiyamApp {
 
                             let id = crypto::derive_public_id(&v_data.private_key);
                             if let Some(tx) = self.tx_identity.take() {
-                                let _ = tx.send((id.clone(), v_data.pseudo.clone()));
+                                let _ = tx.send((id, v_data.pseudo.clone()));
                             } else {
                                 let _ = self.tx_network.send(format!("REGISTER:{}:{}", id, v_data.pseudo));
                             }

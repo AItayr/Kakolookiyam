@@ -32,7 +32,9 @@ pub fn text_muted(theme: &Theme) -> Color {
 }
 
 pub fn color_for_user(pseudo: &str, theme: &Theme) -> Color {
-    if pseudo == "Moi" { return MOI_RED; }
+    if pseudo == "Moi" {
+        return MOI_RED;
+    }
 
     let mut hasher = DefaultHasher::new();
     pseudo.hash(&mut hasher);
@@ -55,13 +57,20 @@ fn color_from_hsl(h: f32, s: f32, l: f32) -> Color {
     let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
     let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
     let m = l - c / 2.0;
+
     let (r, g, b) = match h as u32 {
-        0..=59 => (c, x, 0.0), 60..=119 => (x, c, 0.0), 120..=179 => (0.0, c, x),
-        180..=239 => (0.0, x, c), 240..=299 => (x, 0.0, c), _ => (c, 0.0, x),
+        0..=59   => (c, x, 0.0),
+        60..=119 => (x, c, 0.0),
+        120..=179 => (0.0, c, x),
+        180..=239 => (0.0, x, c),
+        240..=299 => (x, 0.0, c),
+        _         => (c, 0.0, x),
     };
+
     Color::from_rgb(r + m, g + m, b + m)
 }
 
+// --- STYLES DES BOUTONS ---
 pub struct PrimaryButton;
 impl button::StyleSheet for PrimaryButton {
     type Style = Theme;
@@ -69,11 +78,18 @@ impl button::StyleSheet for PrimaryButton {
         button::Appearance {
             background: Some(Background::Color(dynamic_accent(theme))),
             text_color: Color::WHITE,
-            border: Border { radius: 4.0.into(), width: 0.0, color: Color::TRANSPARENT },
-            shadow_offset: Vector::new(0.0, 0.0), shadow: Shadow::default(),
+            border: Border {
+                radius: 4.0.into(),
+                width: 0.0,
+                color: Color::TRANSPARENT
+            },
+            shadow_offset: Vector::new(0.0, 0.0),
+            shadow: Shadow::default(),
         }
     }
-    fn hovered(&self, theme: &Self::Style) -> button::Appearance { self.active(theme) }
+    fn hovered(&self, theme: &Self::Style) -> button::Appearance {
+        self.active(theme)
+    }
 }
 
 pub struct HangupButton;
@@ -83,11 +99,18 @@ impl button::StyleSheet for HangupButton {
         button::Appearance {
             background: Some(Background::Color(ACCENT_RED_DARK)),
             text_color: Color::WHITE,
-            border: Border { radius: 4.0.into(), width: 0.0, color: Color::TRANSPARENT },
-            shadow_offset: Vector::new(0.0, 0.0), shadow: Shadow::default(),
+            border: Border {
+                radius: 4.0.into(),
+                width: 0.0,
+                color: Color::TRANSPARENT
+            },
+            shadow_offset: Vector::new(0.0, 0.0),
+            shadow: Shadow::default(),
         }
     }
-    fn hovered(&self, theme: &Self::Style) -> button::Appearance { self.active(theme) }
+    fn hovered(&self, theme: &Self::Style) -> button::Appearance {
+        self.active(theme)
+    }
 }
 
 pub struct SecondaryButton;
@@ -100,11 +123,18 @@ impl button::StyleSheet for SecondaryButton {
                 _ => Some(Background::Color(Color::from_rgb(0.2, 0.2, 0.2))),
             },
             text_color: text_main(theme),
-            border: Border { radius: 4.0.into(), width: 0.0, color: Color::TRANSPARENT },
-            shadow_offset: Vector::new(0.0, 0.0), shadow: Shadow::default(),
+            border: Border {
+                radius: 4.0.into(),
+                width: 0.0,
+                color: Color::TRANSPARENT
+            },
+            shadow_offset: Vector::new(0.0, 0.0),
+            shadow: Shadow::default(),
         }
     }
-    fn hovered(&self, theme: &Self::Style) -> button::Appearance { self.active(theme) }
+    fn hovered(&self, theme: &Self::Style) -> button::Appearance {
+        self.active(theme)
+    }
 }
 
 pub struct SidebarButton { pub is_selected: bool }
@@ -113,10 +143,19 @@ impl button::StyleSheet for SidebarButton {
     fn active(&self, theme: &Self::Style) -> button::Appearance {
         let accent = dynamic_accent(theme);
         button::Appearance {
-            background: if self.is_selected { Some(Background::Color(Color::from_rgba(accent.r, accent.g, accent.b, 0.15))) } else { None },
+            background: if self.is_selected {
+                Some(Background::Color(Color::from_rgba(accent.r, accent.g, accent.b, 0.15)))
+            } else {
+                None
+            },
             text_color: if self.is_selected { accent } else { text_main(theme) },
-            border: Border { radius: 4.0.into(), width: 0.0, color: Color::TRANSPARENT },
-            shadow_offset: Vector::new(0.0, 0.0), shadow: Shadow::default(),
+            border: Border {
+                radius: 4.0.into(),
+                width: 0.0,
+                color: Color::TRANSPARENT
+            },
+            shadow_offset: Vector::new(0.0, 0.0),
+            shadow: Shadow::default(),
         }
     }
     fn hovered(&self, theme: &Self::Style) -> button::Appearance {
@@ -131,6 +170,7 @@ impl button::StyleSheet for SidebarButton {
     }
 }
 
+// --- STYLES DES CONTENEURS ---
 pub struct ErrorContainerStyle;
 impl container::StyleSheet for ErrorContainerStyle {
     type Style = Theme;
@@ -138,13 +178,16 @@ impl container::StyleSheet for ErrorContainerStyle {
         container::Appearance {
             text_color: Some(MOI_RED),
             background: Some(Background::Color(Color::from_rgba(0.85, 0.15, 0.15, 0.1))),
-            border: Border { color: MOI_RED, width: 1.5, radius: 5.0.into() },
+            border: Border {
+                color: MOI_RED,
+                width: 1.5,
+                radius: 5.0.into()
+            },
             shadow: Shadow::default(),
         }
     }
 }
 
-// --- NOUVEAU : Style de la fenêtre Pop-Up (Overlay) ---
 pub struct OverlayContainerStyle;
 impl container::StyleSheet for OverlayContainerStyle {
     type Style = Theme;
@@ -155,7 +198,11 @@ impl container::StyleSheet for OverlayContainerStyle {
                 Theme::Light => Some(Background::Color(Color::from_rgb(0.95, 0.95, 0.95))),
                 _ => Some(Background::Color(Color::from_rgb(0.12, 0.12, 0.12))),
             },
-            border: Border { color: dynamic_accent(theme), width: 1.0, radius: 8.0.into() },
+            border: Border {
+                color: dynamic_accent(theme),
+                width: 1.0,
+                radius: 8.0.into()
+            },
             shadow: Shadow::default(),
         }
     }

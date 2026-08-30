@@ -65,22 +65,24 @@ async fn create_peer_connection(
 ) -> Result<Arc<RTCPeerConnection>, Box<dyn std::error::Error>> {
 
     let config = RTCConfiguration {
-        ice_servers: vec![RTCIceServer { urls: vec!["stun:stun.l.google.com:19302".to_owned()], ..Default::default() }],
+        ice_servers: vec![RTCIceServer {
+            urls: vec!["stun:stun.l.google.com:19302".to_owned()],
+            ..Default::default()
+        }],
         ..Default::default()
     };
+
     let pc = Arc::new(api.new_peer_connection(config).await?);
 
     let tx_ui_state = tx_ui.clone();
     let tgt_state = target_id.clone();
+
     pc.on_peer_connection_state_change(Box::new(move |state| {
         let tx = tx_ui_state.clone();
         let tgt = tgt_state.clone();
+
         Box::pin(async move {
-            // --- CORRECTION DU SABOTAGE ---
-            // On a retiré RTCPeerConnectionState::Closed.
-            // Si le PC ferme parce qu'on le remplace localement, il ne criera plus "CALL_ENDED" !
-            if state == RTCPeerConnectionState::Failed ||
-               state == RTCPeerConnectionState::Disconnected {
+            if state == RTCPeerConnectionState::Failed || state == RTCPeerConnectionState::Disconnected {
                 let _ = tx.send(format!("CALL_ENDED:{}", tgt));
             }
         })
@@ -89,14 +91,20 @@ async fn create_peer_connection(
     let tx_sig_ice = tx_signal.clone();
     let target_ice = target_id.clone();
     let my_id_ice = my_id.clone();
+
     pc.on_ice_candidate(Box::new(move |c: Option<RTCIceCandidate>| {
         let tx_sig_ice = tx_sig_ice.clone();
         let target = target_ice.clone();
         let sender = my_id_ice.clone();
+
         Box::pin(async move {
             if let Some(candidate) = c {
                 if let Ok(json) = candidate.to_json() {
-                    let _ = tx_sig_ice.send(Signal::Ice { candidate: json.candidate, sender_id: sender, target_id: target }).await;
+                    let _ = tx_sig_ice.send(Signal::Ice {
+                        candidate: json.candidate,
+                        sender_id: sender,
+                        target_id: target
+                    }).await;
                 }
             }
         })
@@ -104,11 +112,17 @@ async fn create_peer_connection(
 
     if let Some(track) = audio_track {
         let tx_spk = tx_speaker.clone();
+
         pc.on_track(Box::new(move |track, _, _| {
             let tx_spk = tx_spk.clone();
+
             Box::pin(async move {
                 tokio::spawn(async move {
-                    let mut decoder = audiopus::coder::Decoder::new(audiopus::SampleRate::Hz48000, audiopus::Channels::Stereo).unwrap();
+                    let mut decoder = audiopus::coder::Decoder::new(
+                        audiopus::SampleRate::Hz48000,
+                        audiopus::Channels::Stereo
+                    ).unwrap();
+
                     let track = track;
                     while let Ok((rtp_packet, _)) = track.read_rtp().await {
                         let mut decoded_pcm = vec![0i16; 1920 * 2];
@@ -121,8 +135,14 @@ async fn create_peer_connection(
             })
         }));
 
-        let rtp_sender = pc.add_track(StdArc::clone(&track) as StdArc<dyn webrtc::track::track_local::TrackLocal + Send + Sync>).await?;
-        tokio::spawn(async move { let mut rtcp_buf = vec![0u8; 1500]; while let Ok((_, _)) = rtp_sender.read(&mut rtcp_buf).await {} });
+        let rtp_sender = pc.add_track(
+            StdArc::clone(&track) as StdArc<dyn webrtc::track::track_local::TrackLocal + Send + Sync>
+        ).await?;
+
+        tokio::spawn(async move {
+            let mut rtcp_buf = vec![0u8; 1500];
+            while let Ok((_, _)) = rtp_sender.read(&mut rtcp_buf).await {}
+        });
     }
 
     let target_id_msg = target_id.clone();
@@ -149,8 +169,11 @@ async fn create_peer_connection(
                 let p = p_open.clone();
                 let tgt = tgt_open.clone();
                 let tx = tx_open.clone();
+
                 Box::pin(async move {
-                    if is_call { let _ = tx.send(format!("CALL_ACTIVE:{}", tgt)); }
+                    if is_call {
+                        let _ = tx.send(format!("CALL_ACTIVE:{}", tgt));
+                    }
                     let msg = format!("{{\"type\":\"pseudo\",\"value\":\"{}\"}}", p);
                     let _ = d_open.send_text(msg).await;
                 })
@@ -194,8 +217,14 @@ pub async fn start_p2p(
     let api = APIBuilder::new().with_media_engine(m).build();
 
     let audio_track = StdArc::new(TrackLocalStaticSample::new(
-        RTCRtpCodecCapability { mime_type: "audio/opus".to_owned(), clock_rate: 48000, channels: 2, ..Default::default() },
-        "audio_p2p".to_owned(), "kakolookiyam_voice".to_owned(),
+        RTCRtpCodecCapability {
+            mime_type: "audio/opus".to_owned(),
+            clock_rate: 48000,
+            channels: 2,
+            ..Default::default()
+        },
+        "audio_p2p".to_owned(),
+        "kakolookiyam_voice".to_owned(),
     ));
 
     let is_muted = Arc::new(AtomicBool::new(false));
@@ -205,7 +234,11 @@ pub async fn start_p2p(
     tokio::spawn(async move {
         while let Some(opus_packet) = rx_mic.recv().await {
             if !is_muted_clone.load(Ordering::Relaxed) {
-                let sample_data = webrtc::media::Sample { data: bytes::Bytes::from(opus_packet), duration: std::time::Duration::from_millis(20), ..Default::default() };
+                let sample_data = webrtc::media::Sample {
+                    data: bytes::Bytes::from(opus_packet),
+                    duration: std::time::Duration::from_millis(20),
+                    ..Default::default()
+                };
                 let _ = audio_track_clone.write_sample(&sample_data).await;
             }
         }
@@ -385,7 +418,19 @@ pub async fn start_p2p(
                     }
                     data_channels.remove(&target_id);
 
-                    let pc = create_peer_connection(&api, target_id.clone(), my_local_id.clone(), my_pseudo.clone(), Some(Arc::clone(&audio_track)), tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), tx_chunks.clone(), true).await.unwrap();
+                    let pc = create_peer_connection(
+                        &api,
+                        target_id.clone(),
+                        my_local_id.clone(),
+                        my_pseudo.clone(),
+                        Some(Arc::clone(&audio_track)),
+                        tx_speaker.clone(),
+                        tx_signal.clone(),
+                        tx_ui.clone(),
+                        tx_dc.clone(),
+                        tx_chunks.clone(),
+                        true
+                    ).await.unwrap();
 
                     let data_channel = pc.create_data_channel("secure_text", None).await.unwrap();
                     data_channels.insert(target_id.clone(), Arc::clone(&data_channel));
@@ -443,7 +488,19 @@ pub async fn start_p2p(
                         }
                         data_channels.remove(&sender_id);
 
-                        let pc = create_peer_connection(&api, sender_id.clone(), my_local_id.clone(), my_pseudo.clone(), Some(Arc::clone(&audio_track)), tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), tx_chunks.clone(), true).await.unwrap();
+                        let pc = create_peer_connection(
+                            &api,
+                            sender_id.clone(),
+                            my_local_id.clone(),
+                            my_pseudo.clone(),
+                            Some(Arc::clone(&audio_track)),
+                            tx_speaker.clone(),
+                            tx_signal.clone(),
+                            tx_ui.clone(),
+                            tx_dc.clone(),
+                            tx_chunks.clone(),
+                            true
+                        ).await.unwrap();
                         peers.insert(sender_id.clone(), Arc::clone(&pc));
 
                         let mut desc = RTCSessionDescription::default();
@@ -489,7 +546,19 @@ pub async fn start_p2p(
                                 let _ = old_pc.close().await;
                             }
 
-                            let pc = create_peer_connection(&api, target_id.clone(), my_local_id.clone(), my_pseudo.clone(), None, tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), tx_chunks.clone(), false).await.unwrap();
+                            let pc = create_peer_connection(
+                                &api,
+                                target_id.clone(),
+                                my_local_id.clone(),
+                                my_pseudo.clone(),
+                                None,
+                                tx_speaker.clone(),
+                                tx_signal.clone(),
+                                tx_ui.clone(),
+                                tx_dc.clone(),
+                                tx_chunks.clone(),
+                                false
+                            ).await.unwrap();
 
                             let data_channel = pc.create_data_channel("secure_text", None).await.unwrap();
                             data_channels.insert(target_id.clone(), Arc::clone(&data_channel));
@@ -561,7 +630,19 @@ pub async fn start_p2p(
                             } else {
                                 if peers.contains_key(&target_id) { continue; }
 
-                                let pc = create_peer_connection(&api, target_id.clone(), my_local_id.clone(), my_pseudo.clone(), None, tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), tx_chunks.clone(), false).await.unwrap();
+                                let pc = create_peer_connection(
+                                    &api,
+                                    target_id.clone(),
+                                    my_local_id.clone(),
+                                    my_pseudo.clone(),
+                                    None,
+                                    tx_speaker.clone(),
+                                    tx_signal.clone(),
+                                    tx_ui.clone(),
+                                    tx_dc.clone(),
+                                    tx_chunks.clone(),
+                                    false
+                                ).await.unwrap();
 
                                 let data_channel = pc.create_data_channel("secure_text", None).await.unwrap();
                                 data_channels.insert(target_id.clone(), Arc::clone(&data_channel));
@@ -637,7 +718,19 @@ pub async fn start_p2p(
                                         }
                                         data_channels.remove(&sender_id);
 
-                                        let pc = create_peer_connection(&api, sender_id.clone(), my_local_id.clone(), my_pseudo.clone(), None, tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), tx_chunks.clone(), false).await.unwrap();
+                                        let pc = create_peer_connection(
+                                            &api,
+                                            sender_id.clone(),
+                                            my_local_id.clone(),
+                                            my_pseudo.clone(),
+                                            None,
+                                            tx_speaker.clone(),
+                                            tx_signal.clone(),
+                                            tx_ui.clone(),
+                                            tx_dc.clone(),
+                                            tx_chunks.clone(),
+                                            false
+                                        ).await.unwrap();
                                         peers.insert(sender_id.clone(), Arc::clone(&pc));
 
                                         let mut desc = RTCSessionDescription::default();

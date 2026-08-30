@@ -4,15 +4,17 @@ use crate::ui::messages::Message;
 
 impl KakolookiyamApp {
     pub(crate) fn handle_call(&mut self, message: Message) -> Command<Message> {
+        self.idle_seconds = 0;
+
         match message {
-            Message::PeerIdChanged(val) => { self.idle_seconds = 0; self.peer_id_input = val; }
+            Message::PeerIdChanged(val) => {
+                self.peer_id_input = val;
+            }
             Message::ConnectClicked => {
-                self.idle_seconds = 0;
-                self.status_message = format!("🔗 En attente de l'interlocuteur...");
+                self.status_message = "🔗 En attente de l'interlocuteur...".to_string();
                 let _ = self.tx_network.send(format!("CALL:{}", self.peer_id_input));
             }
             Message::CallContact(target_id) => {
-                self.idle_seconds = 0;
                 if target_id.starts_with("grp_") {
                     self.status_message = "📞 Conférence de groupe en cours...".to_string();
                     if let Some(vd) = &self.vault_data {
@@ -23,13 +25,14 @@ impl KakolookiyamApp {
                             let members = group.members.clone();
 
                             self.active_call = Some((target_id.clone(), group.name.clone()));
-
                             self.chat_history.clear();
+
                             if let Some(history) = vd.chat_history.get(&target_id) {
-                                for msg in history { self.chat_history.push((msg.author.clone(), msg.content.clone())); }
+                                for msg in history {
+                                    self.chat_history.push((msg.author.clone(), msg.content.clone()));
+                                }
                             }
 
-                            // Allumage en cascade (Staggering) pour la stabilité WebRTC !
                             return Command::perform(
                                 async move {
                                     for member_id in members {
@@ -50,38 +53,40 @@ impl KakolookiyamApp {
                 }
             }
             Message::AcceptCall(id, sdp) => {
-                self.idle_seconds = 0;
-                // Interface Optimiste : on bascule immédiatement
                 let pseudo = self.incoming_call.as_ref().unwrap().1.clone();
 
                 self.incoming_call = None;
                 self.incoming_call_timer = 0;
-                self.status_message = format!("🔗 Connexion sécurisée en cours...");
+                self.status_message = "🔗 Connexion sécurisée en cours...".to_string();
                 let _ = self.tx_network.send(format!("ACCEPT:{}:{}", id, sdp));
 
                 self.active_call = Some((id.clone(), pseudo));
                 self.chat_input.clear();
                 self.chat_history.clear();
+
                 if let Some(vd) = &self.vault_data {
                     if let Some(history) = vd.chat_history.get(&id) {
-                        for msg in history { self.chat_history.push((msg.author.clone(), msg.content.clone())); }
+                        for msg in history {
+                            self.chat_history.push((msg.author.clone(), msg.content.clone()));
+                        }
                     }
                 }
             }
             Message::RejectCall(id) => {
-                self.idle_seconds = 0;
                 self.incoming_call = None;
                 self.incoming_call_timer = 0;
-                self.status_message = format!("❌ Appel rejeté.");
+                self.status_message = "❌ Appel rejeté.".to_string();
                 let _ = self.tx_network.send(format!("REJECT:{}", id));
             }
             Message::HangUpCall => {
-                self.idle_seconds = 0;
                 if let Some((id, _)) = self.active_call.take() {
                     if id.starts_with("grp_") {
                         if let Some(vd) = &self.vault_data {
                             if let Some(group) = vd.groups.get(&id) {
                                 let my_id = crate::crypto::derive_public_id(&vd.private_key);
+                                // --- CORRECTION DU RACCROCHAGE ---
+                                // On ordonne expressément au réseau de couper les ponts individuels
+                                // de chaque membre de ce groupe pour purger ton instance de WebRTC !
                                 for member_id in &group.members {
                                     if member_id != &my_id {
                                         let _ = self.tx_network.send(format!("HANGUP:{}", member_id));
@@ -94,16 +99,19 @@ impl KakolookiyamApp {
                     }
                     self.status_message = "Appel terminé.".to_string();
                 }
+
                 self.is_muted = false;
                 self.chat_input.clear();
                 self.chat_history.clear();
                 let _ = self.tx_network.send("MUTE:off".to_string());
             }
             Message::ToggleMute => {
-                self.idle_seconds = 0;
                 self.is_muted = !self.is_muted;
-                if self.is_muted { let _ = self.tx_network.send("MUTE:on".to_string()); }
-                else { let _ = self.tx_network.send("MUTE:off".to_string()); }
+                if self.is_muted {
+                    let _ = self.tx_network.send("MUTE:on".to_string());
+                } else {
+                    let _ = self.tx_network.send("MUTE:off".to_string());
+                }
             }
             _ => {}
         }

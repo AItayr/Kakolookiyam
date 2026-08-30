@@ -21,6 +21,7 @@ pub struct Flags {
 }
 
 pub struct KakolookiyamApp {
+    pub unread_counts: std::collections::HashMap<String, usize>,
     pub(crate) state: AppState,
     pub(crate) pseudo_input: String,
     pub(crate) password_input: String,
@@ -71,6 +72,7 @@ impl Application for KakolookiyamApp {
         let initial_state = if crypto::any_vault_exists() { AppState::Login } else { AppState::Welcome };
         (
             Self {
+                unread_counts: std::collections::HashMap::new(),
                 state: initial_state,
                 pseudo_input: String::new(),
                 password_input: String::new(),
@@ -124,7 +126,6 @@ impl Application for KakolookiyamApp {
         }
 
         match message {
-            // --- NOUVEAU : Interactions Paramètres ---
             Message::MicSelected(mic) => { self.selected_mic = mic; return Command::none(); }
             Message::SpeakerSelected(spk) => { self.selected_speaker = spk; return Command::none(); }
             Message::ToggleLegal(tab) => {

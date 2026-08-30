@@ -16,6 +16,7 @@ impl KakolookiyamApp {
                     file.map(|f| f.path().to_string_lossy().to_string())
                 }, Message::FileSelected);
             }
+
             Message::FileSelected(path_opt) => {
                 self.idle_seconds = 0;
                 if let Some(path) = path_opt {
@@ -26,12 +27,19 @@ impl KakolookiyamApp {
                             }
                         }
                         if let Ok(raw_data) = tokio::fs::read(&path).await {
-                            let file_name = std::path::Path::new(&path).file_name().unwrap_or_default().to_string_lossy().into_owned();
+                            let file_name = std::path::Path::new(&path)
+                                .file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .into_owned();
                             Some((file_name, raw_data))
-                        } else { None }
+                        } else {
+                            None
+                        }
                     }, Message::FileRead);
                 }
             }
+
             Message::FileRead(data_opt) => {
                 self.idle_seconds = 0;
                 if let Some((file_name, raw_data)) = data_opt {
@@ -40,7 +48,11 @@ impl KakolookiyamApp {
                         return Command::none();
                     }
 
-                    let target = if let Some((active_id, _)) = &self.active_call { Some(active_id.clone()) } else { self.selected_chat.clone() };
+                    let target = if let Some((active_id, _)) = &self.active_call {
+                        Some(active_id.clone())
+                    } else {
+                        self.selected_chat.clone()
+                    };
 
                     if let Some(target_id) = target {
                         if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
@@ -62,7 +74,10 @@ impl KakolookiyamApp {
                                             async move {
                                                 for member_id in members {
                                                     if member_id != my_id {
-                                                        let _ = tx.send(format!("FILE_SEND_INIT:{}:{}:{}:{}", member_id, net_filename, key_b64, enc_path_net));
+                                                        let _ = tx.send(format!(
+                                                            "FILE_SEND_INIT:{}:{}:{}:{}",
+                                                            member_id, net_filename, key_b64, enc_path_net
+                                                        ));
                                                         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
                                                     }
                                                 }
@@ -71,7 +86,10 @@ impl KakolookiyamApp {
                                         );
                                     }
                                 } else {
-                                    let _ = self.tx_network.send(format!("FILE_SEND_INIT:{}:{}:{}:{}", target_id, file_name.clone(), key_b64, enc_path.clone()));
+                                    let _ = self.tx_network.send(format!(
+                                        "FILE_SEND_INIT:{}:{}:{}:{}",
+                                        target_id, file_name.clone(), key_b64, enc_path.clone()
+                                    ));
                                 }
 
                                 let entry = crate::crypto::MessageEntry {
@@ -82,6 +100,7 @@ impl KakolookiyamApp {
                                     media_key: Some(key_bytes),
                                     media_path: Some(enc_path),
                                 };
+
                                 vd.chat_history.entry(target_id.clone()).or_default().push(entry);
                                 let _ = crate::crypto::save_vault(pwd, vd);
 
@@ -93,39 +112,51 @@ impl KakolookiyamApp {
                     }
                 }
             }
+
             Message::OpenMedia(filename, key, path) => {
                 self.idle_seconds = 0;
                 return Command::perform(async move {
                     let clean_name = filename.replace("📎 Fichier reçu : ", "").replace("📎 Fichier partagé : ", "");
-                    let dest = rfd::AsyncFileDialog::new().set_title("Extraction...").set_file_name(&clean_name).save_file().await;
+                    let dest = rfd::AsyncFileDialog::new()
+                        .set_title("Extraction...")
+                        .set_file_name(&clean_name)
+                        .save_file()
+                        .await;
 
                     if let Some(dest_path) = dest {
                         let dest_path_str = dest_path.path().to_string_lossy().to_string();
 
-                        // --- ÉTAPE 2 : MULTITHREADING SUR L'EXTRACTION ---
+                        // --- MULTITHREADING SUR L'EXTRACTION ---
                         let decrypted_data_res = tokio::task::spawn_blocking(move || {
                             crate::crypto::decrypt_media(&path, &key)
                         }).await.unwrap();
 
                         if let Ok(decrypted_data) = decrypted_data_res {
                             let _ = tokio::fs::write(&dest_path_str, decrypted_data).await;
+
                             #[cfg(target_os = "windows")]
                             let _ = std::process::Command::new("cmd").args(["/c", "start", "", &dest_path_str]).spawn();
                             #[cfg(target_os = "macos")]
                             let _ = std::process::Command::new("open").arg(&dest_path_str).spawn();
                             #[cfg(target_os = "linux")]
                             let _ = std::process::Command::new("xdg-open").arg(&dest_path_str).spawn();
-                            format!("✅ Fichier déchiffré !")
-                        } else { "❌ Erreur de déchiffrement.".to_string() }
-                    } else { "⚠️ Extraction annulée.".to_string() }
+
+                            "✅ Fichier déchiffré !".to_string()
+                        } else {
+                            "❌ Erreur de déchiffrement.".to_string()
+                        }
+                    } else {
+                        "⚠️ Extraction annulée.".to_string()
+                    }
                 }, Message::MediaSaved);
             }
+
             Message::MediaSaved(msg) => {
                 self.idle_seconds = 0;
                 self.status_message = msg;
             }
 
-            // --- ÉTAPES 1 & 2 : APERÇU RAM MULTITHREADÉ ---
+            // --- APERÇU RAM MULTITHREADÉ ---
             Message::PreviewMedia(path, key) => {
                 self.idle_seconds = 0;
                 self.status_message = "⏳ Chargement sécurisé de l'aperçu...".to_string();
@@ -135,9 +166,10 @@ impl KakolookiyamApp {
                     let res = tokio::task::spawn_blocking(move || {
                         crate::crypto::decrypt_media(&path, &key)
                     }).await.unwrap();
-                    res.ok() // Retourne Option<Vec<u8>>
+                    res.ok()
                 }, Message::PreviewMediaLoaded);
             }
+
             Message::PreviewMediaLoaded(data_opt) => {
                 self.idle_seconds = 0;
                 if let Some(decrypted_bytes) = data_opt {
@@ -147,6 +179,7 @@ impl KakolookiyamApp {
                     self.status_message = "❌ Impossible de générer l'aperçu.".to_string();
                 }
             }
+
             Message::ClosePreview => {
                 self.idle_seconds = 0;
                 self.media_preview = None;

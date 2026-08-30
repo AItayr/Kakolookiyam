@@ -12,3 +12,8 @@
 *.iml
 
 target/
+
+*.kak
+client/*.kak
+client/media_*/
+media_*/
