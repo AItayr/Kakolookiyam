@@ -45,11 +45,18 @@ impl KakolookiyamApp {
     }
 
     pub(crate) fn view_create_account(&self) -> Element<'_, Message> {
-        let title = text("🔐 Créer un compte")
-            .size(35)
-            .style(text_main(&self.current_theme))
-            .width(Length::Fill)
-            .horizontal_alignment(alignment::Horizontal::Center);
+        let title = column![
+            text("KAKOLOOKIYAM")
+                .size(45)
+                .style(text_main(&self.current_theme))
+                .width(Length::Fill)
+                .horizontal_alignment(alignment::Horizontal::Center),
+            text("Créer un coffre-fort")
+                .size(30)
+                .style(text_main(&self.current_theme))
+                .width(Length::Fill)
+                .horizontal_alignment(alignment::Horizontal::Center)
+        ].spacing(10);
 
         let info = text("Votre mot de passe chiffrera votre clé privée et votre pseudo.")
             .style(text_muted(&self.current_theme))
@@ -77,7 +84,7 @@ impl KakolookiyamApp {
 
         if let Some(err) = &self.auth_error {
             let error_box = container(
-                text(format!("❌ Erreur : {}", err)).size(14).style(Color::from_rgb(0.9, 0.15, 0.15))
+                text(format!("Erreur : {}", err)).size(14).style(Color::from_rgb(0.9, 0.15, 0.15))
             )
             .padding(12)
             .width(Length::Fill)
@@ -102,11 +109,18 @@ impl KakolookiyamApp {
     }
 
     pub(crate) fn view_login(&self) -> Element<'_, Message> {
-        let title = text("🔓 Déverrouiller le coffre-fort")
-            .size(35)
-            .style(text_main(&self.current_theme))
-            .width(Length::Fill)
-            .horizontal_alignment(alignment::Horizontal::Center);
+        let title = column![
+            text("KAKOLOOKIYAM")
+                .size(45)
+                .style(text_main(&self.current_theme))
+                .width(Length::Fill)
+                .horizontal_alignment(alignment::Horizontal::Center),
+            text("Déverrouiller le coffre-fort")
+                .size(30)
+                .style(text_main(&self.current_theme))
+                .width(Length::Fill)
+                .horizontal_alignment(alignment::Horizontal::Center)
+        ].spacing(10);
 
         let pseudo_input = text_input("Votre pseudo...", &self.pseudo_input)
             .on_input(Message::PseudoChanged)
@@ -121,7 +135,7 @@ impl KakolookiyamApp {
 
         if let Some(err) = &self.auth_error {
             let error_box = container(
-                text(format!("❌ Erreur : {}", err)).size(14).style(Color::from_rgb(0.9, 0.15, 0.15))
+                text(format!("Erreur : {}", err)).size(14).style(Color::from_rgb(0.9, 0.15, 0.15))
             )
             .padding(12)
             .width(Length::Fill)

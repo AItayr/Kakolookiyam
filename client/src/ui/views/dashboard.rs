@@ -396,7 +396,12 @@ impl KakolookiyamApp {
             }
         } else {
             column![
-                text("💬 BIENVENUE DANS VOTRE ESPACE ZÉRO-TRACE")
+                text("BIENVENUE DANS KAKOLOOKIYAM")
+                    .size(28)
+                    .style(current_text)
+                    .width(Length::Fill)
+                    .horizontal_alignment(alignment::Horizontal::Center),
+            text("VOTRE LOGICIEL D'ECHANGE SÉCURISÉ")
                     .size(28)
                     .style(current_text)
                     .width(Length::Fill)
