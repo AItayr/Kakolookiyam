@@ -31,3 +31,6 @@ Compiled natively into lightweight binaries for:
 * **Windows**
 * **Linux**
 * **macOS**
+
+
+https://github.com/sponsors/AItayr
