@@ -2,7 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod audio;
-mod network; // Remplacement du module p2p monolithique par le sous-dossier modulaire network
+mod network;
 mod ui;
 mod crypto;
 
@@ -33,7 +33,6 @@ pub fn main() -> iced::Result {
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
-            // Appel via l'interface publique du nouveau module network
             let _ = network::start_p2p(
                 rx_mic,
                 tx_speaker,
@@ -45,11 +44,10 @@ pub fn main() -> iced::Result {
         });
     });
 
-    // Lancement de l'interface graphique (elle démarre vide et verrouillée)
     let flags = Flags {
         tx_network: tx_ui_to_p2p,
         rx_network: rx_p2p_to_ui,
-        tx_identity, // On donne le transmetteur à l'interface
+        tx_identity,
     };
 
     let mut settings = Settings::with_flags(flags);
@@ -63,9 +61,9 @@ pub fn main() -> iced::Result {
         ..Default::default()
     };
 
-    settings.antialiasing = true; // Lissage indispensable pour la police Cinzel
+    settings.antialiasing = true;
 
-    // --- INJECTION DE TOUTES LES DÉCLINAISONS DE LA POLICE ---
+    // --- INJECTION DE LA POLICE OCCIDENTALE (CINZEL) ---
     settings.fonts.push(Cow::Borrowed(include_bytes!("../assets/fonts/Cinzel-Regular.ttf")));
     settings.fonts.push(Cow::Borrowed(include_bytes!("../assets/fonts/Cinzel-Medium.ttf")));
     settings.fonts.push(Cow::Borrowed(include_bytes!("../assets/fonts/Cinzel-SemiBold.ttf")));
@@ -73,7 +71,6 @@ pub fn main() -> iced::Result {
     settings.fonts.push(Cow::Borrowed(include_bytes!("../assets/fonts/Cinzel-ExtraBold.ttf")));
     settings.fonts.push(Cow::Borrowed(include_bytes!("../assets/fonts/Cinzel-Black.ttf")));
 
-    // On force l'application à utiliser Cinzel Regular par défaut
     settings.default_font = Font {
         family: iced::font::Family::Name("Cinzel"),
         weight: iced::font::Weight::Normal,

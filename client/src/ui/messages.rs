@@ -59,4 +59,5 @@ pub enum Message {
     MicSelected(String),
     SpeakerSelected(String),
     ToggleLegal(String),
+    ToggleLanguage,
 }

@@ -7,8 +7,8 @@ use crate::ui::theme::{
     text_main, text_muted, color_for_user, dynamic_accent,
     PrimaryButton, SecondaryButton, SidebarButton, HangupButton, OverlayContainerStyle
 };
+use crate::ui::i18n::t;
 
-// --- DÉCLARATION DU STYLE DE LA BULLE DE NOTIFICATION ---
 struct BadgeStyle(iced::Color);
 impl iced::widget::container::StyleSheet for BadgeStyle {
     type Style = iced::Theme;
@@ -39,18 +39,18 @@ impl KakolookiyamApp {
         let is_creator = group_data.members.first() == Some(&my_id);
 
         let invite_row = row![
-            text_input("Ajouter par ID public...", &self.new_member_input)
+            text_input(&t(&self.language, "add_public_id"), &self.new_member_input)
                 .on_input(Message::NewMemberInputChanged)
                 .width(Length::Fill)
                 .padding(10),
-            button("Ajouter")
+            button(text(t(&self.language, "btn_add")))
                 .style(iced::theme::Button::Custom(Box::new(PrimaryButton)))
                 .on_press(Message::AddMemberToGroup)
                 .padding(10)
         ].spacing(10);
 
         let mut quick_add_col = column![
-            text("Ajout rapide (Contacts)").style(current_accent).size(18)
+            text(t(&self.language, "quick_add_contacts")).style(current_accent).size(18)
         ].spacing(10);
 
         let mut has_shortcuts = false;
@@ -58,7 +58,7 @@ impl KakolookiyamApp {
         for (c_id, c_pseudo) in &vd.contacts {
             if !group_data.members.contains(c_id) {
                 quick_add_col = quick_add_col.push(
-                    button(text(format!("+ Ajouter {}", c_pseudo)).size(16))
+                    button(text(format!("{} {}", t(&self.language, "btn_add_prefix"), c_pseudo)).size(16))
                         .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
                         .on_press(Message::AddSpecificMemberToGroup(c_id.clone()))
                         .padding(10)
@@ -70,12 +70,12 @@ impl KakolookiyamApp {
 
         if !has_shortcuts {
             quick_add_col = quick_add_col.push(
-                text("Tous vos contacts sont déjà dans ce serveur.").style(current_muted)
+                text(t(&self.language, "all_contacts_in_server")).style(current_muted)
             );
         }
 
-        let btn_delete_text = if is_creator { "🗑️ Supprimer le serveur" } else { "🚪 Quitter le serveur" };
-        let btn_delete = button(btn_delete_text)
+        let btn_delete_text = if is_creator { t(&self.language, "btn_delete_server") } else { t(&self.language, "btn_leave_server") };
+        let btn_delete = button(text(btn_delete_text))
             .style(iced::theme::Button::Custom(Box::new(HangupButton)))
             .on_press(Message::DeleteGroup)
             .padding(15)
@@ -83,9 +83,9 @@ impl KakolookiyamApp {
 
         let content = column![
             row![
-                text(format!("Options : {}", group_data.name)).size(28).style(current_text),
+                text(format!("{} {}", t(&self.language, "options_prefix"), group_data.name)).size(28).style(current_text),
                 Space::with_width(Length::Fill),
-                button("❌ Fermer")
+                button(text(t(&self.language, "btn_close")))
                     .style(iced::theme::Button::Custom(Box::new(HangupButton)))
                     .on_press(Message::CloseGroupOptions)
                     .padding(10)
@@ -93,7 +93,7 @@ impl KakolookiyamApp {
 
             Rule::horizontal(1),
 
-            text("Inviter un membre").size(20).style(current_accent),
+            text(t(&self.language, "invite_member")).size(20).style(current_accent),
             invite_row,
 
             Space::with_height(10),
@@ -125,18 +125,16 @@ impl KakolookiyamApp {
         let current_text = text_main(&self.current_theme);
         let current_muted = text_muted(&self.current_theme);
 
-        // --- CHOIX DE LA COULEUR DE NOTIFICATION ---
-        // On s'assure d'appliquer Bleu canard (claire) ou Rouge (sombre)
         let badge_color = match format!("{:?}", self.current_theme).as_str() {
-            "Dark" => iced::Color::from_rgb(0.9, 0.1, 0.1), // Rouge intense
-            _ => iced::Color::from_rgb(0.0, 0.5, 0.5),      // Bleu Canard
+            "Dark" => iced::Color::from_rgb(0.9, 0.1, 0.1),
+            _ => iced::Color::from_rgb(0.0, 0.5, 0.5),
         };
 
         let mut sidebar = column![
             text(format!("🛡️ {}", vd.pseudo)).size(24).style(current_text),
             row![
-                text("🔑 Mon ID").size(14).style(current_muted),
-                button("Copier")
+                text(t(&self.language, "my_id")).size(14).style(current_muted),
+                button(text(t(&self.language, "btn_copy")))
                     .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
                     .on_press(Message::CopyIdClicked)
                     .padding(5)
@@ -148,7 +146,7 @@ impl KakolookiyamApp {
         .spacing(15)
         .width(Length::Fill);
 
-        sidebar = sidebar.push(text("📔 CONTACTS").size(16).style(current_muted));
+        sidebar = sidebar.push(text(t(&self.language, "contacts")).size(16).style(current_muted));
 
         for (id, pseudo) in &vd.contacts {
             let is_selected = self.selected_chat.as_ref() == Some(id) && !self.show_group_options;
@@ -176,7 +174,7 @@ impl KakolookiyamApp {
 
         sidebar = sidebar.push(Space::with_height(10));
         sidebar = sidebar.push(Rule::horizontal(1));
-        sidebar = sidebar.push(text("🏘️ SERVEURS").size(16).style(current_muted));
+        sidebar = sidebar.push(text(t(&self.language, "servers")).size(16).style(current_muted));
 
         for (id, group) in &vd.groups {
             let is_selected = self.selected_chat.as_ref() == Some(id) && !self.show_group_options;
@@ -203,10 +201,10 @@ impl KakolookiyamApp {
         }
 
         let create_group_row = row![
-            text_input("Nouveau serveur...", &self.new_group_input)
+            text_input(&t(&self.language, "new_server"), &self.new_group_input)
                 .on_input(Message::NewGroupInputChanged)
                 .width(Length::Fill),
-            button("+")
+            button(text("+"))
                 .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
                 .on_press(Message::CreateGroup)
         ].spacing(5);
@@ -221,7 +219,7 @@ impl KakolookiyamApp {
         let sidebar_content = column![
             sidebar_scroll,
             Rule::horizontal(1),
-            button("⚙️ Paramètres")
+            button(text(t(&self.language, "btn_settings")))
                 .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
                 .on_press(Message::OpenSettings)
                 .padding(10)
@@ -244,7 +242,7 @@ impl KakolookiyamApp {
                 };
 
                 let mut header = row![
-                    button("⬅️ Retour")
+                    button(text(t(&self.language, "btn_return")))
                         .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
                         .on_press(Message::DeselectChat)
                         .padding(10),
@@ -256,12 +254,12 @@ impl KakolookiyamApp {
                 .width(Length::Fill);
 
                 if is_group {
-                    let btn_call_group = button("📞 Appeler")
+                    let btn_call_group = button(text(t(&self.language, "btn_call_group")))
                         .style(iced::theme::Button::Custom(Box::new(PrimaryButton)))
                         .on_press(Message::CallContact(target_id.clone()))
                         .padding(10);
 
-                    let btn_options = button("⚙️ Options")
+                    let btn_options = button(text(t(&self.language, "btn_options")))
                         .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
                         .on_press(Message::OpenGroupOptions)
                         .padding(10);
@@ -272,11 +270,11 @@ impl KakolookiyamApp {
                 } else {
                     header = header.push(
                         row![
-                            button("📋 Copier ID")
+                            button(text(t(&self.language, "btn_copy_id")))
                                 .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
                                 .on_press(Message::CopyContactId(target_id.clone()))
                                 .padding(10),
-                            button("📞 Appeler")
+                            button(text(t(&self.language, "btn_call_group")))
                                 .style(iced::theme::Button::Custom(Box::new(PrimaryButton)))
                                 .on_press(Message::CallContact(target_id.clone()))
                                 .padding(10)
@@ -286,7 +284,7 @@ impl KakolookiyamApp {
 
                 if let Some(handle) = &self.media_preview {
                     let img = iced::widget::image(handle.clone()).width(Length::Fill).height(Length::Fill);
-                    let close_btn = button("Fermer l'aperçu")
+                    let close_btn = button(text(t(&self.language, "btn_close_preview")))
                         .style(iced::theme::Button::Custom(Box::new(PrimaryButton)))
                         .on_press(Message::ClosePreview)
                         .padding(15);
@@ -320,7 +318,7 @@ impl KakolookiyamApp {
                                     .width(Length::Fill);
 
                                 let mut btn_row = row![
-                                    button("📂 Extraire & Ouvrir")
+                                    button(text(t(&self.language, "btn_extract")))
                                         .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
                                         .on_press(Message::OpenMedia(msg.content.clone(), key, path.clone()))
                                         .padding(8)
@@ -328,7 +326,7 @@ impl KakolookiyamApp {
 
                                 if is_image {
                                     btn_row = btn_row.push(
-                                        button("👁️ Aperçu RAM")
+                                        button(text(t(&self.language, "btn_preview_ram")))
                                             .style(iced::theme::Button::Custom(Box::new(PrimaryButton)))
                                             .on_press(Message::PreviewMedia(path, key))
                                             .padding(8)
@@ -352,7 +350,7 @@ impl KakolookiyamApp {
                         }
                     } else {
                         chat_messages = chat_messages.push(
-                            text("Aucun message. Soyez le premier à écrire !").style(current_muted)
+                            text(t(&self.language, "no_message")).style(current_muted)
                         );
                     }
 
@@ -362,16 +360,16 @@ impl KakolookiyamApp {
                         .direction(Direction::Vertical(Properties::new().width(0).scroller_width(0)));
 
                     let input_row = row![
-                        button("📎")
+                        button(text("📎"))
                             .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
                             .on_press(Message::OpenFileDialog)
                             .padding(10),
-                        text_input(format!("Envoyer à {}...", target_name).as_str(), &self.chat_input)
+                        text_input(&format!("{} {}...", t(&self.language, "send_to_prefix"), target_name), &self.chat_input)
                             .on_input(Message::ChatInputChanged)
                             .on_submit(Message::SendChatMessage)
                             .padding(10)
                             .width(Length::Fill),
-                        button("Envoyer")
+                        button(text(t(&self.language, "btn_send")))
                             .style(iced::theme::Button::Custom(Box::new(PrimaryButton)))
                             .on_press(Message::SendChatMessage)
                             .padding(10)
@@ -396,26 +394,26 @@ impl KakolookiyamApp {
             }
         } else {
             column![
-                text("BIENVENUE DANS KAKOLOOKIYAM")
+                text(t(&self.language, "welcome_chat_1"))
                     .size(28)
                     .style(current_text)
                     .width(Length::Fill)
                     .horizontal_alignment(alignment::Horizontal::Center),
-            text("VOTRE LOGICIEL D'ECHANGE SÉCURISÉ")
+                text(t(&self.language, "welcome_chat_2"))
                     .size(28)
                     .style(current_text)
                     .width(Length::Fill)
                     .horizontal_alignment(alignment::Horizontal::Center),
-                text("Sélectionnez un contact ou un serveur à gauche.")
+                text(t(&self.language, "select_contact"))
                     .size(16)
                     .style(current_muted)
                     .width(Length::Fill)
                     .horizontal_alignment(alignment::Horizontal::Center),
                 Rule::horizontal(1),
-                text_input("Ajouter un ID public...", &self.peer_id_input)
+                text_input(&t(&self.language, "add_public_id_call"), &self.peer_id_input)
                     .on_input(Message::PeerIdChanged)
                     .padding(10),
-                button("Ajouter & Appeler")
+                button(text(t(&self.language, "btn_add_call")))
                     .style(iced::theme::Button::Custom(Box::new(PrimaryButton)))
                     .on_press(Message::ConnectClicked)
                     .padding(10),
@@ -439,7 +437,7 @@ impl KakolookiyamApp {
         .height(Length::Fill);
 
         let bottom_bar = Container::new(
-            button("🔒 Verrouiller le coffre")
+            button(text(t(&self.language, "btn_lock")))
                 .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
                 .on_press(Message::LockSession)
                 .padding(10)

@@ -60,6 +60,7 @@ pub struct KakolookiyamApp {
     pub(crate) selected_mic: String,
     pub(crate) selected_speaker: String,
     pub(crate) active_legal_tab: Option<String>,
+    pub(crate) language: crate::ui::i18n::Language,
 }
 
 impl Application for KakolookiyamApp {
@@ -81,7 +82,7 @@ impl Application for KakolookiyamApp {
                 master_password: None,
                 vault_data: None,
                 peer_id_input: String::new(),
-                status_message: "⏳ Prêt à appeler...".to_owned(),
+                status_message: "Prêt à appeler...".to_owned(),
                 tx_network: flags.tx_network,
                 rx_network: Arc::new(Mutex::new(Some(flags.rx_network))),
                 tx_identity: Some(flags.tx_identity),
@@ -102,6 +103,7 @@ impl Application for KakolookiyamApp {
                 selected_mic: "Périphérique par défaut (Système)".to_string(),
                 selected_speaker: "Périphérique par défaut (Système)".to_string(),
                 active_legal_tab: None,
+                language: crate::ui::i18n::Language::Fr, // <-- INITIALISATION
             },
             Command::none(),
         )
@@ -138,6 +140,15 @@ impl Application for KakolookiyamApp {
             Message::ToggleTheme => {
                 self.idle_seconds = 0;
                 self.current_theme = if self.current_theme == Theme::Dark { Theme::Light } else { Theme::Dark };
+                return Command::none();
+            }
+            Message::ToggleLanguage => { // <-- INTERCEPTION DU BOUTON
+                self.idle_seconds = 0;
+                self.language = if self.language == crate::ui::i18n::Language::Fr {
+                    crate::ui::i18n::Language::En
+                } else {
+                    crate::ui::i18n::Language::Fr
+                };
                 return Command::none();
             }
 

@@ -4,6 +4,7 @@ use iced::{Alignment, Element, Length};
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
 use crate::ui::theme::{text_main, text_muted, color_for_user, PrimaryButton, SecondaryButton, HangupButton};
+use crate::ui::i18n::t;
 
 impl KakolookiyamApp {
     pub(crate) fn view_active_call(&self) -> Element<'_, Message> {
@@ -12,22 +13,22 @@ impl KakolookiyamApp {
 
         let (_, active_pseudo) = self.active_call.as_ref().unwrap();
 
-        let title = text("📞 Appel en cours")
+        let title = text(t(&self.language, "call_active"))
             .size(40)
             .style(current_text);
 
-        let subtitle = text(format!("En communication sécurisée avec {}", active_pseudo))
+        let subtitle = text(format!("{} {}", t(&self.language, "call_secure_with"), active_pseudo))
             .size(25)
             .style(current_muted);
 
-        let mute_text = if self.is_muted { "🎙️ Activer le micro" } else { "🔇 Couper le micro (Mute)" };
+        let mute_text = if self.is_muted { t(&self.language, "mic_enable") } else { t(&self.language, "mic_disable") };
 
-        let btn_mute = button(mute_text)
+        let btn_mute = button(text(mute_text))
             .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
             .on_press(Message::ToggleMute)
             .padding(20);
 
-        let btn_hangup = button("❌ Raccrocher")
+        let btn_hangup = button(text(t(&self.language, "btn_hangup")))
             .style(iced::theme::Button::Custom(Box::new(HangupButton)))
             .on_press(Message::HangUpCall)
             .padding(20);
@@ -47,12 +48,12 @@ impl KakolookiyamApp {
             .width(Length::Fixed(600.0))
             .direction(Direction::Vertical(Properties::new().width(0).scroller_width(0)));
 
-        let input_chat = text_input("Écrivez un message furtif...", &self.chat_input)
+        let input_chat = text_input(&t(&self.language, "chat_placeholder_stealth"), &self.chat_input)
             .on_input(Message::ChatInputChanged)
             .on_submit(Message::SendChatMessage)
             .padding(10);
 
-        let btn_send = button("Envoyer")
+        let btn_send = button(text(t(&self.language, "btn_send")))
             .style(iced::theme::Button::Custom(Box::new(PrimaryButton)))
             .on_press(Message::SendChatMessage)
             .padding(10);
@@ -62,7 +63,7 @@ impl KakolookiyamApp {
             .width(Length::Fixed(600.0));
 
         let chat_section = column![
-            text("💬 Chat Éphémère (Zéro-Trace)").size(20).style(current_text),
+            text(t(&self.language, "chat_ephemeral")).size(20).style(current_text),
             chat_scroll,
             input_row
         ]
@@ -82,24 +83,24 @@ impl KakolookiyamApp {
 
         let (caller_id, caller_pseudo, sdp) = self.incoming_call.as_ref().unwrap();
 
-        let title = text("🔔 Appel entrant !")
+        let title = text(t(&self.language, "call_incoming"))
             .size(40)
             .style(current_text);
 
-        let subtitle = text(format!("{} souhaite communiquer avec vous.", caller_pseudo))
+        let subtitle = text(format!("{} {}", caller_pseudo, t(&self.language, "wants_to_talk")))
             .size(25)
             .style(current_muted);
 
-        let timer_text = text(format!("(Rejet automatique dans {}s)", 15 - self.incoming_call_timer))
+        let timer_text = text(format!("({} {}s)", t(&self.language, "auto_reject"), 15 - self.incoming_call_timer))
             .size(16)
             .style(crate::ui::theme::ACCENT_RED_DARK);
 
-        let btn_accept = button("✅ Décrocher")
+        let btn_accept = button(text(t(&self.language, "btn_accept")))
             .style(iced::theme::Button::Custom(Box::new(PrimaryButton)))
             .on_press(Message::AcceptCall(caller_id.clone(), sdp.clone()))
             .padding(15);
 
-        let btn_reject = button("❌ Rejeter")
+        let btn_reject = button(text(t(&self.language, "btn_reject")))
             .style(iced::theme::Button::Custom(Box::new(HangupButton)))
             .on_press(Message::RejectCall(caller_id.clone()))
             .padding(15);

@@ -3,6 +3,7 @@ use iced::{alignment, Alignment, Color, Element, Length};
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
 use crate::ui::theme::{text_main, text_muted, PrimaryButton, SecondaryButton, ErrorContainerStyle};
+use crate::ui::i18n::t;
 
 impl KakolookiyamApp {
     pub(crate) fn clear_auth_fields(&mut self) {
@@ -13,24 +14,30 @@ impl KakolookiyamApp {
     }
 
     pub(crate) fn view_welcome(&self) -> Element<'_, Message> {
+        let lang_btn = button(text(t(&self.language, "lang_toggle")))
+            .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
+            .on_press(Message::ToggleLanguage)
+            .padding(10);
+        let top_bar = container(lang_btn).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
+
         let title = text("Kakolookiyam")
             .size(45)
             .style(text_main(&self.current_theme))
             .width(Length::Fill)
             .horizontal_alignment(alignment::Horizontal::Center);
 
-        let subtitle = text("Communication P2P Zéro-Trace")
+        let subtitle = text(t(&self.language, "welcome_sub"))
             .size(18)
             .style(text_muted(&self.current_theme))
             .width(Length::Fill)
             .horizontal_alignment(alignment::Horizontal::Center);
 
-        let btn_create = button("Créer un nouveau compte (Coffre-fort local)")
+        let btn_create = button(text(t(&self.language, "btn_create")))
             .style(iced::theme::Button::Custom(Box::new(PrimaryButton)))
             .on_press(Message::GoToCreateAccount)
             .padding(15);
 
-        let btn_login = button("Se connecter (Déverrouiller un compte existant)")
+        let btn_login = button(text(t(&self.language, "btn_login")))
             .style(iced::theme::Button::Custom(Box::new(PrimaryButton)))
             .on_press(Message::GoToLogin)
             .padding(15);
@@ -41,41 +48,48 @@ impl KakolookiyamApp {
             .align_items(Alignment::Center)
             .width(Length::Fill);
 
-        Container::new(content).width(Length::Fill).height(Length::Fill).center_x().center_y().into()
+        let main_box = Container::new(content).width(Length::Fill).height(Length::Fill).center_x().center_y();
+        column![top_bar, main_box].width(Length::Fill).height(Length::Fill).into()
     }
 
     pub(crate) fn view_create_account(&self) -> Element<'_, Message> {
+        let lang_btn = button(text(t(&self.language, "lang_toggle")))
+            .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
+            .on_press(Message::ToggleLanguage)
+            .padding(10);
+        let top_bar = container(lang_btn).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
+
         let title = column![
             text("KAKOLOOKIYAM")
                 .size(45)
                 .style(text_main(&self.current_theme))
                 .width(Length::Fill)
                 .horizontal_alignment(alignment::Horizontal::Center),
-            text("Créer un coffre-fort")
+            text(t(&self.language, "create_vault_title"))
                 .size(30)
                 .style(text_main(&self.current_theme))
                 .width(Length::Fill)
                 .horizontal_alignment(alignment::Horizontal::Center)
         ].spacing(10);
 
-        let info = text("Votre mot de passe chiffrera votre clé privée et votre pseudo.")
+        let info = text(t(&self.language, "create_vault_info"))
             .style(text_muted(&self.current_theme))
             .width(Length::Fill)
             .horizontal_alignment(alignment::Horizontal::Center);
 
-        let pseudo_input = text_input("Choisissez un pseudo...", &self.pseudo_input)
+        let pseudo_input = text_input(&t(&self.language, "pseudo_placeholder"), &self.pseudo_input)
             .on_input(Message::PseudoChanged)
             .padding(15);
 
         let pass_input = text_input(
-            "Nouveau mot de passe (min. 12 car., Maj, Min, Chiffre, Spécial)...",
+            &t(&self.language, "password_new_placeholder"),
             &self.password_input
         )
         .on_input(Message::PasswordChanged)
         .secure(true)
         .padding(15);
 
-        let pass_confirm = text_input("Confirmez le mot de passe...", &self.password_confirm_input)
+        let pass_confirm = text_input(&t(&self.language, "password_confirm_placeholder"), &self.password_confirm_input)
             .on_input(Message::PasswordConfirmChanged)
             .secure(true)
             .padding(15);
@@ -84,7 +98,7 @@ impl KakolookiyamApp {
 
         if let Some(err) = &self.auth_error {
             let error_box = container(
-                text(format!("Erreur : {}", err)).size(14).style(Color::from_rgb(0.9, 0.15, 0.15))
+                text(format!("{} : {}", t(&self.language, "error"), err)).size(14).style(Color::from_rgb(0.9, 0.15, 0.15))
             )
             .padding(12)
             .width(Length::Fill)
@@ -93,40 +107,47 @@ impl KakolookiyamApp {
             col = col.push(error_box);
         }
 
-        let btn_submit = button("Créer et Chiffrer")
+        let btn_submit = button(text(t(&self.language, "btn_submit_create")))
             .style(iced::theme::Button::Custom(Box::new(PrimaryButton)))
             .on_press(Message::SubmitCreateAccount)
             .padding(12);
 
-        let btn_back = button("Retour")
+        let btn_back = button(text(t(&self.language, "btn_back")))
             .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
             .on_press(Message::BackToWelcome)
             .padding(12);
 
         col = col.push(row![btn_back, btn_submit].spacing(15)).align_items(Alignment::Center);
 
-        Container::new(col).width(Length::Fill).height(Length::Fill).center_x().center_y().into()
+        let main_box = Container::new(col).width(Length::Fill).height(Length::Fill).center_x().center_y();
+        column![top_bar, main_box].width(Length::Fill).height(Length::Fill).into()
     }
 
     pub(crate) fn view_login(&self) -> Element<'_, Message> {
+        let lang_btn = button(text(t(&self.language, "lang_toggle")))
+            .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
+            .on_press(Message::ToggleLanguage)
+            .padding(10);
+        let top_bar = container(lang_btn).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
+
         let title = column![
             text("KAKOLOOKIYAM")
                 .size(45)
                 .style(text_main(&self.current_theme))
                 .width(Length::Fill)
                 .horizontal_alignment(alignment::Horizontal::Center),
-            text("Déverrouiller le coffre-fort")
+            text(t(&self.language, "login_title"))
                 .size(30)
                 .style(text_main(&self.current_theme))
                 .width(Length::Fill)
                 .horizontal_alignment(alignment::Horizontal::Center)
         ].spacing(10);
 
-        let pseudo_input = text_input("Votre pseudo...", &self.pseudo_input)
+        let pseudo_input = text_input(&t(&self.language, "login_pseudo_placeholder"), &self.pseudo_input)
             .on_input(Message::PseudoChanged)
             .padding(15);
 
-        let pass_input = text_input("Votre mot de passe maître...", &self.password_input)
+        let pass_input = text_input(&t(&self.language, "login_password_placeholder"), &self.password_input)
             .on_input(Message::PasswordChanged)
             .secure(true)
             .padding(15);
@@ -135,7 +156,7 @@ impl KakolookiyamApp {
 
         if let Some(err) = &self.auth_error {
             let error_box = container(
-                text(format!("Erreur : {}", err)).size(14).style(Color::from_rgb(0.9, 0.15, 0.15))
+                text(format!("{} : {}", t(&self.language, "error"), err)).size(14).style(Color::from_rgb(0.9, 0.15, 0.15))
             )
             .padding(12)
             .width(Length::Fill)
@@ -144,18 +165,19 @@ impl KakolookiyamApp {
             col = col.push(error_box);
         }
 
-        let btn_submit = button("Déverrouiller")
+        let btn_submit = button(text(t(&self.language, "btn_submit_login")))
             .style(iced::theme::Button::Custom(Box::new(PrimaryButton)))
             .on_press(Message::SubmitLogin)
             .padding(12);
 
-        let btn_back = button("Retour")
+        let btn_back = button(text(t(&self.language, "btn_back")))
             .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
             .on_press(Message::BackToWelcome)
             .padding(12);
 
         col = col.push(row![btn_back, btn_submit].spacing(15)).align_items(Alignment::Center);
 
-        Container::new(col).width(Length::Fill).height(Length::Fill).center_x().center_y().into()
+        let main_box = Container::new(col).width(Length::Fill).height(Length::Fill).center_x().center_y();
+        column![top_bar, main_box].width(Length::Fill).height(Length::Fill).into()
     }
 }

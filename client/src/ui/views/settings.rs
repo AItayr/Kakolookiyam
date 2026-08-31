@@ -4,6 +4,7 @@ use iced::{Alignment, Element, Length};
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
 use crate::ui::theme::{text_main, text_muted, dynamic_accent, SecondaryButton, HangupButton, OverlayContainerStyle};
+use crate::ui::i18n::t;
 
 impl KakolookiyamApp {
     pub(crate) fn view_settings(&self) -> Element<'_, Message> {
@@ -14,17 +15,17 @@ impl KakolookiyamApp {
         // --- GESTION DE L'OVERLAY LÉGAL ---
         if let Some(tab) = &self.active_legal_tab {
             let (legal_title, legal_text) = match tab.as_str() {
-                "CGU" => ("Conditions d'Utilisation", "Kakolookiyam est fourni 'en l'état'. L'utilisation du réseau P2P et l'échange de fichiers engagent l'entière responsabilité des utilisateurs. Aucun métadonnée n'est stockée sur l'infrastructure de routage."),
-                "PRIVACY" => ("Confidentialité", "Mode Zéro-Trace garanti. Les messages, appels vocaux Opus et fichiers chiffrés transitent uniquement de pair à pair. La RAM est purgée de manière sécurisée lors du verrouillage du coffre-fort."),
-                "OFL" => ("Licences (OFL)", "La police principale 'Cinzel' est distribuée sous licence SIL Open Font License (OFL). Le framework Iced et les bibliothèques cryptographiques sont régis par leurs licences MIT/Apache respectives."),
-                _ => ("", "")
+                "CGU" => (t(&self.language, "cgu_title"), t(&self.language, "cgu_text")),
+                "PRIVACY" => (t(&self.language, "privacy_title"), t(&self.language, "privacy_text")),
+                "OFL" => (t(&self.language, "ofl_title"), t(&self.language, "ofl_text")),
+                _ => (String::new(), String::new())
             };
 
             let content = column![
                 row![
                     text(legal_title).size(28).style(current_text),
                     Space::with_width(Length::Fill),
-                    button("❌ Fermer")
+                    button(text(t(&self.language, "btn_close")))
                         .style(iced::theme::Button::Custom(Box::new(HangupButton)))
                         .on_press(Message::ToggleLegal(tab.clone()))
                         .padding(10)
@@ -48,22 +49,30 @@ impl KakolookiyamApp {
         }
 
         // --- VUE NORMALE DES PARAMÈTRES ---
-        let mics = vec!["Périphérique par défaut (Système)".to_string(), "Universal Audio Volt 476".to_string(), "Entrée virtuelle".to_string()];
-        let spks = vec!["Périphérique par défaut (Système)".to_string(), "Universal Audio Volt 476".to_string(), "Sortie virtuelle".to_string()];
+        let mics = vec![
+            t(&self.language, "device_default"),
+            "Universal Audio Volt 476".to_string(),
+            t(&self.language, "device_virtual_in")
+        ];
+        let spks = vec![
+            t(&self.language, "device_default"),
+            "Universal Audio Volt 476".to_string(),
+            t(&self.language, "device_virtual_out")
+        ];
 
         let mic_picker = pick_list(mics, Some(self.selected_mic.clone()), Message::MicSelected).width(Length::Fill);
         let spk_picker = pick_list(spks, Some(self.selected_speaker.clone()), Message::SpeakerSelected).width(Length::Fill);
 
         let legal_section = column![
-            text("Légal & Mentions").size(20).style(current_accent),
+            text(t(&self.language, "settings_legal")).size(20).style(current_accent),
             row![
-                button("Conditions d'Utilisation (CGU)")
+                button(text(t(&self.language, "settings_cgu_btn")))
                     .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
                     .on_press(Message::ToggleLegal("CGU".to_string())).padding(10),
-                button("Confidentialité")
+                button(text(t(&self.language, "privacy_title")))
                     .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
                     .on_press(Message::ToggleLegal("PRIVACY".to_string())).padding(10),
-                button("Licences (OFL)")
+                button(text(t(&self.language, "ofl_title")))
                     .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
                     .on_press(Message::ToggleLegal("OFL".to_string())).padding(10),
             ].spacing(15)
@@ -71,9 +80,9 @@ impl KakolookiyamApp {
 
         let settings_content = column![
             row![
-                text("⚙️ PARAMÈTRES DU COFFRE").size(32).style(current_text),
+                text(t(&self.language, "settings_title")).size(32).style(current_text),
                 Space::with_width(Length::Fill),
-                button("❌ Fermer")
+                button(text(t(&self.language, "btn_close")))
                     .style(iced::theme::Button::Custom(Box::new(HangupButton)))
                     .on_press(Message::CloseSettings)
                     .padding(10)
@@ -81,19 +90,25 @@ impl KakolookiyamApp {
 
             Rule::horizontal(1),
 
-            text("Général").size(20).style(current_accent),
-            button("🌗 Basculer le thème (Clair/Sombre)")
+            text(t(&self.language, "settings_general")).size(20).style(current_accent),
+            button(text(t(&self.language, "settings_lang")))
+                .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
+                .on_press(Message::ToggleLanguage)
+                .padding(10),
+
+            button(text(t(&self.language, "settings_theme")))
                 .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
                 .on_press(Message::ToggleTheme)
                 .padding(10),
 
+
             Space::with_height(20),
 
-            text("Matériel & Audio").size(20).style(current_accent),
-            text("Microphone (Entrée)").style(current_muted),
+            text(t(&self.language, "settings_audio")).size(20).style(current_accent),
+            text(t(&self.language, "settings_mic")).style(current_muted),
             mic_picker,
             Space::with_height(5),
-            text("Haut-parleurs (Sortie)").style(current_muted),
+            text(t(&self.language, "settings_speaker")).style(current_muted),
             spk_picker,
 
             Space::with_height(20),

@@ -30,7 +30,7 @@ impl KakolookiyamApp {
 
                 self.clear_auth_fields();
                 self.state = AppState::Login;
-                self.status_message = "⏳ Prêt à appeler...".to_owned();
+                self.status_message = "Prêt à appeler...".to_owned();
                 self.idle_seconds = 0;
             }
             Message::ForceDisconnect(err_msg) => {
@@ -84,7 +84,7 @@ impl KakolookiyamApp {
                     match crypto::save_vault(&self.password_input, &mut v_data) {
                         Ok(_) => {
                             self.master_password = Some(self.password_input.clone());
-                            self.auth_error = Some("⏳ Création réseau en cours...".to_string());
+                            self.auth_error = Some("Création réseau en cours...".to_string());
 
                             let id = crypto::derive_public_id(&v_data.private_key);
                             if let Some(tx) = self.tx_identity.take() {
@@ -110,7 +110,7 @@ impl KakolookiyamApp {
                     match crypto::unlock_vault(trimmed, &self.password_input) {
                         Ok(v_data) => {
                             self.master_password = Some(self.password_input.clone());
-                            self.auth_error = Some("⏳ Authentification réseau en cours...".to_string());
+                            self.auth_error = Some("Authentification réseau en cours...".to_string());
 
                             let id = crypto::derive_public_id(&v_data.private_key);
                             if let Some(tx) = self.tx_identity.take() {
