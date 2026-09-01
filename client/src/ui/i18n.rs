@@ -116,6 +116,8 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::En, "add_public_id") => "Add by public ID...",
         (Language::Fr, "quick_add_contacts") => "Ajout rapide (Contacts)",
         (Language::En, "quick_add_contacts") => "Quick add (Contacts)",
+        (Language::Fr, "btn_add_prefix") => "+ Ajouter",
+        (Language::En, "btn_add_prefix") => "+ Add",
         (Language::Fr, "btn_add") => "+ Ajouter",
         (Language::En, "btn_add") => "+ Add",
         (Language::Fr, "all_contacts_in_server") => "Tous vos contacts sont déjà dans ce serveur.",

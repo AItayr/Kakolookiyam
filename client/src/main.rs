@@ -6,29 +6,24 @@ mod network;
 mod ui;
 mod crypto;
 
-use iced::{Application, Font, Settings, Size};
-use std::borrow::Cow;
+use iced::{Font, Size};
 use ui::{KakolookiyamApp, Flags};
 use tokio::sync::mpsc;
+use std::sync::{Arc, Mutex};
 
 pub fn main() -> iced::Result {
     audio::detect_microphone();
 
-    // Canaux de communication P2P <-> Interface
     let (tx_ui_to_p2p, rx_ui_to_p2p) = mpsc::unbounded_channel::<String>();
     let (tx_p2p_to_ui, rx_p2p_to_ui) = mpsc::unbounded_channel::<String>();
-
-    // Canal d'attente pour l'identité cryptographique (ID + Pseudo)
     let (tx_identity, rx_identity) = std::sync::mpsc::channel::<(String, String)>();
 
-    // Lancement des moteurs d'arrière-plan
     std::thread::spawn(move || {
         let (tx_mic, rx_mic) = tokio::sync::mpsc::channel::<Vec<u8>>(500);
-        let (tx_speaker, rx_speaker) = std::sync::mpsc::channel::<Vec<i16>>();
+        let (tx_speaker, rx_speaker) = std::sync::mpsc::channel::<(usize, Vec<i16>)>();
 
         audio::start_hardware_audio(tx_mic, rx_speaker);
 
-        // LE THREAD SE MET EN PAUSE ICI : Il attend que le coffre-fort soit ouvert !
         let (my_id_b64, my_pseudo) = rx_identity.recv().expect("L'interface s'est fermée avant le déverrouillage.");
 
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -50,33 +45,37 @@ pub fn main() -> iced::Result {
         tx_identity,
     };
 
-    let mut settings = Settings::with_flags(flags);
-
-    // --- OPTIMISATIONS QUALITY OF LIFE (QoL) ---
-    settings.window = iced::window::Settings {
-        size: Size::new(1024.0, 768.0),
-        min_size: Some(Size::new(1024.0, 768.0)),
-        position: iced::window::Position::Centered,
-        resizable: true,
-        ..Default::default()
-    };
-
-    settings.antialiasing = true;
-
-    // --- INJECTION DE LA POLICE OCCIDENTALE (CINZEL) ---
-    settings.fonts.push(Cow::Borrowed(include_bytes!("../assets/fonts/Cinzel-Regular.ttf")));
-    settings.fonts.push(Cow::Borrowed(include_bytes!("../assets/fonts/Cinzel-Medium.ttf")));
-    settings.fonts.push(Cow::Borrowed(include_bytes!("../assets/fonts/Cinzel-SemiBold.ttf")));
-    settings.fonts.push(Cow::Borrowed(include_bytes!("../assets/fonts/Cinzel-Bold.ttf")));
-    settings.fonts.push(Cow::Borrowed(include_bytes!("../assets/fonts/Cinzel-ExtraBold.ttf")));
-    settings.fonts.push(Cow::Borrowed(include_bytes!("../assets/fonts/Cinzel-Black.ttf")));
-
-    settings.default_font = Font {
+    let default_font = Font {
         family: iced::font::Family::Name("Cinzel"),
         weight: iced::font::Weight::Normal,
         stretch: iced::font::Stretch::Normal,
         style: iced::font::Style::Normal,
     };
 
-    KakolookiyamApp::run(settings)
+    // Make the boot function compatible with `BootFn` which returns `(State, Task<Message>)` or just `State`.
+    // KakolookiyamApp::new returns `(KakolookiyamApp, iced::Task<Message>)`!
+    
+    // We pass `title` as a builder method on the returned Application!
+    iced::application(
+        {
+        let flags_arc = Arc::new(Mutex::new(Some(flags)));
+        move || KakolookiyamApp::new(flags_arc.lock().unwrap().take().unwrap())
+    },
+        KakolookiyamApp::update,
+        KakolookiyamApp::view
+    )
+    .subscription(KakolookiyamApp::subscription)
+    .theme(KakolookiyamApp::theme)
+    .window_size(Size::new(1024.0, 768.0))
+    .centered()
+    .antialiasing(true)
+    .font(include_bytes!("../assets/fonts/Cinzel-Regular.ttf"))
+    .font(include_bytes!("../assets/fonts/Cinzel-Medium.ttf"))
+    .font(include_bytes!("../assets/fonts/Cinzel-SemiBold.ttf"))
+    .font(include_bytes!("../assets/fonts/Cinzel-Bold.ttf"))
+    .font(include_bytes!("../assets/fonts/Cinzel-ExtraBold.ttf"))
+    .font(include_bytes!("../assets/fonts/Cinzel-Black.ttf"))
+    .default_font(default_font)
+    .title(KakolookiyamApp::title)
+    .run()
 }

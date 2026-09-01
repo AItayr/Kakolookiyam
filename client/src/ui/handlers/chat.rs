@@ -1,4 +1,4 @@
-use iced::{clipboard, Command};
+use iced::{clipboard, Task as Command};
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
 use crate::crypto;

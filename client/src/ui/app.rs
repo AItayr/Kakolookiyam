@@ -1,6 +1,5 @@
-use iced::{time, Application, Command, Element, Event, Subscription, Theme};
+use iced::{time, Task as Command, Element, Event, Subscription, Theme};
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
 
@@ -59,17 +58,15 @@ pub struct KakolookiyamApp {
     // --- Variables d'interface (Paramètres) ---
     pub(crate) selected_mic: String,
     pub(crate) selected_speaker: String,
+    pub(crate) available_mics: Vec<String>,
+    pub(crate) available_speakers: Vec<String>,
     pub(crate) active_legal_tab: Option<String>,
     pub(crate) language: crate::ui::i18n::Language,
 }
 
-impl Application for KakolookiyamApp {
-    type Executor = iced::executor::Default;
-    type Message = Message;
-    type Theme = Theme;
-    type Flags = Flags;
-
-    fn new(flags: Self::Flags) -> (Self, Command<Message>) {
+impl KakolookiyamApp {
+                
+    pub fn new(flags: Flags) -> (Self, Command<Message>) {
         let initial_state = if crypto::any_vault_exists() { AppState::Login } else { AppState::Welcome };
         (
             Self {
@@ -100,8 +97,10 @@ impl Application for KakolookiyamApp {
                 current_theme: Theme::Dark,
                 show_settings: false,
                 show_group_options: false,
-                selected_mic: "Périphérique par défaut (Système)".to_string(),
-                selected_speaker: "Périphérique par défaut (Système)".to_string(),
+                selected_mic: "Défaut".to_string(),
+            available_mics: crate::audio::get_available_microphones(),
+            available_speakers: crate::audio::get_available_speakers(),
+                selected_speaker: "Défaut".to_string(),
                 active_legal_tab: None,
                 language: crate::ui::i18n::Language::Fr, // <-- INITIALISATION
             },
@@ -109,13 +108,13 @@ impl Application for KakolookiyamApp {
         )
     }
 
-    fn title(&self) -> String { String::from("Kakolookiyam - Secure P2P") }
+    pub fn title(&self) -> String { String::from("Kakolookiyam - Secure P2P") }
 
-    fn theme(&self) -> Theme {
+    pub fn theme(&self) -> Theme {
         self.current_theme.clone()
     }
 
-    fn update(&mut self, message: Message) -> Command<Message> {
+    pub fn update(&mut self, message: Message) -> Command<Message> {
         if matches!(message, Message::LockSession | Message::ForceDisconnect(_)) {
             self.media_preview = None;
             self.show_settings = false;
@@ -128,8 +127,8 @@ impl Application for KakolookiyamApp {
         }
 
         match message {
-            Message::MicSelected(mic) => { self.selected_mic = mic; return Command::none(); }
-            Message::SpeakerSelected(spk) => { self.selected_speaker = spk; return Command::none(); }
+            Message::MicSelected(mic) => { self.selected_mic = mic.clone(); crate::audio::set_microphone(mic); return Command::none(); }
+            Message::SpeakerSelected(spk) => { self.selected_speaker = spk.clone(); crate::audio::set_speaker(spk); return Command::none(); }
             Message::ToggleLegal(tab) => {
                 self.active_legal_tab = if self.active_legal_tab.as_deref() == Some(&tab) { None } else { Some(tab) };
                 return Command::none();
@@ -184,7 +183,7 @@ impl Application for KakolookiyamApp {
         }
     }
 
-    fn view(&self) -> Element<'_, Message> {
+    pub fn view(&self) -> Element<'_, Message> {
         match self.state {
             AppState::Welcome => self.view_welcome(),
             AppState::CreateAccount => self.view_create_account(),
@@ -193,22 +192,50 @@ impl Application for KakolookiyamApp {
         }
     }
 
-    fn subscription(&self) -> Subscription<Message> {
-        struct NetworkSub;
-        let network_subscription = iced::subscription::unfold(
-            std::any::TypeId::of::<NetworkSub>(),
-            self.rx_network.clone(),
-            |rx_mutex| async move {
-                let msg = {
-                    let mut guard = rx_mutex.lock().await;
-                    if let Some(rx) = guard.as_mut() { rx.recv().await } else { None }
-                };
-                match msg { Some(text) => (Message::NetworkEvent(text), rx_mutex), None => std::future::pending().await }
-            },
+    pub fn subscription(&self) -> Subscription<Message> {
+
+        let rx_network = self.rx_network.clone();
+
+
+        #[derive(Clone)]
+        struct RxData(std::sync::Arc<tokio::sync::Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<String>>>>);
+        impl std::hash::Hash for RxData {
+            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                std::sync::Arc::as_ptr(&self.0).hash(state);
+            }
+        }
+
+        let network_subscription = iced::Subscription::run_with(
+            RxData(rx_network),
+            |rx_wrapper| {
+                let rx_mutex = rx_wrapper.0.clone();
+                
+                iced::stream::channel::<Message>(100, |mut output: iced::futures::channel::mpsc::Sender<Message>| async move {
+                    use futures_util::sink::SinkExt;
+                    loop {
+                        let msg = {
+                            let mut guard = rx_mutex.lock().await;
+                            if let Some(rx) = guard.as_mut() { 
+                                rx.recv().await 
+                            } else { 
+                                None 
+                            }
+                        };
+                        match msg {
+                            Some(text) => {
+                                let _ = output.send(Message::NetworkEvent(text)).await;
+                            }
+                            None => {
+                                std::future::pending::<()>().await;
+                            }
+                        }
+                    }
+                })
+            }
         );
 
-        let timer_subscription = time::every(Duration::from_secs(1)).map(|_| Message::TickInactivity);
-        let event_subscription = iced::event::listen_with(|event, _status| {
+        let timer_subscription = time::every(std::time::Duration::from_secs(1)).map(|_| Message::TickInactivity);
+        let event_subscription = iced::event::listen_with(|event, _status, _window_id| {
             match event { Event::Keyboard(_) | Event::Mouse(_) => Some(Message::ResetInactivity), _ => None }
         });
 

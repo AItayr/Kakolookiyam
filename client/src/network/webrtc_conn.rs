@@ -2,6 +2,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 use std::sync::Arc as StdArc;
 
+static TRACK_ID_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(1);
 use webrtc::api::API;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::peer_connection::configuration::RTCConfiguration;
@@ -20,7 +21,7 @@ pub async fn create_peer_connection(
     my_id: String,
     my_pseudo: String,
     audio_track: Option<StdArc<TrackLocalStaticSample>>,
-    tx_speaker: std::sync::mpsc::Sender<Vec<i16>>,
+    tx_speaker: std::sync::mpsc::Sender<(usize, Vec<i16>)>,
     tx_signal: tokio::sync::mpsc::Sender<Signal>,
     tx_ui: UnboundedSender<String>,
     tx_dc: UnboundedSender<(String, Arc<RTCDataChannel>)>,
@@ -80,6 +81,7 @@ pub async fn create_peer_connection(
         pc.on_track(Box::new(move |track, _, _| {
             let tx_spk = tx_spk.clone();
 
+            let track_id = TRACK_ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Box::pin(async move {
                 tokio::spawn(async move {
                     let mut decoder = audiopus::coder::Decoder::new(
@@ -92,7 +94,7 @@ pub async fn create_peer_connection(
                         let mut decoded_pcm = vec![0i16; 1920 * 2];
                         if let Ok(len) = decoder.decode(Some(rtp_packet.payload.as_ref()), &mut decoded_pcm, false) {
                             decoded_pcm.truncate(len * 2);
-                            let _ = tx_spk.send(decoded_pcm);
+                            let _ = tx_spk.send((track_id, decoded_pcm));
                         }
                     }
                 });

@@ -1,4 +1,4 @@
-use iced::Command;
+use iced::Task as Command;
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
 

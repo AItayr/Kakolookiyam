@@ -1,4 +1,4 @@
-use iced::Command;
+use iced::Task as Command;
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
 
@@ -173,7 +173,7 @@ impl KakolookiyamApp {
             Message::PreviewMediaLoaded(data_opt) => {
                 self.idle_seconds = 0;
                 if let Some(decrypted_bytes) = data_opt {
-                    self.media_preview = Some(iced::widget::image::Handle::from_memory(decrypted_bytes));
+                    self.media_preview = Some(iced::widget::image::Handle::from_bytes(decrypted_bytes));
                     self.status_message = "✅ Aperçu média chargé en mémoire RAM (Zéro-Trace).".to_string();
                 } else {
                     self.status_message = "❌ Impossible de générer l'aperçu.".to_string();

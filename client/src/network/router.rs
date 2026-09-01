@@ -35,7 +35,7 @@ pub enum Signal {
 
 pub async fn start_p2p(
     mut rx_mic: tokio::sync::mpsc::Receiver<Vec<u8>>,
-    tx_speaker: std::sync::mpsc::Sender<Vec<i16>>,
+    tx_speaker: std::sync::mpsc::Sender<(usize, Vec<i16>)>,
     mut rx_ui: UnboundedReceiver<String>,
     tx_ui: UnboundedSender<String>,
     mut my_local_id: String,

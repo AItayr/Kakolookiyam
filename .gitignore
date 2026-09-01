@@ -17,3 +17,5 @@ target/
 client/*.kak
 client/media_*/
 media_*/
+
+.DS_STORE

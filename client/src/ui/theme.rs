@@ -1,5 +1,5 @@
 use iced::widget::{button, container};
-use iced::{Color, Theme, Background, Vector, Border, Shadow};
+use iced::{Color, Theme, Background, Border, Shadow};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -16,7 +16,6 @@ pub fn dynamic_accent(theme: &Theme) -> Color {
     }
 }
 
-// --- TEXTES DYNAMIQUES ---
 pub fn text_main(theme: &Theme) -> Color {
     match theme {
         Theme::Light => Color::BLACK,
@@ -71,139 +70,112 @@ fn color_from_hsl(h: f32, s: f32, l: f32) -> Color {
 }
 
 // --- STYLES DES BOUTONS ---
-pub struct PrimaryButton;
-impl button::StyleSheet for PrimaryButton {
-    type Style = Theme;
-    fn active(&self, theme: &Self::Style) -> button::Appearance {
-        button::Appearance {
-            background: Some(Background::Color(dynamic_accent(theme))),
-            text_color: Color::WHITE,
-            border: Border {
-                radius: 4.0.into(),
-                width: 0.0,
-                color: Color::TRANSPARENT
-            },
-            shadow_offset: Vector::new(0.0, 0.0),
-            shadow: Shadow::default(),
-        }
-    }
-    fn hovered(&self, theme: &Self::Style) -> button::Appearance {
-        self.active(theme)
+pub fn primary_button(theme: &Theme, _status: button::Status) -> button::Style {
+    button::Style {
+        background: Some(Background::Color(dynamic_accent(theme))),
+        text_color: Color::WHITE,
+        border: Border {
+            radius: 4.0.into(),
+            width: 0.0,
+            color: Color::TRANSPARENT,
+            ..Default::default()
+        },
+        shadow: Shadow::default(),
+        ..Default::default()
     }
 }
 
-pub struct HangupButton;
-impl button::StyleSheet for HangupButton {
-    type Style = Theme;
-    fn active(&self, _theme: &Self::Style) -> button::Appearance {
-        button::Appearance {
-            background: Some(Background::Color(ACCENT_RED_DARK)),
-            text_color: Color::WHITE,
-            border: Border {
-                radius: 4.0.into(),
-                width: 0.0,
-                color: Color::TRANSPARENT
-            },
-            shadow_offset: Vector::new(0.0, 0.0),
-            shadow: Shadow::default(),
-        }
-    }
-    fn hovered(&self, theme: &Self::Style) -> button::Appearance {
-        self.active(theme)
+pub fn hangup_button(_theme: &Theme, _status: button::Status) -> button::Style {
+    button::Style {
+        background: Some(Background::Color(ACCENT_RED_DARK)),
+        text_color: Color::WHITE,
+        border: Border {
+            radius: 4.0.into(),
+            width: 0.0,
+            color: Color::TRANSPARENT,
+            ..Default::default()
+        },
+        shadow: Shadow::default(),
+        ..Default::default()
     }
 }
 
-pub struct SecondaryButton;
-impl button::StyleSheet for SecondaryButton {
-    type Style = Theme;
-    fn active(&self, theme: &Self::Style) -> button::Appearance {
-        button::Appearance {
-            background: match theme {
-                Theme::Light => Some(Background::Color(Color::from_rgb(0.85, 0.85, 0.85))),
-                _ => Some(Background::Color(Color::from_rgb(0.2, 0.2, 0.2))),
-            },
-            text_color: text_main(theme),
-            border: Border {
-                radius: 4.0.into(),
-                width: 0.0,
-                color: Color::TRANSPARENT
-            },
-            shadow_offset: Vector::new(0.0, 0.0),
-            shadow: Shadow::default(),
-        }
-    }
-    fn hovered(&self, theme: &Self::Style) -> button::Appearance {
-        self.active(theme)
+pub fn secondary_button(theme: &Theme, _status: button::Status) -> button::Style {
+    button::Style {
+        background: match theme {
+            Theme::Light => Some(Background::Color(Color::from_rgb(0.85, 0.85, 0.85))),
+            _ => Some(Background::Color(Color::from_rgb(0.2, 0.2, 0.2))),
+        },
+        text_color: text_main(theme),
+        border: Border {
+            radius: 4.0.into(),
+            width: 0.0,
+            color: Color::TRANSPARENT,
+            ..Default::default()
+        },
+        shadow: Shadow::default(),
+        ..Default::default()
     }
 }
 
-pub struct SidebarButton { pub is_selected: bool }
-impl button::StyleSheet for SidebarButton {
-    type Style = Theme;
-    fn active(&self, theme: &Self::Style) -> button::Appearance {
+pub fn sidebar_button(is_selected: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
+    move |theme, status| {
         let accent = dynamic_accent(theme);
-        button::Appearance {
-            background: if self.is_selected {
+        let mut style = button::Style {
+            background: if is_selected {
                 Some(Background::Color(Color::from_rgba(accent.r, accent.g, accent.b, 0.15)))
             } else {
                 None
             },
-            text_color: if self.is_selected { accent } else { text_main(theme) },
+            text_color: if is_selected { accent } else { text_main(theme) },
             border: Border {
                 radius: 4.0.into(),
                 width: 0.0,
-                color: Color::TRANSPARENT
+                color: Color::TRANSPARENT,
+                ..Default::default()
             },
-            shadow_offset: Vector::new(0.0, 0.0),
             shadow: Shadow::default(),
-        }
-    }
-    fn hovered(&self, theme: &Self::Style) -> button::Appearance {
-        let mut app = self.active(theme);
-        if !self.is_selected {
-            app.background = match theme {
+            ..Default::default()
+        };
+
+        if !is_selected && status == button::Status::Hovered {
+            style.background = match theme {
                 Theme::Light => Some(Background::Color(Color::from_rgba(0.0, 0.0, 0.0, 0.05))),
                 _ => Some(Background::Color(Color::from_rgba(1.0, 1.0, 1.0, 0.05))),
             };
         }
-        app
+        style
     }
 }
 
 // --- STYLES DES CONTENEURS ---
-pub struct ErrorContainerStyle;
-impl container::StyleSheet for ErrorContainerStyle {
-    type Style = Theme;
-    fn appearance(&self, _theme: &Self::Style) -> container::Appearance {
-        container::Appearance {
-            text_color: Some(MOI_RED),
-            background: Some(Background::Color(Color::from_rgba(0.85, 0.15, 0.15, 0.1))),
-            border: Border {
-                color: MOI_RED,
-                width: 1.5,
-                radius: 5.0.into()
-            },
-            shadow: Shadow::default(),
-        }
+pub fn error_container_style(_theme: &Theme) -> container::Style {
+    container::Style {
+        text_color: Some(MOI_RED),
+        background: Some(Background::Color(Color::from_rgba(0.85, 0.15, 0.15, 0.1))),
+        border: Border {
+            color: MOI_RED,
+            width: 1.5,
+            radius: 5.0.into()
+        },
+        shadow: Shadow::default(),
+        ..Default::default()
     }
 }
 
-pub struct OverlayContainerStyle;
-impl container::StyleSheet for OverlayContainerStyle {
-    type Style = Theme;
-    fn appearance(&self, theme: &Self::Style) -> container::Appearance {
-        container::Appearance {
-            text_color: Some(text_main(theme)),
-            background: match theme {
-                Theme::Light => Some(Background::Color(Color::from_rgb(0.95, 0.95, 0.95))),
-                _ => Some(Background::Color(Color::from_rgb(0.12, 0.12, 0.12))),
-            },
-            border: Border {
-                color: dynamic_accent(theme),
-                width: 1.0,
-                radius: 8.0.into()
-            },
-            shadow: Shadow::default(),
-        }
+pub fn overlay_container_style(theme: &Theme) -> container::Style {
+    container::Style {
+        text_color: Some(text_main(theme)),
+        background: match theme {
+            Theme::Light => Some(Background::Color(Color::from_rgb(0.95, 0.95, 0.95))),
+            _ => Some(Background::Color(Color::from_rgb(0.12, 0.12, 0.12))),
+        },
+        border: Border {
+            color: dynamic_accent(theme),
+            width: 1.0,
+            radius: 8.0.into()
+        },
+        shadow: Shadow::default(),
+        ..Default::default()
     }
 }
