@@ -70,22 +70,30 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::En, "btn_close") => "Close",
 
         // Légal
-        (Language::Fr, "settings_legal") => "Légal & Mentions",
-        (Language::En, "settings_legal") => "Legal & Notices",
-        (Language::Fr, "settings_cgu_btn") => "Conditions d'Utilisation (CGU)",
-        (Language::En, "settings_cgu_btn") => "Terms of Use (ToU)",
-        (Language::Fr, "cgu_title") => "Conditions d'Utilisation",
-        (Language::En, "cgu_title") => "Terms of Use",
-        (Language::Fr, "cgu_text") => "Kakolookiyam est fourni 'en l'état'. L'utilisation du réseau P2P et l'échange de fichiers engagent l'entière responsabilité des utilisateurs. Aucun métadonnée n'est stockée sur l'infrastructure de routage.",
-        (Language::En, "cgu_text") => "Kakolookiyam is provided 'as is'. P2P network usage and file sharing engage the sole responsibility of users. No metadata is stored on the routing infrastructure.",
-        (Language::Fr, "privacy_title") => "Confidentialité",
-        (Language::En, "privacy_title") => "Privacy",
-        (Language::Fr, "privacy_text") => "Mode Zéro-Trace garanti. Les messages, appels vocaux et fichiers chiffrés transitent uniquement de pair à pair. La RAM est purgée de manière sécurisée lors du verrouillage du coffre-fort.",
-        (Language::En, "privacy_text") => "Zero-Trace mode guaranteed. Messages, voice calls and encrypted files transit strictly peer-to-peer. RAM is securely wiped when locking the vault.",
-        (Language::Fr, "ofl_title") => "Licences (OFL)",
-        (Language::En, "ofl_title") => "Licenses (OFL)",
-        (Language::Fr, "ofl_text") => "La police principale 'Cinzel' est distribuée sous licence SIL Open Font License (OFL). Le framework Iced et les bibliothèques cryptographiques sont régis par leurs licences respectives.",
-        (Language::En, "ofl_text") => "The primary font 'Cinzel' is distributed under the SIL Open Font License (OFL). The Iced framework and cryptographic libraries are governed by their respective licenses.",
+        // Légal, Mentions & Crédits
+        (Language::Fr, "settings_legal") => "Légal, Mentions & Crédits",
+        (Language::En, "settings_legal") => "Legal, Notices & Credits",
+
+        (Language::Fr, "settings_cgu_btn") => "Licence & Infrastructure",
+        (Language::En, "settings_cgu_btn") => "License & Infrastructure",
+
+        (Language::Fr, "cgu_title") => "Licence AGPLv3 & Réseau",
+        (Language::En, "cgu_title") => "AGPLv3 License & Network",
+
+        (Language::Fr, "cgu_text") => "Kakolookiyam est distribué sous la GNU Affero General Public License v3.0 (AGPLv3) garantissant l'indépendance de son code. \n\nLe relais P2P aveugle transite via l'infrastructure Oracle, régi par l'Oracle Cloud Services Agreement[cite: 1].\n\n  Création de l'identité visuelle et du logo par Constance PERSAD.",
+        (Language::En, "cgu_text") => "Kakolookiyam is distributed under the GNU AGPLv3 license, guaranteeing code independence. \n\nThe blind P2P relay operates on Oracle infrastructure, governed by the Oracle Cloud Services Agreement[cite: 1].\n\n  Visual identity and logo designed by Constance PERSAD.",
+
+        (Language::Fr, "privacy_title") => "Philosophie Zéro-Trace",
+        (Language::En, "privacy_title") => "Zero-Knowledge Philosophy",
+
+        (Language::Fr, "privacy_text") => "Connectés entre vous. Invisibles pour le reste. \n\n Identité chiffrée (ChaCha20Poly1305/Argon2) et traitements exclusifs en RAM, purgés au verrouillage. \n\nAucun serveur tiers ne stocke vos métadonnées.",
+        (Language::En, "privacy_text") => "Connected together. Invisible to the rest. \n\nIdentity is strictly encrypted locally (ChaCha20Poly1305/Argon2) and processing is RAM-only, securely wiped upon locking. \n\nNo third-party servers store your metadata.",
+
+        (Language::Fr, "ofl_title") => "Composants Open-Source",
+        (Language::En, "ofl_title") => "Open-Source Components",
+
+        (Language::Fr, "ofl_text") => "Application native en Rust (Iced, Tokio, WebRTC). La police 'Cinzel' et est sous SIL Open Font License (OFL).\n\n  Soutenez le projet libre sur GitHub (Sponsors : Altayr).",
+        (Language::En, "ofl_text") => "Built natively in Rust (Iced, Tokio, WebRTC). 'Cinzel' fonts is distributed under the SIL Open Font License (OFL).\n\n  Support the independent project on GitHub (Sponsors: Altayr).",
 
         // Dashboard (Barre latérale)
         (Language::Fr, "my_id") => "Mon ID",
