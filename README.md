@@ -1,10 +1,10 @@
-# Kakolookiyam 🛡️
+# Kakolookiyam 
 
 *Connected together. Invisible to the rest.*
 
 A lightweight, high-performance, and ultra-secure cross-platform peer-to-peer (P2P "Full Mesh") communication application. Built natively in Rust without web technologies to ensure maximum performance and absolute user data privacy.
 
-## 🔒 Security & Architecture Philosophy (Zero-Knowledge)
+## Security & Architecture Philosophy (Zero-Knowledge)
 
 This project adopts a strict **zero-trust, zero-trace** design:
 
@@ -21,7 +21,7 @@ This project adopts a strict **zero-trust, zero-trace** design:
 
 
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 * **Language:** **Rust** — Chosen for extreme performance, zero garbage collector, and absolute memory safety.
 
@@ -33,7 +33,7 @@ This project adopts a strict **zero-trust, zero-trace** design:
 
 
 
-## ⚖️ License & Independence
+## License & Independence
 
 Kakolookiyam is proudly open-source and distributed under the **GNU Affero General Public License v3.0 (AGPLv3)**. This guarantees that the network architecture remains transparent, auditable, and fiercely protected against proprietary corporate appropriation.
 
@@ -44,13 +44,13 @@ Kakolookiyam is built for the people, not for data brokers. If this tool guarant
 
 ---
 
-# Kakolookiyam 🛡️
+# Kakolookiyam
 
 *Connectés entre vous. Invisibles pour le reste.*
 
 Une application de communication pair-à-pair (P2P "Full Mesh") multiplateforme, légère et ultra-sécurisée. Conçue entièrement en natif avec Rust, sans technologies web, pour garantir des performances maximales et une confidentialité absolue.
 
-## 🔒 Philosophie de Sécurité (Zero-Knowledge)
+## Philosophie de Sécurité (Zero-Knowledge)
 
 Ce projet adopte une architecture stricte **zéro-confiance, zéro-trace** :
 
@@ -67,7 +67,7 @@ Ce projet adopte une architecture stricte **zéro-confiance, zéro-trace** :
 
 
 
-## 🛠️ Stack Technique
+## Stack Technique
 
 * **Langage :** **Rust** — Choisi pour ses performances extrêmes, l'absence de garbage collector et sa sécurité mémoire absolue.
 
@@ -79,7 +79,7 @@ Ce projet adopte une architecture stricte **zéro-confiance, zéro-trace** :
 
 
 
-## ⚖️ Licence & Indépendance
+## Licence & Indépendance
 
 Kakolookiyam est open-source et distribué sous la **GNU Affero General Public License v3.0 (AGPLv3)**. Cela garantit que l'architecture réseau reste transparente, auditable et fermement protégée contre toute appropriation commerciale propriétaire.
 

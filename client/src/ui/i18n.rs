@@ -12,8 +12,8 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::En, "lang_toggle") => "Français",
 
         // Accueil & Authentification
-        (Language::Fr, "welcome_sub") => "Communication P2P Zéro-Trace",
-        (Language::En, "welcome_sub") => "Zero-Trace P2P Communication",
+        (Language::Fr, "welcome_sub") => "Connectés entre vous. Invisibles pour le reste.",
+        (Language::En, "welcome_sub") => "Connected together. Invisible to the rest.",
         (Language::Fr, "btn_create") => "Créer un nouveau compte (Coffre-fort local)",
         (Language::En, "btn_create") => "Create a new account (Local Vault)",
         (Language::Fr, "btn_login") => "Se connecter (Déverrouiller un compte existant)",
@@ -25,8 +25,8 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::En, "login_title") => "Unlock Vault",
         (Language::Fr, "login_pseudo_placeholder") => "Votre pseudo...",
         (Language::En, "login_pseudo_placeholder") => "Your pseudo...",
-        (Language::Fr, "login_password_placeholder") => "Votre mot de passe maître...",
-        (Language::En, "login_password_placeholder") => "Your master password...",
+        (Language::Fr, "login_password_placeholder") => "Votre mot de passe...",
+        (Language::En, "login_password_placeholder") => "Your password...",
         (Language::Fr, "btn_submit_login") => "Déverrouiller",
         (Language::En, "btn_submit_login") => "Unlock",
 
@@ -108,8 +108,8 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::En, "add_public_id") => "Add by public ID...",
         (Language::Fr, "quick_add_contacts") => "Ajout rapide (Contacts)",
         (Language::En, "quick_add_contacts") => "Quick add (Contacts)",
-        (Language::Fr, "btn_add_prefix") => "+ Ajouter",
-        (Language::En, "btn_add_prefix") => "+ Add",
+        (Language::Fr, "btn_add") => "+ Ajouter",
+        (Language::En, "btn_add") => "+ Add",
         (Language::Fr, "all_contacts_in_server") => "Tous vos contacts sont déjà dans ce serveur.",
         (Language::En, "all_contacts_in_server") => "All your contacts are already in this server.",
         (Language::Fr, "btn_delete_server") => "Supprimer le serveur",

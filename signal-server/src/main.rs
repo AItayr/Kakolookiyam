@@ -22,17 +22,15 @@ type Clients = Arc<Mutex<HashMap<String, mpsc::UnboundedSender<String>>>>;
 
 #[tokio::main]
 async fn main() {
-    let addr = "127.0.0.1:8080";
+    // Écoute sur toutes les interfaces réseau du VPS Oracle
+    let addr = "0.0.0.0:8080";
     let listener = TcpListener::bind(addr).await.expect("Impossible de lier le port");
 
-    // --- MODE FURTIF : Les logs de démarrage sont masqués ---
-    // println!("📮 Serveur de signalisation (Facteur Privé v5 - Anti-Fantôme) démarré sur : {}", addr);
-
+    // Mode furtif strict : Aucun log console
     let clients: Clients = Arc::new(Mutex::new(HashMap::new()));
 
     while let Ok((stream, _)) = listener.accept().await {
         let clients_clone = clients.clone();
-
         tokio::spawn(async move {
             if let Ok(ws_stream) = accept_async(stream).await {
                 handle_connection(ws_stream, clients_clone).await;
@@ -47,10 +45,8 @@ async fn handle_connection(
 ) {
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
     let (tx, mut rx) = mpsc::unbounded_channel::<String>();
-
     let mut client_id = String::new();
 
-    // Tâche asynchrone dédiée à l'envoi de messages vers le client
     let send_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             if ws_sender.send(tokio_tungstenite::tungstenite::protocol::Message::Text(msg.into())).await.is_err() {
@@ -59,59 +55,44 @@ async fn handle_connection(
         }
     });
 
-    // Boucle principale de réception des messages
     while let Some(Ok(msg)) = ws_receiver.next().await {
         if let Ok(text) = msg.into_text() {
             if let Ok(signal) = serde_json::from_str::<Signal>(&text) {
-
                 match signal {
                     Signal::Register { id } => {
                         let mut clients_guard = clients.lock().await;
-
                         if clients_guard.contains_key(&id) {
-                            // println!("⛔ Rejet : Tentative de double connexion pour l'ID {}", id);
                             let _ = tx.send("ERROR:ALREADY_CONNECTED".to_string());
                         } else {
-                            // println!("📝 Nouvel utilisateur enregistré : {}", id);
                             client_id = id.clone();
                             clients_guard.insert(id, tx.clone());
                             let _ = tx.send("SUCCESS:REGISTERED".to_string());
                         }
                     },
-
                     Signal::Unregister { id } => {
                         let mut clients_guard = clients.lock().await;
                         clients_guard.remove(&id);
-
                         if client_id == id {
                             client_id.clear();
                         }
-                        // println!("🔒 Session purgée proprement par l'utilisateur : {}", id);
                     },
-
                     Signal::Offer { target_id, .. } |
                     Signal::ChatOffer { target_id, .. } |
                     Signal::Answer { target_id, .. } |
                     Signal::Ice { target_id, .. } => {
                         let clients_guard = clients.lock().await;
-
                         if let Some(target_tx) = clients_guard.get(&target_id) {
-                            // println!("📫 Routage secret d'un message vers : {}", target_id);
                             let _ = target_tx.send(text.to_string());
-                        } else {
-                            // println!("⚠️ Destinataire introuvable ou hors-ligne : {}", target_id);
                         }
                     },
-
                     _ => {}
                 }
             }
         }
     }
 
-    // Nettoyage automatique en cas de déconnexion inattendue
+    // Nettoyage automatique en cas de déconnexion inattendue (Zéro-Trace)
     if !client_id.is_empty() {
-        // println!("❌ Utilisateur déconnecté du réseau : {}", client_id);
         clients.lock().await.remove(&client_id);
     }
 

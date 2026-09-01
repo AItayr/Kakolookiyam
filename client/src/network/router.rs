@@ -74,7 +74,7 @@ pub async fn start_p2p(
         }
     });
 
-    let url = "ws://127.0.0.1:8080";
+    let url = "ws://89.168.62.93:8080";
     let (ws_stream, _) = match connect_async(url).await {
         Ok(stream) => stream,
         Err(_) => {

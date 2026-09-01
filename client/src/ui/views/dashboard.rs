@@ -131,7 +131,7 @@ impl KakolookiyamApp {
         };
 
         let mut sidebar = column![
-            text(format!("🛡️ {}", vd.pseudo)).size(24).style(current_text),
+            text(format!("{}", vd.pseudo)).size(24).style(current_text),
             row![
                 text(t(&self.language, "my_id")).size(14).style(current_muted),
                 button(text(t(&self.language, "btn_copy")))
@@ -154,14 +154,14 @@ impl KakolookiyamApp {
 
             let btn_content = if unread > 0 {
                 row![
-                    text(format!("👤 {}", pseudo)).size(16),
+                    text(pseudo).size(16),
                     Space::with_width(Length::Fill),
                     container(text(unread.to_string()).size(12).style(iced::Color::WHITE))
                         .padding([2, 6])
                         .style(iced::theme::Container::Custom(Box::new(BadgeStyle(badge_color))))
                 ].align_items(Alignment::Center)
             } else {
-                row![text(format!("👤 {}", pseudo)).size(16)].align_items(Alignment::Center)
+                row![text(pseudo).size(16)].align_items(Alignment::Center)
             };
 
             let btn_chat = button(btn_content)
@@ -246,7 +246,7 @@ impl KakolookiyamApp {
                         .style(iced::theme::Button::Custom(Box::new(SecondaryButton)))
                         .on_press(Message::DeselectChat)
                         .padding(10),
-                    Container::new(text(format!("💬 {}", target_name)).size(24).style(current_text))
+                    Container::new(text(target_name.clone()).size(24).style(current_text))
                         .width(Length::Fill)
                         .center_x()
                 ]
@@ -381,7 +381,7 @@ impl KakolookiyamApp {
                         .height(Length::Fill);
 
                     if !self.status_message.is_empty() {
-                        let alert_color = if self.status_message.starts_with('❌') {
+                        let alert_color = if self.status_message.starts_with("ERROR:") {
                             iced::Color::from_rgb(0.9, 0.1, 0.1)
                         } else {
                             dynamic_accent(&self.current_theme)
