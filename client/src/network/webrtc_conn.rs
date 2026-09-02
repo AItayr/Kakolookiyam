@@ -29,14 +29,21 @@ pub async fn create_peer_connection(
     is_call: bool,
 ) -> Result<Arc<RTCPeerConnection>, Box<dyn std::error::Error>> {
 
-    let config = RTCConfiguration {
-        ice_servers: vec![RTCIceServer {
-            urls: vec!["stun:stun.l.google.com:19302".to_owned()],
-            ..Default::default()
-        }],
+        let config = RTCConfiguration {
+        ice_servers: vec![
+            RTCIceServer {
+                urls: vec!["stun:89.168.62.93:3478".to_owned()],
+                ..Default::default()
+            },
+            RTCIceServer {
+                urls: vec!["turn:89.168.62.93:3478".to_owned()],
+                username: "kako_relais".to_owned(),
+                credential: "cX@XctAfrSym5ak8".to_owned(),
+                
+            }
+        ],
         ..Default::default()
     };
-
     let pc = Arc::new(api.new_peer_connection(config).await?);
 
     let tx_ui_state = tx_ui.clone();

@@ -149,7 +149,7 @@ impl KakolookiyamApp {
                     }
                 }
             }
-            else if msg.starts_with("CHAT_RECV:") {
+                                    else if msg.starts_with("CHAT_RECV:") {
                 let parts: Vec<&str> = msg.splitn(3, ':').collect();
 
                 if parts.len() == 3 {
@@ -265,44 +265,57 @@ impl KakolookiyamApp {
                     }
 
                     if text.starts_with("SYS:CALL_CONTEXT:") {
-                        let sys_parts: Vec<&str> = text.splitn(3, ':').collect();
+    let sys_parts: Vec<&str> = text.splitn(3, ':').collect();
 
-                        if sys_parts.len() == 3 {
-                            let grp_id = sys_parts[2].trim().to_string();
+    if sys_parts.len() == 3 {
+        let grp_id = sys_parts[2].trim().to_string();
 
-                            if let Some(vd) = &self.vault_data {
-                                if let Some(group) = vd.groups.get(&grp_id) {
-                                    let my_id = crate::crypto::derive_public_id(&vd.private_key);
+        let mut already_in_group = false;
+        if let Some((active_id, _)) = &self.active_call {
+            if active_id == &grp_id {
+                already_in_group = true;
+            }
+        }
 
-                                    self.active_call = Some((grp_id.clone(), group.name.clone()));
-                                    self.chat_history.clear();
+        if !already_in_group {
+            if let Some(vd) = &self.vault_data {
+                if let Some(group) = vd.groups.get(&grp_id) {
+                    let my_id = crate::crypto::derive_public_id(&vd.private_key);
 
-                                    if let Some(history) = vd.chat_history.get(&grp_id) {
-                                        for msg in history {
-                                            self.chat_history.push((msg.author.clone(), msg.content.clone()));
-                                        }
-                                    }
-                                    self.status_message = format!("📞 Conférence rejointe : {}", group.name);
+                    self.active_call = Some((grp_id.clone(), group.name.clone()));
+                    self.chat_history.clear();
 
-                                    let tx = self.tx_network.clone();
-                                    let members = group.members.clone();
-                                    let m_id = my_id.clone();
-                                    let inviter = sender_id.clone();
+                    if let Some(history) = vd.chat_history.get(&grp_id) {
+                        for msg in history {
+                            self.chat_history.push((msg.author.clone(), msg.content.clone()));
+                        }
+                    }
+                    self.status_message = format!("🚀 Conférence rejointe : {}", group.name);
 
-                                    return Command::perform(async move {
-                                        for member_id in members {
-                                            if member_id != m_id && member_id != inviter {
-                                                if m_id > member_id {
-                                                    let _ = tx.send(format!("CALL:{}", member_id));
-                                                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-                                                }
-                                            }
-                                        }
-                                    }, |_| Message::ResetInactivity);
+                    let tx = self.tx_network.clone();
+                    let members = group.members.clone();
+                    let m_id = my_id.clone();
+                    let inviter = sender_id.clone();
+
+                    // Synchronisation initiale pour l'arrivée
+                    let sync_task = self.trigger_history_sync(&grp_id);
+                    let dial_task = Command::perform(async move {
+                        for member_id in members {
+                            if member_id != m_id && member_id != inviter {
+                                if m_id > member_id {
+                                    let _ = tx.send(format!("CALL:{}", member_id));
+                                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
                                 }
                             }
                         }
-                        return Command::none();
+                    }, |_| Message::ResetInactivity);
+
+                    return Command::batch(vec![dial_task, sync_task]);
+                }
+            }
+        }
+    }
+    return Command::none();
                     }
 
                     if text.starts_with("SYS:GROUP_SYNC:") {
@@ -411,11 +424,20 @@ impl KakolookiyamApp {
                     let caller_id = parts[1].trim().to_string();
                     let sdp = parts[2].to_string();
 
-                    if let Some((active_id, _)) = &self.active_call {
+                                        if let Some((active_id, _)) = &self.active_call {
                         if active_id.starts_with("grp_") {
                             if let Some(vd) = &self.vault_data {
                                 if let Some(group) = vd.groups.get(active_id) {
                                     if group.members.contains(&caller_id) {
+                                        let _ = self.tx_network.send(format!("ACCEPT:{}:{}", caller_id, sdp));
+                                        return Command::none();
+                                    }
+                                }
+                            }
+                        } else {
+                            if let Some(vd) = &self.vault_data {
+                                for (_grp_id, group) in &vd.groups {
+                                    if group.members.contains(active_id) && group.members.contains(&caller_id) {
                                         let _ = self.tx_network.send(format!("ACCEPT:{}:{}", caller_id, sdp));
                                         return Command::none();
                                     }
@@ -438,9 +460,9 @@ impl KakolookiyamApp {
                 let id = msg.trim_start_matches("CALL_ACTIVE:").trim().to_string();
 
                 if let Some((active_id, _)) = &self.active_call {
-                    if active_id.starts_with("grp_") {
+                                        if active_id.starts_with("grp_") {
                         let _ = self.tx_network.send(format!("CHAT_SEND:{}:SYS:CALL_CONTEXT:{}", id, active_id));
-                        return self.trigger_history_sync(active_id);
+                        return Command::none(); // STOP THE SYNC STORM !
                     }
                 } else {
                     let pseudo = if let Some(vd) = &self.vault_data {
