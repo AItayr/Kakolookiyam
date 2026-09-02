@@ -143,10 +143,10 @@ impl KakolookiyamApp {
             }
             Message::ToggleLanguage => { // <-- INTERCEPTION DU BOUTON
                 self.idle_seconds = 0;
-                self.language = if self.language == crate::ui::i18n::Language::Fr {
-                    crate::ui::i18n::Language::En
-                } else {
-                    crate::ui::i18n::Language::Fr
+                self.language = match self.language {
+                    crate::ui::i18n::Language::Fr => crate::ui::i18n::Language::En,
+                    crate::ui::i18n::Language::En => crate::ui::i18n::Language::Ar,
+                    crate::ui::i18n::Language::Ar => crate::ui::i18n::Language::Fr,
                 };
                 return Command::none();
             }

@@ -1,4 +1,4 @@
-use iced::widget::{button, column, container, row, text, text_input, Container};
+use iced::widget::{button, column, container, row, text_input, Container};
 use iced::{alignment, Alignment, Color, Element, Length};
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
@@ -14,30 +14,26 @@ impl KakolookiyamApp {
     }
 
     pub(crate) fn view_welcome(&self) -> Element<'_, Message> {
-        let lang_btn = button(text(t(&self.language, "lang_toggle")))
+        let lang_btn = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "lang_toggle")))
             .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
             .on_press(Message::ToggleLanguage)
             .padding(10);
         let top_bar = container(lang_btn).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
 
-        let title = text("Kakolookiyam")
+        let title = crate::ui::i18n::app_text(&self.language, "Kakolookiyam")
             .size(45)
-            .color(text_main(&self.current_theme))
-            .width(Length::Fill)
-            .center();
+            .color(text_main(&self.current_theme));
 
-        let subtitle = text(t(&self.language, "welcome_sub"))
+        let subtitle = crate::ui::i18n::app_text(&self.language, t(&self.language, "welcome_sub"))
             .size(18)
-            .color(text_muted(&self.current_theme))
-            .width(Length::Fill)
-            .center();
+            .color(text_muted(&self.current_theme));
 
-        let btn_create = button(text(t(&self.language, "btn_create")))
+        let btn_create = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_create")))
             .style(primary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
             .on_press(Message::GoToCreateAccount)
             .padding(15);
 
-        let btn_login = button(text(t(&self.language, "btn_login")))
+        let btn_login = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_login")))
             .style(primary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
             .on_press(Message::GoToLogin)
             .padding(15);
@@ -53,29 +49,23 @@ impl KakolookiyamApp {
     }
 
     pub(crate) fn view_create_account(&self) -> Element<'_, Message> {
-        let lang_btn = button(text(t(&self.language, "lang_toggle")))
+        let lang_btn = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "lang_toggle")))
             .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
             .on_press(Message::ToggleLanguage)
             .padding(10);
         let top_bar = container(lang_btn).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
 
         let title = column![
-            text("KAKOLOOKIYAM")
+            crate::ui::i18n::app_text(&self.language, "KAKOLOOKIYAM")
                 .size(45)
-                .color(text_main(&self.current_theme))
-                .width(Length::Fill)
-                .center(),
-            text(t(&self.language, "create_vault_title"))
+                .color(text_main(&self.current_theme)),
+            crate::ui::i18n::app_text(&self.language, t(&self.language, "create_vault_title"))
                 .size(30)
                 .color(text_main(&self.current_theme))
-                .width(Length::Fill)
-                .center()
-        ].spacing(10);
+        ].spacing(10).align_x(Alignment::Center);
 
-        let info = text(t(&self.language, "create_vault_info"))
-            .color(text_muted(&self.current_theme))
-            .width(Length::Fill)
-            .center();
+        let info = crate::ui::i18n::app_text(&self.language, t(&self.language, "create_vault_info"))
+            .color(text_muted(&self.current_theme));
 
         let pseudo_input = text_input(&t(&self.language, "pseudo_placeholder"), &self.pseudo_input)
             .on_input(Message::PseudoChanged)
@@ -98,7 +88,7 @@ impl KakolookiyamApp {
 
         if let Some(err) = &self.auth_error {
             let error_box = container(
-                text(format!("{} : {}", t(&self.language, "error"), err)).size(14).color(Color::from_rgb(0.9, 0.15, 0.15))
+                crate::ui::i18n::app_text(&self.language, format!("{} : {}", t(&self.language, "error"), err)).size(14).color(Color::from_rgb(0.9, 0.15, 0.15))
             )
             .padding(12)
             .width(Length::Fill)
@@ -107,12 +97,12 @@ impl KakolookiyamApp {
             col = col.push(error_box);
         }
 
-        let btn_submit = button(text(t(&self.language, "btn_submit_create")))
+        let btn_submit = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_submit_create")))
             .style(primary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
             .on_press(Message::SubmitCreateAccount)
             .padding(12);
 
-        let btn_back = button(text(t(&self.language, "btn_back")))
+        let btn_back = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_back")))
             .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
             .on_press(Message::BackToWelcome)
             .padding(12);
@@ -124,24 +114,20 @@ impl KakolookiyamApp {
     }
 
     pub(crate) fn view_login(&self) -> Element<'_, Message> {
-        let lang_btn = button(text(t(&self.language, "lang_toggle")))
+        let lang_btn = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "lang_toggle")))
             .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
             .on_press(Message::ToggleLanguage)
             .padding(10);
         let top_bar = container(lang_btn).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
 
         let title = column![
-            text("KAKOLOOKIYAM")
+            crate::ui::i18n::app_text(&self.language, "KAKOLOOKIYAM")
                 .size(45)
-                .color(text_main(&self.current_theme))
-                .width(Length::Fill)
-                .center(),
-            text(t(&self.language, "login_title"))
+                .color(text_main(&self.current_theme)),
+            crate::ui::i18n::app_text(&self.language, t(&self.language, "login_title"))
                 .size(30)
                 .color(text_main(&self.current_theme))
-                .width(Length::Fill)
-                .center()
-        ].spacing(10);
+        ].spacing(10).align_x(Alignment::Center);
 
         let pseudo_input = text_input(&t(&self.language, "login_pseudo_placeholder"), &self.pseudo_input)
             .on_input(Message::PseudoChanged)
@@ -156,7 +142,7 @@ impl KakolookiyamApp {
 
         if let Some(err) = &self.auth_error {
             let error_box = container(
-                text(format!("{} : {}", t(&self.language, "error"), err)).size(14).color(Color::from_rgb(0.9, 0.15, 0.15))
+                crate::ui::i18n::app_text(&self.language, format!("{} : {}", t(&self.language, "error"), err)).size(14).color(Color::from_rgb(0.9, 0.15, 0.15))
             )
             .padding(12)
             .width(Length::Fill)
@@ -165,12 +151,12 @@ impl KakolookiyamApp {
             col = col.push(error_box);
         }
 
-        let btn_submit = button(text(t(&self.language, "btn_submit_login")))
+        let btn_submit = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_submit_login")))
             .style(primary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
             .on_press(Message::SubmitLogin)
             .padding(12);
 
-        let btn_back = button(text(t(&self.language, "btn_back")))
+        let btn_back = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_back")))
             .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
             .on_press(Message::BackToWelcome)
             .padding(12);

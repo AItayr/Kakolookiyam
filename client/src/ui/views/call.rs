@@ -1,4 +1,4 @@
-use iced::widget::{button, column, row, text, text_input, Container, Scrollable};
+use iced::widget::{button, column, row, text_input, Container, Scrollable};
 use iced::widget::scrollable::{Direction, Scrollbar};
 use iced::{Alignment, Element, Length};
 use crate::ui::app::KakolookiyamApp;
@@ -13,22 +13,22 @@ impl KakolookiyamApp {
 
         let (_, active_pseudo) = self.active_call.as_ref().unwrap();
 
-        let title = text(t(&self.language, "call_active"))
+        let title = crate::ui::i18n::app_text(&self.language, t(&self.language, "call_active"))
             .size(40)
             .color(current_text);
 
-        let subtitle = text(format!("{} {}", t(&self.language, "call_secure_with"), active_pseudo))
+        let subtitle = crate::ui::i18n::app_text(&self.language, format!("{} {}", t(&self.language, "call_secure_with"), active_pseudo))
             .size(25)
             .color(current_muted);
 
         let mute_text = if self.is_muted { t(&self.language, "mic_enable") } else { t(&self.language, "mic_disable") };
 
-        let btn_mute = button(text(mute_text))
+        let btn_mute = button(crate::ui::i18n::app_text(&self.language, mute_text))
             .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
             .on_press(Message::ToggleMute)
             .padding(20);
 
-        let btn_hangup = button(text(t(&self.language, "btn_hangup")))
+        let btn_hangup = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_hangup")))
             .style(hangup_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
             .on_press(Message::HangUpCall)
             .padding(20);
@@ -37,7 +37,7 @@ impl KakolookiyamApp {
 
         let mut chat_messages = column![].spacing(10);
         for (author, msg) in &self.chat_history {
-            let msg_text = text(format!("{}: {}", author, msg))
+            let msg_text = crate::ui::i18n::app_text(&self.language, format!("{}: {}", author, msg))
                 .size(16)
                 .color(color_for_user(author, &self.current_theme));
             chat_messages = chat_messages.push(msg_text);
@@ -53,7 +53,7 @@ impl KakolookiyamApp {
             .on_submit(Message::SendChatMessage)
             .padding(10);
 
-        let btn_send = button(text(t(&self.language, "btn_send")))
+        let btn_send = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_send")))
             .style(primary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
             .on_press(Message::SendChatMessage)
             .padding(10);
@@ -63,7 +63,7 @@ impl KakolookiyamApp {
             .width(Length::Fixed(600.0));
 
         let chat_section = column![
-            text(t(&self.language, "chat_ephemeral")).size(20).color(current_text),
+            crate::ui::i18n::app_text(&self.language, t(&self.language, "chat_ephemeral")).size(20).color(current_text),
             chat_scroll,
             input_row
         ]
@@ -83,24 +83,24 @@ impl KakolookiyamApp {
 
         let (caller_id, caller_pseudo, sdp) = self.incoming_call.as_ref().unwrap();
 
-        let title = text(t(&self.language, "call_incoming"))
+        let title = crate::ui::i18n::app_text(&self.language, t(&self.language, "call_incoming"))
             .size(40)
             .color(current_text);
 
-        let subtitle = text(format!("{} {}", caller_pseudo, t(&self.language, "wants_to_talk")))
+        let subtitle = crate::ui::i18n::app_text(&self.language, format!("{} {}", caller_pseudo, t(&self.language, "wants_to_talk")))
             .size(25)
             .color(current_muted);
 
-        let timer_text = text(format!("({} {}s)", t(&self.language, "auto_reject"), 15 - self.incoming_call_timer))
+        let timer_text = crate::ui::i18n::app_text(&self.language, format!("({} {}s)", t(&self.language, "auto_reject"), 15 - self.incoming_call_timer))
             .size(16)
             .color(crate::ui::theme::ACCENT_RED_DARK);
 
-        let btn_accept = button(text(t(&self.language, "btn_accept")))
+        let btn_accept = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_accept")))
             .style(primary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
             .on_press(Message::AcceptCall(caller_id.clone(), sdp.clone()))
             .padding(15);
 
-        let btn_reject = button(text(t(&self.language, "btn_reject")))
+        let btn_reject = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_reject")))
             .style(hangup_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
             .on_press(Message::RejectCall(caller_id.clone()))
             .padding(15);

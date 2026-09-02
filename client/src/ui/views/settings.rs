@@ -1,4 +1,4 @@
-use iced::widget::{button, column, row, text, Container, Space, pick_list, Scrollable};
+use iced::widget::{button, column, row, Container, Space, pick_list, Scrollable};
 use iced::widget::scrollable::{Direction, Scrollbar};
 use iced::{Alignment, Element, Length};
 use crate::ui::app::KakolookiyamApp;
@@ -23,9 +23,9 @@ impl KakolookiyamApp {
 
             let content = column![
                 row![
-                    text(legal_title).size(28).color(current_text),
+                    crate::ui::i18n::app_text(&self.language, legal_title).size(28).color(current_text),
                     Space::new().width(Length::Fill),
-                    button(text(t(&self.language, "btn_close")))
+                    button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_close")))
                         .style(hangup_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
                         .on_press(Message::ToggleLegal(tab.clone()))
                         .padding(10)
@@ -33,7 +33,7 @@ impl KakolookiyamApp {
 
                 iced::widget::rule::horizontal(1),
 
-                Scrollable::new(text(legal_text).color(current_text).size(16))
+                Scrollable::new(crate::ui::i18n::app_text(&self.language, legal_text).color(current_text).size(16))
                     .height(Length::Fill)
                     .direction(Direction::Vertical(Scrollbar::new().width(0).scroller_width(0)))
             ]
@@ -56,15 +56,15 @@ impl KakolookiyamApp {
         let spk_picker = pick_list(spks, Some(self.selected_speaker.clone()), Message::SpeakerSelected).width(Length::Fill);
 
         let legal_section = column![
-            text(t(&self.language, "settings_legal")).size(20).color(current_accent),
+            crate::ui::i18n::app_text(&self.language, t(&self.language, "settings_legal")).size(20).color(current_accent),
             row![
-                button(text(t(&self.language, "settings_cgu_btn")))
+                button(crate::ui::i18n::app_text(&self.language, t(&self.language, "settings_cgu_btn")))
                     .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
                     .on_press(Message::ToggleLegal("CGU".to_string())).padding(10),
-                button(text(t(&self.language, "privacy_title")))
+                button(crate::ui::i18n::app_text(&self.language, t(&self.language, "privacy_title")))
                     .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
                     .on_press(Message::ToggleLegal("PRIVACY".to_string())).padding(10),
-                button(text(t(&self.language, "ofl_title")))
+                button(crate::ui::i18n::app_text(&self.language, t(&self.language, "ofl_title")))
                     .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
                     .on_press(Message::ToggleLegal("OFL".to_string())).padding(10),
             ].spacing(15)
@@ -72,9 +72,9 @@ impl KakolookiyamApp {
 
         let settings_content = column![
             row![
-                text(t(&self.language, "settings_title")).size(32).color(current_text),
+                crate::ui::i18n::app_text(&self.language, t(&self.language, "settings_title")).size(32).color(current_text),
                 Space::new().width(Length::Fill),
-                button(text(t(&self.language, "btn_close")))
+                button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_close")))
                     .style(hangup_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
                     .on_press(Message::CloseSettings)
                     .padding(10)
@@ -82,13 +82,13 @@ impl KakolookiyamApp {
 
             iced::widget::rule::horizontal(1),
 
-            text(t(&self.language, "settings_general")).size(20).color(current_accent),
-            button(text(t(&self.language, "settings_lang")))
+            crate::ui::i18n::app_text(&self.language, t(&self.language, "settings_general")).size(20).color(current_accent),
+            button(crate::ui::i18n::app_text(&self.language, t(&self.language, "settings_lang")))
                 .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
                 .on_press(Message::ToggleLanguage)
                 .padding(10),
 
-            button(text(t(&self.language, "settings_theme")))
+            button(crate::ui::i18n::app_text(&self.language, t(&self.language, "settings_theme")))
                 .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
                 .on_press(Message::ToggleTheme)
                 .padding(10),
@@ -96,11 +96,11 @@ impl KakolookiyamApp {
 
             Space::new().height(20),
 
-            text(t(&self.language, "settings_audio")).size(20).color(current_accent),
-            text(t(&self.language, "settings_mic")).color(current_muted),
+            crate::ui::i18n::app_text(&self.language, t(&self.language, "settings_audio")).size(20).color(current_accent),
+            crate::ui::i18n::app_text(&self.language, t(&self.language, "settings_mic")).color(current_muted),
             mic_picker,
             Space::new().height(5),
-            text(t(&self.language, "settings_speaker")).color(current_muted),
+            crate::ui::i18n::app_text(&self.language, t(&self.language, "settings_speaker")).color(current_muted),
             spk_picker,
 
             Space::new().height(20),
