@@ -1,6 +1,7 @@
 #![allow(unused_mut)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+pub mod reduction;
 mod audio;
 mod network;
 mod ui;

@@ -23,6 +23,9 @@ This project adopts a strict **zero-trust, zero-trace** design:
 * **RAM-Only Processing:** Sensitive data and media previews reside strictly in temporary memory (RAM) and are wiped out immediately upon locking the vault.
 
 
+* **Local AI Noise Cancellation:** Crystal clear voice communication is achieved using a recurrent neural network (RNNoise) running strictly in RAM on your machine. Zero audio data is sent to external servers, staying true to our philosophy.
+
+
 * **End-to-End Encryption (E2EE):** All direct P2P streams and heavy file transfers (chunked with ACK) are strictly encrypted.
 
 
@@ -71,6 +74,9 @@ Ce projet adopte une architecture stricte **zéro-confiance, zéro-trace** :
 * **Traitement exclusif en RAM :** Les données sensibles et les aperçus de médias résident uniquement en mémoire vive et sont purgés immédiatement au verrouillage.
 
 
+* **Annulation de Bruit IA en Local :** Une clarté vocale parfaite est obtenue grâce à un réseau de neurones (RNNoise) s'exécutant strictement en RAM sur votre machine. Aucune donnée audio n'est envoyée à des serveurs externes, contrairement aux solutions tierces classiques.
+
+
 * **Chiffrement de bout en bout (E2EE) :** Tous les flux P2P directs et les transferts de fichiers lourds sont strictement chiffrés.
 
 
@@ -117,6 +123,9 @@ Si cet outil garantit votre liberté numérique, soutenez son développement ind
 
 
 * **المعالجة في ذاكرة الوصول العشوائي (RAM) فقط:** تقتصر إقامة البيانات الحساسة ومعاينات الوسائط على الذاكرة المؤقتة، ويتم مسحها فوراً عند قفل الخزنة.
+
+
+* **إلغاء الضوضاء بالذكاء الاصطناعي محلياً:** يتم تحقيق جودة صوت نقية باستخدام شبكة عصبية (RNNoise) تعمل بشكل صارم في ذاكرة الوصول العشوائي (RAM) على جهازك. لا يتم إرسال أي بيانات صوتية إلى خوادم خارجية، على عكس تقنيات الطرف الثالث.
 
 
 * **التشفير من النهاية إلى النهاية (E2EE):** يتم تشفير جميع تدفقات P2P المباشرة ونقل الملفات الثقيلة بصرامة تامة.

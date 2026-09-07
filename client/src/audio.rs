@@ -86,8 +86,8 @@ pub fn start_hardware_audio(
                         }
 
                         while mic_buffer.len() >= chunk_size {
-                            let frame: Vec<i16> = mic_buffer.drain(..chunk_size).collect();
-                            let mut encoded = vec![0u8; 1500];
+                            let mut frame: Vec<i16> = mic_buffer.drain(..chunk_size).collect();
+                            crate::reduction::process_chunk(&mut frame); let mut encoded = vec![0u8; 1500];
 
                             if let Ok(len) = encoder.encode(&frame, &mut encoded) {
                                 encoded.truncate(len);
@@ -117,8 +117,8 @@ pub fn start_hardware_audio(
                         }
 
                         while mic_buffer.len() >= chunk_size {
-                            let frame: Vec<i16> = mic_buffer.drain(..chunk_size).collect();
-                            let mut encoded = vec![0u8; 1500];
+                            let mut frame: Vec<i16> = mic_buffer.drain(..chunk_size).collect();
+                            crate::reduction::process_chunk(&mut frame); let mut encoded = vec![0u8; 1500];
 
                             if let Ok(len) = encoder.encode(&frame, &mut encoded) {
                                 encoded.truncate(len);
