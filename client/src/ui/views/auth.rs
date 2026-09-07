@@ -49,7 +49,13 @@ impl KakolookiyamApp {
             .width(Length::Fill);
 
         let main_box = Container::new(content).width(Length::Fill).height(Length::Fill).center_x(iced::Length::Fill).center_y(iced::Length::Fill);
-        column![top_bar, main_box].width(Length::Fill).height(Length::Fill).into()
+        
+        let trademark = crate::ui::i18n::app_text(&self.language, "Kakolookiyam ™")
+            .size(14)
+            .color(text_muted(&self.current_theme));
+        let bottom_bar = container(trademark).width(Length::Fill).align_x(alignment::Horizontal::Center).padding(20);
+
+        column![top_bar, main_box, bottom_bar].width(Length::Fill).height(Length::Fill).into()
     }
 
     pub(crate) fn view_create_account(&self) -> Element<'_, Message> {
@@ -118,8 +124,20 @@ impl KakolookiyamApp {
 
         col = col.push(row![btn_back, btn_submit].spacing(15)).align_x(Alignment::Center);
 
+        let info_path = crate::ui::i18n::app_text(&self.language, format!("{}{}", t(&self.language, "vault_path_info"), crate::crypto::get_app_dir().to_string_lossy()))
+            .size(12)
+            .color(text_muted(&self.current_theme));
+
+        col = col.push(info_path).align_x(Alignment::Center);
+
         let main_box = Container::new(col).width(Length::Fill).height(Length::Fill).center_x(iced::Length::Fill).center_y(iced::Length::Fill);
-        column![top_bar, main_box].width(Length::Fill).height(Length::Fill).into()
+        
+        let trademark = crate::ui::i18n::app_text(&self.language, "Kakolookiyam ™")
+            .size(14)
+            .color(text_muted(&self.current_theme));
+        let bottom_bar = container(trademark).width(Length::Fill).align_x(alignment::Horizontal::Center).padding(20);
+        
+        column![top_bar, main_box, bottom_bar].width(Length::Fill).height(Length::Fill).into()
     }
 
     pub(crate) fn view_login(&self) -> Element<'_, Message> {
@@ -177,7 +195,19 @@ impl KakolookiyamApp {
 
         col = col.push(row![btn_back, btn_submit].spacing(15)).align_x(Alignment::Center);
 
+        let info_path = crate::ui::i18n::app_text(&self.language, format!("{}{}", t(&self.language, "vault_path_info"), crate::crypto::get_app_dir().to_string_lossy()))
+            .size(12)
+            .color(text_muted(&self.current_theme));
+
+        col = col.push(info_path).align_x(Alignment::Center);
+
         let main_box = Container::new(col).width(Length::Fill).height(Length::Fill).center_x(iced::Length::Fill).center_y(iced::Length::Fill);
-        column![top_bar, main_box].width(Length::Fill).height(Length::Fill).into()
+        
+        let trademark = crate::ui::i18n::app_text(&self.language, "Kakolookiyam ™")
+            .size(14)
+            .color(text_muted(&self.current_theme));
+        let bottom_bar = container(trademark).width(Length::Fill).align_x(alignment::Horizontal::Center).padding(20);
+        
+        column![top_bar, main_box, bottom_bar].width(Length::Fill).height(Length::Fill).into()
     }
 }

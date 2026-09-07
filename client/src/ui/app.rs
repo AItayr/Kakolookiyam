@@ -108,7 +108,7 @@ impl KakolookiyamApp {
         )
     }
 
-    pub fn title(&self) -> String { String::from("Kakolookiyam - Secure P2P") }
+    pub fn title(&self) -> String { String::from("Kakolookiyam") }
 
     pub fn theme(&self) -> Theme {
         self.current_theme.clone()

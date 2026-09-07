@@ -1,4 +1,4 @@
-﻿use iced::{Font, font::{Family, Weight, Stretch, Style}};
+use iced::{Font, font::{Family, Weight, Stretch, Style}};
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum Language {
@@ -79,10 +79,6 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::Ar, "btn_submit_create") => "إنشاء وتشفير",
         (Language::Fr, "error") => "Erreur",
         (Language::En, "error") => "Error",
-        (Language::Fr, "vault_path_info") => "Si vous souhaitez supprimer votre compte et vos données, le dossier se trouve dans : ",
-        (Language::En, "vault_path_info") => "If you wish to delete your account and data, the directory is located at : ",
-        (Language::Ar, "vault_path_info") => "إذا كنت ترغب في حذف حسابك وبياناتك، فإن المجلد موجود في : ",
-
         (Language::Ar, "error") => "خطأ",
 
         // Paramètres

@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::fs;
+use std::path::PathBuf;
+use dirs;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct MessageEntry {
@@ -37,13 +39,46 @@ pub struct VaultData {
     pub chat_history: HashMap<String, Vec<MessageEntry>>,
 }
 
+pub fn get_app_dir() -> PathBuf {
+    let mut path = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
+    path.push("Kakolookiyam");
+    let _ = fs::create_dir_all(&path);
+    
+    let readme_path = path.join("A_PROPOS_DE_VOS_DONNEES.txt");
+    if !readme_path.exists() {
+        let content = "Kakolookiyam : Dossier Coffre-Fort / Vault Folder / مجلد الخزنة\r\n\r\n\
+[FR] Ce dossier héberge toutes vos données chiffrées localement.\r\n\
+Si vous souhaitez supprimer votre compte et toutes ses données, vous pouvez simplement effacer ce dossier.\r\n\
+Aucun historique n'est récupérable en ligne.\r\n\r\n\
+[EN] This folder hosts all your locally encrypted data.\r\n\
+If you wish to delete your account and all its data, you can simply delete this folder.\r\n\
+No history is recoverable online.\r\n\r\n\
+[AR] يستضيف هذا المجلد جميع بياناتك المشفرة محليًا.\r\n\
+إذا كنت ترغب في حذف حسابك وجميع بياناته، يمكنك ببساطة حذف هذا المجلد.\r\n\
+لا يمكن استرداد أي سجل عبر الإنترنت.";
+        let _ = fs::write(readme_path, content);
+    }
+    
+    path
+}
+
 pub fn get_vault_file(pseudo: &str) -> String {
     let safe_pseudo: String = pseudo.chars().filter(|c| c.is_alphanumeric()).collect();
-    format!("vault_{}.kak", safe_pseudo.to_lowercase())
+    let file = format!("vault_{}.kak", safe_pseudo.to_lowercase());
+    get_app_dir().join(file).to_string_lossy().into_owned()
+}
+
+pub fn get_media_dir(pseudo: &str) -> String {
+    let safe_pseudo: String = pseudo.chars().filter(|c| c.is_alphanumeric()).collect();
+    let media = format!("media_{}", safe_pseudo.to_lowercase());
+    let path = get_app_dir().join(media);
+    let _ = fs::create_dir_all(&path);
+    path.to_string_lossy().into_owned()
 }
 
 pub fn any_vault_exists() -> bool {
-    if let Ok(entries) = std::fs::read_dir(".") {
+    let path = get_app_dir();
+    if let Ok(entries) = std::fs::read_dir(path) {
         for entry in entries.flatten() {
             if let Some(name) = entry.file_name().to_str() {
                 if name.starts_with("vault_") && name.ends_with(".kak") {
@@ -128,42 +163,57 @@ pub fn unlock_vault(pseudo: &str, password: &str) -> Result<VaultData, &'static 
     let salt_len = u32::from_le_bytes(salt_len_bytes) as usize;
 
     if file_data.len() < 4 + salt_len + 12 {
-        return Err("Corrompu");
+        return Err("Fichier corrompu");
     }
 
-    let salt_str = std::str::from_utf8(&file_data[4..4 + salt_len]).map_err(|_| "Sel invalide")?;
-    let salt = SaltString::from_b64(salt_str).map_err(|_| "Sel invalide")?;
-    let nonce = Nonce::from_slice(&file_data[4 + salt_len..16 + salt_len]);
-    let ciphertext = &file_data[16 + salt_len..];
+    let salt_str = std::str::from_utf8(&file_data[4..4 + salt_len]).map_err(|_| "Erreur de décodage du Salt")?;
+    let salt = SaltString::from_b64(salt_str).map_err(|_| "Format de Salt invalide")?;
+
+    let nonce_start = 4 + salt_len;
+    let nonce_bytes = &file_data[nonce_start..nonce_start + 12];
+    let nonce = Nonce::from_slice(nonce_bytes);
+
+    let ciphertext = &file_data[nonce_start + 12..];
 
     let key = derive_key(password, &salt);
     let cipher = ChaCha20Poly1305::new(&key.into());
-    let decrypted = cipher.decrypt(nonce, ciphertext).map_err(|_| "Mot de passe incorrect.")?;
 
-    let mut vault_data: VaultData = serde_json::from_slice(&decrypted).map_err(|_| "JSON invalide")?;
+    let payload = cipher.decrypt(nonce, ciphertext).map_err(|_| "Mot de passe erroné ou corruption de données")?;
 
-    // --- LE ROLLOUT SÉCURITÉ DE 30 JOURS ---
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
-    let thirty_days_sec = 30 * 24 * 60 * 60;
+    let vault_data: VaultData = serde_json::from_slice(&payload).map_err(|_| "Format de fichier invalide")?;
+
+    Ok(vault_data)
+}
+
+#[allow(dead_code)]
+pub fn delete_vault(pseudo: &str, password: &str) -> std::result::Result<(), String> {
+    if let Ok(_vault_data) = unlock_vault(pseudo, password) {
+        let vault_file = get_vault_file(pseudo);
+        let _ = std::fs::remove_file(vault_file);
+        
+        let media_folder = get_media_dir(pseudo);
+        let _ = std::fs::remove_dir_all(media_folder);
+        
+        Ok(())
+    } else {
+        Err("Mot de passe incorrect".to_string())
+    }
+}
+
+#[allow(dead_code)]
+pub fn add_message_to_vault(password: &str, vault_data: &mut VaultData, dest: &str, msg: MessageEntry) -> Result<VaultData, &'static str> {
+    let _ = unlock_vault(&vault_data.pseudo, password)?;
+
+    let is_group = vault_data.groups.contains_key(dest);
+    
     let mut modified = false;
 
-    for (_, history) in vault_data.chat_history.iter_mut() {
-        let original_len = history.len();
-
-        history.retain(|msg| {
-            if now.saturating_sub(msg.timestamp) > thirty_days_sec {
-                if msg.is_media {
-                    if let Some(path) = &msg.media_path {
-                        let _ = std::fs::remove_file(path);
-                    }
-                }
-                false
-            } else {
-                true
-            }
-        });
-
-        if history.len() != original_len {
+    if is_group || vault_data.contacts.contains_key(dest) {
+        let history = vault_data.chat_history.entry(dest.to_string()).or_insert_with(Vec::new);
+        
+        let exists = history.iter().any(|m| m.timestamp == msg.timestamp && m.author == msg.author);
+        if !exists {
+            history.push(msg);
             modified = true;
         }
     }
@@ -172,7 +222,7 @@ pub fn unlock_vault(pseudo: &str, password: &str) -> Result<VaultData, &'static 
         let _ = save_vault(password, &vault_data);
     }
 
-    Ok(vault_data)
+    Ok(vault_data.clone())
 }
 
 pub fn generate_secure_secret() -> [u8; 32] {
@@ -196,9 +246,8 @@ pub fn encrypt_and_save_media(pseudo: &str, file_name: &str, raw_data: &[u8]) ->
 
     let ciphertext = cipher.encrypt(&nonce, raw_data).map_err(|_| "Erreur de chiffrement du média")?;
 
-    let media_folder = format!("media_{}", pseudo);
-    let _ = fs::create_dir_all(&media_folder);
-    let save_path = format!("{}/{}.enc", media_folder, file_name);
+    let media_folder = get_media_dir(pseudo);
+    let save_path = format!("{}/{}.enc", media_folder, file_name); // It's okay because get_media_dir returns absolute
 
     let mut file_data = Vec::new();
     file_data.extend_from_slice(&nonce);
@@ -219,5 +268,7 @@ pub fn decrypt_media(path: &str, key: &[u8; 32]) -> Result<Vec<u8>, &'static str
     let ciphertext = &file_data[12..];
 
     let cipher = ChaCha20Poly1305::new(key.into());
-    cipher.decrypt(nonce, ciphertext).map_err(|_| "Clé de déchiffrement invalide")
+    let dec = cipher.decrypt(nonce, ciphertext).map_err(|_| "Décodage impossible - Clé invalide")?;
+    
+    Ok(dec)
 }
