@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="client/assets/images/Kakolookiyam_logo.png" alt="Kakolookiyam Logo" width="250" />
+</div>
+
 # Kakolookiyam 
 
 *Connected together. Invisible to the rest.*
@@ -42,6 +46,10 @@ If this tool guarantees your digital freedom, consider supporting its independen
 
 ---
 
+<div align="center">
+  <img src="client/assets/images/Kakolookiyam_logo.png" alt="Kakolookiyam Logo" width="250" />
+</div>
+
 # Kakolookiyam
 
 *Connectés entre vous. Invisibles pour le reste.*
@@ -85,6 +93,10 @@ Si cet outil garantit votre liberté numérique, soutenez son développement ind
 
 
 ---
+
+<div align="center">
+  <img src="client/assets/images/Kakolookiyam_logo.png" alt="Kakolookiyam Logo" width="250" />
+</div>
 
 # Kakolookiyam (كاكولوكيام)
 

@@ -10,6 +10,7 @@ use iced::{Font, Size};
 use ui::{KakolookiyamApp, Flags};
 use tokio::sync::mpsc;
 use std::sync::{Arc, Mutex};
+use iced::window::icon;
 
 pub fn main() -> iced::Result {
     audio::detect_microphone();
@@ -52,6 +53,8 @@ pub fn main() -> iced::Result {
         style: iced::font::Style::Normal,
     };
 
+    let icon = icon::from_file_data(include_bytes!("../assets/images/Kakolookiyam_logo.png"), None).unwrap();
+
     // Make the boot function compatible with `BootFn` which returns `(State, Task<Message>)` or just `State`.
     // KakolookiyamApp::new returns `(KakolookiyamApp, iced::Task<Message>)`!
     
@@ -66,6 +69,10 @@ pub fn main() -> iced::Result {
     )
     .subscription(KakolookiyamApp::subscription)
     .theme(KakolookiyamApp::theme)
+    .window(iced::window::Settings {
+        icon: Some(icon),
+        ..Default::default()
+    })
     .window_size(Size::new(1024.0, 768.0))
     .centered()
     .antialiasing(true)

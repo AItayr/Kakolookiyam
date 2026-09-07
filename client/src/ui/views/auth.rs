@@ -1,4 +1,4 @@
-use iced::widget::{button, column, container, row, text_input, Container};
+use iced::widget::{button, column, container, row, text_input, Container, image};
 use iced::{alignment, Alignment, Color, Element, Length};
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
@@ -20,6 +20,10 @@ impl KakolookiyamApp {
             .padding(10);
         let top_bar = container(lang_btn).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
 
+        let logo = image(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/images/Kakolookiyam_logo.png"))
+            .width(Length::Fixed(150.0))
+            .height(Length::Fixed(150.0));
+
         let title = crate::ui::i18n::app_text(&self.language, "Kakolookiyam")
             .size(45)
             .color(text_main(&self.current_theme));
@@ -38,7 +42,7 @@ impl KakolookiyamApp {
             .on_press(Message::GoToLogin)
             .padding(15);
 
-        let content = column![title, subtitle, btn_create, btn_login]
+        let content = column![logo, title, subtitle, btn_create, btn_login]
             .spacing(25)
             .padding(60)
             .align_x(Alignment::Center)
@@ -55,12 +59,17 @@ impl KakolookiyamApp {
             .padding(10);
         let top_bar = container(lang_btn).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
 
+        let logo = image(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/images/Kakolookiyam_logo.png"))
+            .width(Length::Fixed(100.0))
+            .height(Length::Fixed(100.0));
+
         let title = column![
+            logo,
             crate::ui::i18n::app_text(&self.language, "KAKOLOOKIYAM")
-                .size(45)
+                .size(35)
                 .color(text_main(&self.current_theme)),
             crate::ui::i18n::app_text(&self.language, t(&self.language, "create_vault_title"))
-                .size(30)
+                .size(25)
                 .color(text_main(&self.current_theme))
         ].spacing(10).align_x(Alignment::Center);
 
@@ -120,12 +129,17 @@ impl KakolookiyamApp {
             .padding(10);
         let top_bar = container(lang_btn).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
 
+        let logo = image(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/images/Kakolookiyam_logo.png"))
+            .width(Length::Fixed(100.0))
+            .height(Length::Fixed(100.0));
+
         let title = column![
+            logo,
             crate::ui::i18n::app_text(&self.language, "KAKOLOOKIYAM")
-                .size(45)
+                .size(35)
                 .color(text_main(&self.current_theme)),
             crate::ui::i18n::app_text(&self.language, t(&self.language, "login_title"))
-                .size(30)
+                .size(25)
                 .color(text_main(&self.current_theme))
         ].spacing(10).align_x(Alignment::Center);
 
