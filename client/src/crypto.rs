@@ -1,4 +1,4 @@
-use argon2::{
+﻿use argon2::{
     password_hash::{PasswordHasher, SaltString},
     Argon2,
 };
@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::fmt::Write;
 use std::fs;
 use std::path::PathBuf;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 use dirs;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -30,12 +31,15 @@ pub struct GroupData {
     pub members: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Zeroize, ZeroizeOnDrop)]
 pub struct VaultData {
     pub private_key: [u8; 32],
     pub pseudo: String,
+    #[zeroize(skip)]
     pub contacts: HashMap<String, String>,
+    #[zeroize(skip)]
     pub groups: HashMap<String, GroupData>,
+    #[zeroize(skip)]
     pub chat_history: HashMap<String, Vec<MessageEntry>>,
 }
 
