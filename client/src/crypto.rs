@@ -157,7 +157,17 @@ pub fn save_vault(password: &str, data: &VaultData) -> Result<(), &'static str> 
 pub fn unlock_vault(pseudo: &str, password: &str) -> Result<VaultData, &'static str> {
     let vault_file = get_vault_file(pseudo);
 
-    let file_data = fs::read(&vault_file).map_err(|_| "Profil introuvable ou mot de passe incorrect.")?;
+    // [MITIGATION ANTI-TIMING] Si le profil (fichier) n'existe pas, 
+    // l'algorithme Argon2 tourne dans le vide sur un sel généré aléatoirement.
+    // Cela rend le temps de réponse aveugle (Constant-Time) équivalent à un échec de mot de passe.
+    let file_data = match std::fs::read(&vault_file) {
+        Ok(data) => data,
+        Err(_) => {
+            let dummy_salt = SaltString::generate(&mut OsRng);
+            let _ = derive_key(password, &dummy_salt);
+            return Err("Profil introuvable ou mot de passe incorrect.");
+        }
+    };
     if file_data.len() < 4 {
         return Err("Corrompu");
     }

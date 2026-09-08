@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+﻿use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 use webrtc::data_channel::RTCDataChannel;
@@ -106,11 +106,11 @@ impl TransferManager {
                                         full_data.extend(bytes);
                                     }
                                 }
-                                let media_dir = format!("media_{}", pseudo_clone);
-                                let _ = tokio::fs::create_dir_all(&media_dir).await;
-
+                                let media_dir = crate::crypto::get_media_dir(&pseudo_clone);
                                 let safe_filename = filename_owned.replace('|', "_");
-                                let save_path = format!("{}/{}", media_dir, safe_filename);
+                                let mut path_buf = std::path::PathBuf::from(media_dir);
+                                path_buf.push(safe_filename);
+                                let save_path = path_buf.to_string_lossy().to_string();
 
                                 if tokio::fs::write(&save_path, full_data).await.is_ok() {
                                     let _ = tx_ui_clone.send(format!("FILE_RECV:{}:{}:{}:{}", sender_owned, filename_owned, key_owned, save_path));
