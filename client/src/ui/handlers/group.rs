@@ -1,3 +1,4 @@
+﻿use secrecy::ExposeSecret;
 use iced::Task as Command;
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
@@ -30,7 +31,7 @@ impl KakolookiyamApp {
                             members: vec![my_id],
                         });
 
-                        let _ = crate::crypto::save_vault(pwd, vd);
+                        let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
 
                         self.new_group_input.clear();
                         self.selected_chat = Some(group_id);
@@ -62,7 +63,7 @@ impl KakolookiyamApp {
                                 }
 
                                 if let Some((grp_name, members)) = sync_data {
-                                    let _ = crate::crypto::save_vault(pwd, vd);
+                                    let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
                                     let members_str = members.join(",");
                                     let my_id = crate::crypto::derive_public_id(&vd.private_key);
 
@@ -102,7 +103,7 @@ impl KakolookiyamApp {
                             }
 
                             if let Some((grp_name, members)) = sync_data {
-                                let _ = crate::crypto::save_vault(pwd, vd);
+                                let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
                                 let members_str = members.join(",");
                                 let my_id = crate::crypto::derive_public_id(&vd.private_key);
 
@@ -142,7 +143,7 @@ impl KakolookiyamApp {
 
                             vd.groups.remove(&grp_id);
                             vd.chat_history.remove(&grp_id);
-                            let _ = crate::crypto::save_vault(pwd, vd);
+                            let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
 
                             self.selected_chat = None;
                             self.chat_history.clear();

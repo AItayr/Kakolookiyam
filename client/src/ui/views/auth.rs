@@ -1,3 +1,4 @@
+﻿use secrecy::ExposeSecret;
 use iced::widget::{button, column, container, row, text_input, Container, image};
 use iced::{alignment, Alignment, Color, Element, Length};
 use crate::ui::app::KakolookiyamApp;
@@ -8,8 +9,8 @@ use crate::ui::i18n::t;
 impl KakolookiyamApp {
     pub(crate) fn clear_auth_fields(&mut self) {
         self.pseudo_input.clear();
-        self.password_input.clear();
-        self.password_confirm_input.clear();
+        self.password_input = secrecy::Secret::new(String::new());
+        self.password_confirm_input = secrecy::Secret::new(String::new());
         self.auth_error = None;
     }
 
@@ -88,13 +89,13 @@ impl KakolookiyamApp {
 
         let pass_input = text_input(
             &t(&self.language, "password_new_placeholder"),
-            &self.password_input
+            self.password_input.expose_secret()
         )
         .on_input(Message::PasswordChanged)
         .secure(true)
         .padding(15);
 
-        let pass_confirm = text_input(&t(&self.language, "password_confirm_placeholder"), &self.password_confirm_input)
+        let pass_confirm = text_input(&t(&self.language, "password_confirm_placeholder"), self.password_confirm_input.expose_secret())
             .on_input(Message::PasswordConfirmChanged)
             .secure(true)
             .padding(15);
@@ -165,7 +166,7 @@ impl KakolookiyamApp {
             .on_input(Message::PseudoChanged)
             .padding(15);
 
-        let pass_input = text_input(&t(&self.language, "login_password_placeholder"), &self.password_input)
+        let pass_input = text_input(&t(&self.language, "login_password_placeholder"), self.password_input.expose_secret())
             .on_input(Message::PasswordChanged)
             .secure(true)
             .padding(15);

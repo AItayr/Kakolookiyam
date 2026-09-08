@@ -1,3 +1,4 @@
+﻿use secrecy::ExposeSecret;
 use iced::Task as Command;
 use crate::ui::app::{KakolookiyamApp, AppState};
 use crate::ui::messages::Message;
@@ -85,7 +86,7 @@ impl KakolookiyamApp {
                                             }
 
                                             if modified {
-                                                let _ = crate::crypto::save_vault(pwd, vd);
+                                                let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
                                                 let is_currently_viewed = self.selected_chat.as_ref() == Some(&target_id)
                                                                        || self.active_call.as_ref().map(|(id, _)| id) == Some(&target_id);
 
@@ -136,7 +137,7 @@ impl KakolookiyamApp {
                         };
 
                         vd.chat_history.entry(target_chat_id.clone()).or_default().push(entry);
-                        let _ = crypto::save_vault(pwd, vd);
+                        let _ = crypto::save_vault(pwd.expose_secret(), vd);
                     }
 
                     let is_currently_viewed = self.selected_chat.as_ref() == Some(&target_chat_id)
@@ -242,7 +243,7 @@ impl KakolookiyamApp {
                                         };
 
                                         if is_new {
-                                            let _ = crate::crypto::save_vault(pwd, vd);
+                                            let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
                                             let is_currently_viewed = self.selected_chat.as_ref() == Some(&t_id)
                                                                    || self.active_call.as_ref().map(|(id, _)| id) == Some(&t_id);
 
@@ -333,7 +334,7 @@ impl KakolookiyamApp {
                                     name: grp_name.clone(),
                                     members
                                 });
-                                let _ = crate::crypto::save_vault(pwd, vd);
+                                let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
 
                                 if is_new {
                                     self.status_message = format!("✅ Invité dans le serveur {} !", grp_name);
@@ -352,7 +353,7 @@ impl KakolookiyamApp {
                             if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
                                 if let Some(group) = vd.groups.get_mut(&grp_id) {
                                     group.members.retain(|m| m.trim() != sender_id);
-                                    let _ = crate::crypto::save_vault(pwd, vd);
+                                    let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
                                     self.status_message = "🚪 Un membre a quitté le serveur.".to_string();
                                 }
                             }
@@ -389,7 +390,7 @@ impl KakolookiyamApp {
                         };
 
                         vd.chat_history.entry(target_chat_id.clone()).or_default().push(entry);
-                        let _ = crypto::save_vault(pwd, vd);
+                        let _ = crypto::save_vault(pwd.expose_secret(), vd);
                     }
 
                     let is_currently_viewed = self.selected_chat.as_ref() == Some(&target_chat_id)
@@ -412,7 +413,7 @@ impl KakolookiyamApp {
                     if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
                         if !vd.contacts.contains_key(&c_id) {
                             vd.contacts.insert(c_id, c_pseudo);
-                            let _ = crypto::save_vault(pwd, vd);
+                            let _ = crypto::save_vault(pwd.expose_secret(), vd);
                         }
                     }
                 }

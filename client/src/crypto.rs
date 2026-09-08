@@ -196,6 +196,9 @@ pub fn unlock_vault(pseudo: &str, password: &str) -> Result<VaultData, &'static 
 
     let vault_data: VaultData = serde_json::from_slice(&payload).map_err(|_| "Format de fichier invalide")?;
 
+    // [MITIGATION SWAP/PAGEFILE] Verrouille la clé privée en RAM pure pour interdire la pagination sur le disque 
+    let _ = region::lock(vault_data.private_key.as_ptr(), vault_data.private_key.len());
+
     Ok(vault_data)
 }
 

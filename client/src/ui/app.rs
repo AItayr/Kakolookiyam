@@ -1,4 +1,4 @@
-use iced::{time, Task as Command, Element, Event, Subscription, Theme};
+﻿use iced::{time, Task as Command, Element, Event, Subscription, Theme};
 use std::sync::Arc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
@@ -23,11 +23,11 @@ pub struct KakolookiyamApp {
     pub unread_counts: std::collections::HashMap<String, usize>,
     pub(crate) state: AppState,
     pub(crate) pseudo_input: String,
-    pub(crate) password_input: String,
-    pub(crate) password_confirm_input: String,
+    pub(crate) password_input: secrecy::SecretString,
+    pub(crate) password_confirm_input: secrecy::SecretString,
     pub(crate) auth_error: Option<String>,
 
-    pub(crate) master_password: Option<String>,
+    pub(crate) master_password: Option<secrecy::SecretString>,
     pub(crate) vault_data: Option<crypto::VaultData>,
 
     pub(crate) peer_id_input: String,
@@ -73,8 +73,8 @@ impl KakolookiyamApp {
                 unread_counts: std::collections::HashMap::new(),
                 state: initial_state,
                 pseudo_input: String::new(),
-                password_input: String::new(),
-                password_confirm_input: String::new(),
+                password_input: secrecy::Secret::new(String::new()),
+                password_confirm_input: secrecy::Secret::new(String::new()),
                 auth_error: None,
                 master_password: None,
                 vault_data: None,

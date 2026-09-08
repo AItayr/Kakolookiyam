@@ -1,3 +1,4 @@
+﻿use secrecy::ExposeSecret;
 use iced::{clipboard, Task as Command};
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
@@ -80,7 +81,7 @@ impl KakolookiyamApp {
                         };
 
                         vd.chat_history.entry(target_id).or_default().push(entry);
-                        let _ = crypto::save_vault(pwd, vd);
+                        let _ = crypto::save_vault(pwd.expose_secret(), vd);
 
                         self.chat_history.push(("Moi".to_string(), text));
                         self.chat_input.clear();

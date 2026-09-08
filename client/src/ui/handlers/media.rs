@@ -1,3 +1,4 @@
+﻿use secrecy::ExposeSecret;
 use iced::Task as Command;
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
@@ -102,7 +103,7 @@ impl KakolookiyamApp {
                                 };
 
                                 vd.chat_history.entry(target_id.clone()).or_default().push(entry);
-                                let _ = crate::crypto::save_vault(pwd, vd);
+                                let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
 
                                 self.chat_history.push(("Moi".to_string(), format!("📎 Fichier partagé : {}", file_name)));
 

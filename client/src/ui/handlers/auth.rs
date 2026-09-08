@@ -1,3 +1,4 @@
+﻿use secrecy::ExposeSecret;
 use iced::Task as Command;
 use crate::ui::app::{KakolookiyamApp, AppState};
 use crate::ui::messages::Message;
@@ -58,8 +59,8 @@ impl KakolookiyamApp {
             }
             Message::ResetInactivity => { self.idle_seconds = 0; }
             Message::PseudoChanged(val) => { self.idle_seconds = 0; self.pseudo_input = val; self.auth_error = None; }
-            Message::PasswordChanged(val) => { self.idle_seconds = 0; self.password_input = val; self.auth_error = None; }
-            Message::PasswordConfirmChanged(val) => { self.idle_seconds = 0; self.password_confirm_input = val; self.auth_error = None; }
+            Message::PasswordChanged(val) => { self.idle_seconds = 0; self.password_input = secrecy::Secret::new(val); self.auth_error = None; }
+            Message::PasswordConfirmChanged(val) => { self.idle_seconds = 0; self.password_confirm_input = secrecy::Secret::new(val); self.auth_error = None; }
 
             Message::SubmitCreateAccount => {
                 self.idle_seconds = 0;
@@ -70,7 +71,7 @@ impl KakolookiyamApp {
                     self.auth_error = Some("Veuillez choisir un pseudo.".into());
                 } else if std::path::Path::new(&potential_file).exists() {
                     self.auth_error = Some("Ce profil existe déjà sur cet ordinateur.".into());
-                } else if self.password_input != self.password_confirm_input {
+                } else if self.password_input.expose_secret() != self.password_confirm_input.expose_secret() {
                     self.auth_error = Some("Mots de passe distincts.".into());
                 } else {
                     let mut v_data = crypto::VaultData {
@@ -81,9 +82,9 @@ impl KakolookiyamApp {
                         chat_history: std::collections::HashMap::new(),
                     };
 
-                    match crypto::save_vault(&self.password_input, &mut v_data) {
+                    match crypto::save_vault(self.password_input.expose_secret(), &mut v_data) {
                         Ok(_) => {
-                            self.master_password = Some(self.password_input.clone());
+                            self.master_password = Some(secrecy::Secret::new(self.password_input.expose_secret().clone()));
                             self.auth_error = Some("Création réseau en cours...".to_string());
 
                             let id = crypto::derive_public_id(&v_data.private_key);
@@ -104,12 +105,12 @@ impl KakolookiyamApp {
 
                 if trimmed.is_empty() {
                     self.auth_error = Some("Veuillez entrer votre pseudo.".to_string());
-                } else if self.password_input.is_empty() {
+                } else if self.password_input.expose_secret().is_empty() {
                     self.auth_error = Some("Veuillez entrer un mot de passe.".to_string());
                 } else {
-                    match crypto::unlock_vault(trimmed, &self.password_input) {
+                    match crypto::unlock_vault(trimmed, self.password_input.expose_secret()) {
                         Ok(v_data) => {
-                            self.master_password = Some(self.password_input.clone());
+                            self.master_password = Some(secrecy::Secret::new(self.password_input.expose_secret().clone()));
                             self.auth_error = Some("Authentification réseau en cours...".to_string());
 
                             let id = crypto::derive_public_id(&v_data.private_key);
