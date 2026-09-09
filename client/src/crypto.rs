@@ -121,7 +121,10 @@ pub fn validate_password(password: &str) -> Result<(), &'static str> {
 }
 
 fn derive_key(password: &str, salt: &SaltString) -> [u8; 32] {
-    let argon2 = Argon2::default();
+    use argon2::{Params, Algorithm, Version};
+    // [MITIGATION BRUTE-FORCE] Paramètres OWASP 2026 : 64MB RAM, 3 Itérations, 4 Parallélismes.
+    let params = Params::new(65536, 3, 4, None).unwrap();
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
     let hash = argon2.hash_password(password.as_bytes(), salt).unwrap();
     let mut key = [0u8; 32];
 
@@ -148,8 +151,16 @@ pub fn save_vault(password: &str, data: &VaultData) -> Result<(), &'static str> 
     file_data.extend_from_slice(&nonce);
     file_data.extend_from_slice(&ciphertext);
 
+    // [MITIGATION RAM] Nettoyage manuel du buffer contenant le JSON non chiffré
+    let mut payload_mut = payload;
+    payload_mut.zeroize();
+
     let vault_file = get_vault_file(&data.pseudo);
-    fs::write(vault_file, file_data).map_err(|_| "Erreur IO")?;
+    
+    // [MITIGATION ATOMIQUE] Écriture dans un fichier temporaire puis renommage (garanti atomique sous Windows/Linux/Mac)
+    let tmp_file = format!("{}.tmp", vault_file);
+    fs::write(&tmp_file, file_data).map_err(|_| "Erreur IO")?;
+    fs::rename(&tmp_file, vault_file).map_err(|_| "Erreur Atomique")?;
 
     Ok(())
 }

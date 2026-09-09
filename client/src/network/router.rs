@@ -1,4 +1,4 @@
-use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
+﻿use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use futures_util::{StreamExt, SinkExt};
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
@@ -74,7 +74,7 @@ pub async fn start_p2p(
         }
     });
 
-    let url = "ws://89.168.62.93:8080";
+    let url = "wss://signal.kakolookiyam.com"; // [MITIGATION] Route chiffrée par Reverse-Proxy
     let (ws_stream, _) = match connect_async(url).await {
         Ok(stream) => stream,
         Err(_) => {
