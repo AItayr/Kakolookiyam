@@ -31,7 +31,7 @@ pub async fn create_peer_connection(
 ) -> Result<Arc<RTCPeerConnection>, Box<dyn std::error::Error>> {
 
         let config = RTCConfiguration {
-        ice_transport_policy: RTCIceTransportPolicy::Relay,
+        ice_transport_policy: RTCIceTransportPolicy::All, // [TODO] Remettre sur Relay une fois Coturn installe sur le VPS
         ice_servers: vec![
             RTCIceServer {
                 urls: vec!["stun:89.168.62.93:3478".to_owned()],
