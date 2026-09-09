@@ -2,6 +2,7 @@
 use iced::Task as Command;
 use crate::ui::app::{KakolookiyamApp, AppState};
 use crate::ui::messages::Message;
+use zeroize::Zeroize;
 use crate::crypto;
 
 impl KakolookiyamApp {

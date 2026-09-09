@@ -43,6 +43,30 @@ pub struct VaultData {
     pub chat_history: HashMap<String, Vec<MessageEntry>>,
 }
 
+impl VaultData {
+    pub fn zeroize_deep(&mut self) {
+        self.private_key.zeroize();
+        self.pseudo.zeroize();
+        for (_, msgs) in self.chat_history.iter_mut() {
+            for m in msgs.iter_mut() {
+                m.author.zeroize();
+                m.content.zeroize();
+                if let Some(mut k) = m.media_key { k.zeroize(); }
+                if let Some(p) = &mut m.media_path { p.zeroize(); }
+            }
+        }
+        for (_, group) in self.groups.iter_mut() {
+            group.name.zeroize();
+            for member in group.members.iter_mut() { member.zeroize(); }
+        }
+        for (_, contact) in self.contacts.iter_mut() {
+            // Cannot easily zeroize values directly from iterator here, but wait:
+            // if Contacts is HashMap<String, String>, then contact.zeroize() works!
+            contact.zeroize();
+        }
+    }
+}
+
 pub fn get_app_dir() -> PathBuf {
     let mut path = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
     path.push("Kakolookiyam");

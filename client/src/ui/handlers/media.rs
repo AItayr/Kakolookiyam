@@ -1,5 +1,6 @@
 ﻿use secrecy::ExposeSecret;
 use iced::Task as Command;
+use zeroize::Zeroize;
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
 
@@ -105,6 +106,10 @@ impl KakolookiyamApp {
                                 vd.chat_history.entry(target_id.clone()).or_default().push(entry);
                                 let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
 
+                                // [MITIGATION] Zero-Trace RAM: Wiping the plaintext file buffer
+                                let mut raw_data_mut = raw_data;
+                                raw_data_mut.zeroize();
+
                                 self.chat_history.push(("Moi".to_string(), format!("📎 Fichier partagé : {}", file_name)));
 
                                 return broadcast_cmd;
@@ -133,7 +138,11 @@ impl KakolookiyamApp {
                         }).await.unwrap();
 
                         if let Ok(decrypted_data) = decrypted_data_res {
-                            let _ = tokio::fs::write(&dest_path_str, decrypted_data).await;
+                            let mut decrypted_mut = decrypted_data;
+                            let _ = tokio::fs::write(&dest_path_str, &decrypted_mut).await;
+                            
+                            // [MITIGATION] Zero-Trace RAM: Wipe plaintext after extract
+                            decrypted_mut.zeroize();
 
                             #[cfg(target_os = "windows")]
                             let _ = std::process::Command::new("cmd").args(["/c", "start", "", &dest_path_str]).spawn();

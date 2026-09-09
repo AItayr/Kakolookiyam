@@ -2,6 +2,7 @@
 use iced::Task as Command;
 use crate::ui::app::{KakolookiyamApp, AppState};
 use crate::ui::messages::Message;
+use zeroize::Zeroize;
 use crate::crypto;
 
 impl KakolookiyamApp {
@@ -12,9 +13,11 @@ impl KakolookiyamApp {
             Message::BackToWelcome => { self.clear_auth_fields(); self.state = AppState::Welcome; }
 
             Message::LockSession => {
-                if let Some(vd) = &self.vault_data {
+                if let Some(mut vd) = self.vault_data.take() {
                     let id = crypto::derive_public_id(&vd.private_key);
                     let _ = self.tx_network.send(format!("LOGOUT:{}", id));
+                    // [MITIGATION] Zero-Trace RAM: Wiping skipped nested HashMaps in VaultData
+                    vd.zeroize_deep();
                 }
 
                 self.master_password = None;
@@ -24,9 +27,18 @@ impl KakolookiyamApp {
                 self.active_call = None;
                 self.is_muted = false;
                 self.selected_chat = None;
+                self.chat_input.zeroize();
                 self.chat_input.clear();
+                
+                // [MITIGATION] Zero-Trace RAM: Wipe active chat UI history strings
+                for (author, content) in self.chat_history.iter_mut() {
+                    author.zeroize();
+                    content.zeroize();
+                }
                 self.chat_history.clear();
+                self.new_group_input.zeroize();
                 self.new_group_input.clear();
+                self.new_member_input.zeroize();
                 self.new_member_input.clear();
 
                 self.clear_auth_fields();
