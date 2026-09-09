@@ -1,4 +1,4 @@
-use std::sync::Arc;
+﻿use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 use std::sync::Arc as StdArc;
 
@@ -6,6 +6,7 @@ static TRACK_ID_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::Ato
 use webrtc::api::API;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::peer_connection::configuration::RTCConfiguration;
+use webrtc::peer_connection::policy::ice_transport_policy::RTCIceTransportPolicy;
 use webrtc::ice_transport::ice_server::RTCIceServer;
 use webrtc::ice_transport::ice_candidate::RTCIceCandidate;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
@@ -30,6 +31,7 @@ pub async fn create_peer_connection(
 ) -> Result<Arc<RTCPeerConnection>, Box<dyn std::error::Error>> {
 
         let config = RTCConfiguration {
+        ice_transport_policy: RTCIceTransportPolicy::Relay,
         ice_servers: vec![
             RTCIceServer {
                 urls: vec!["stun:89.168.62.93:3478".to_owned()],

@@ -291,7 +291,7 @@ pub fn derive_public_id(secret: &[u8]) -> String {
     hex
 }
 
-pub fn encrypt_and_save_media(pseudo: &str, file_name: &str, raw_data: &[u8]) -> Result<([u8; 32], String), &'static str> {
+pub fn encrypt_and_save_media(pseudo: &str, _file_name: &str, raw_data: &[u8]) -> Result<([u8; 32], String), &'static str> {
     let key = generate_secure_secret();
     let cipher = ChaCha20Poly1305::new(&key.into());
     let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
@@ -299,7 +299,10 @@ pub fn encrypt_and_save_media(pseudo: &str, file_name: &str, raw_data: &[u8]) ->
     let ciphertext = cipher.encrypt(&nonce, raw_data).map_err(|_| "Erreur de chiffrement du média")?;
 
     let media_folder = get_media_dir(pseudo);
-    let save_path = format!("{}/{}.enc", media_folder, file_name); // It's okay because get_media_dir returns absolute
+    let mut rnd_name = [0u8; 16];
+    OsRng.fill_bytes(&mut rnd_name);
+    let safe_name = derive_public_id(&rnd_name);
+    let save_path = format!("{}/{}.enc", media_folder, safe_name);
 
     let mut file_data = Vec::new();
     file_data.extend_from_slice(&nonce);
