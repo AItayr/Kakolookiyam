@@ -134,15 +134,15 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::Ar, "cgu_title") => "رخصة AGPLv3 والشبكة",
 
         (Language::Fr, "cgu_text") => "Kakolookiyam est distribué sous la GNU Affero General Public License v3.0 (AGPLv3) garantissant l'indépendance de son code. \n\nLe relais P2P aveugle transite via l'infrastructure Oracle, régi par l'Oracle Cloud Services Agreement[cite: 1].\n\n  Création de l'identité visuelle et du logo par Constance PERSAD.",
-        (Language::En, "cgu_text") => "Kakolookiyam is distributed under the GNU AGPLv3 license, guaranteeing code independence. \n\nThe blind P2P relay operates on Oracle infrastructure, governed by the Oracle Cloud Services Agreement[cite: 1].\n\n  Visual identity and logo designed by Constance PERSAD.",
-        (Language::Ar, "cgu_text") => "يتم توزيع Kakolookiyam تحت رخصة GNU AGPLv3، مما يضمن استقلالية الكود. \n\nيعمل مرحل P2P الأعمى على البنية التحتية لـ Oracle، ويخضع لاتفاقية خدمات Oracle السحابية[cite: 1].\n\n  الهوية البصرية والشعار من تصميم Constance PERSAD.",
+        (Language::En, "cgu_text") => "Kakolookiyam is distributed under the GNU AGPLv3 license, guaranteeing code independence. \n\nThe WSS Signaling is secured by a Reverse-Proxy under Swiss jurisdiction (.ch).\nThe blind P2P relay operates on Oracle infrastructure, governed by the Oracle Cloud Services Agreement[cite: 1].\n\n  Visual identity and logo designed by Constance PERSAD.",
+        (Language::Ar, "cgu_text") => "يتم توزيع Kakolookiyam تحت رخصة GNU AGPLv3، مما يضمن استقلالية الكود. \n\nيتم تأمين إشارات WSS بواسطة وكيل عكسي تحت الولاية القضائية السويسرية (.ch).\nيعمل مرحل P2P الأعمى على البنية التحتية لـ Oracle، ويخضع لاتفاقية خدمات Oracle السحابية[cite: 1].\n\n  الهوية البصرية والشعار من تصميم Constance PERSAD.",
 
         (Language::Fr, "privacy_title") => "Philosophie Zéro-Trace",
         (Language::En, "privacy_title") => "Zero-Knowledge Philosophy",
         (Language::Ar, "privacy_title") => "فلسفة انعدام المعرفة",
 
-        (Language::Fr, "privacy_text") => "Connectés entre vous. Invisibles pour le reste. \n\n Identité chiffrée (ChaCha20Poly1305/Argon2) et traitements exclusifs en RAM, purgés au verrouillage. \n\nAucun serveur tiers ne stocke vos métadonnées.",
-        (Language::En, "privacy_text") => "Connected together. Invisible to the rest. \n\nIdentity is strictly encrypted locally (ChaCha20Poly1305/Argon2) and processing is RAM-only, securely wiped upon locking. \n\nNo third-party servers store your metadata.",
+        (Language::Fr, "privacy_text") => "Connectés entre vous. Invisibles pour le reste. \n\n Identité chiffrée (ChaCha20Poly1305/Argon2) et traitements exclusifs en RAM, purgés au verrouillage (mlock / Zeroize). \n\nAucun serveur tiers ne stocke vos métadonnées.",
+        (Language::En, "privacy_text") => "Connected together. Invisible to the rest. \n\nIdentity is strictly encrypted locally (ChaCha20Poly1305/Argon2) and processing is RAM-only, securely wiped upon locking (mlock / Zeroize). \n\nNo third-party servers store your metadata.",
         (Language::Ar, "privacy_text") => "متصلون ببعضكم. مخفيون عن البقية. \n\nيتم تشفير الهوية محلياً (ChaCha20Poly1305/Argon2) والمعالجة تتم في RAM فقط، وتُمسح بأمان عند القفل. \n\nلا تخزن خوادم الطرف الثالث بياناتك الوصفية.",
 
         (Language::Fr, "ofl_title") => "Composants Open-Source",

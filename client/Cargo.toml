@@ -1,4 +1,4 @@
-[package]
+﻿[package]
 name = "client"
 version = "0.1.0"
 edition = "2024"
@@ -13,7 +13,7 @@ ring = "0.17.14"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 tokio = { version = "1.53.1", features = ["full"] }
-tokio-tungstenite = "0.30.0"
+tokio-tungstenite = { version = "0.30.0", features = ["native-tls"] }
 webrtc = "0.17.1"
 zeroize = { version = "1.8.1", features = ["derive"] }
 argon2 = "0.5"

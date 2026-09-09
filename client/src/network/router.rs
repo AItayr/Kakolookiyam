@@ -74,7 +74,7 @@ pub async fn start_p2p(
         }
     });
 
-    let url = "wss://signal.kakolookiyam.com"; // [MITIGATION] Route chiffrée par Reverse-Proxy
+    let url = "wss://signal.kakolookiyam.ch"; // [MITIGATION] Route chiffrée par Reverse-Proxy (Suisse)
     let (ws_stream, _) = match connect_async(url).await {
         Ok(stream) => stream,
         Err(_) => {

@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
   <img src="client/assets/images/Kakolookiyam_logo.png" alt="Kakolookiyam Logo" width="250" />
 </div>
 
@@ -14,13 +14,14 @@ A lightweight, high-performance, and ultra-secure cross-platform peer-to-peer (P
 
 This project adopts a strict **zero-trust, zero-trace** design:
 
+* **Swiss-Fortified Infrastructure:** Our WSS Signaling relies on TLS 1.3 reverse-proxying routed strictly over a sovereign Swiss `.ch` domain with full WHOIS privacy, guarding against metadata harvesting.
 * **No Network Persistence:** The blind signaling server and our private, self-hosted Zero-Trace TURN relay handle initial connection matching and NAT traversal anonymously without recording IP addresses or metadata. This completely severs reliance on Big Tech infrastructure (like Google STUN), guaranteeing that your IP addresses are never logged by third parties.
 
 
-* **Local Vault:** Your identity, contacts, and chat history are encrypted locally using **ChaCha20Poly1305** and **Argon2**.
+* **Local Vault & Anti-Attack:** Your identity, contacts, and logs are encrypted locally using **ChaCha20Poly1305** and **Argon2id** (OWASP 2026 hardened: 64MB RAM, 3 iterations) to mathematically defeat GPU brute-forcing. The vault uses atomic writes to prevent corruption.
 
 
-* **RAM-Only Processing:** Sensitive data and media previews reside strictly in temporary memory (RAM) and are wiped out immediately upon locking the vault.
+* **RAM-Only Processing & mlock:** Sensitive data resides strictly in temporary memory. Passwords use `SecretString` for immediate auto-zeroization, and private keys are pinned in RAM via `mlock` (`region::lock`) to prevent OS paging to disk (`pagefile.sys`).
 
 
 * **Local AI Noise Cancellation:** Crystal clear voice communication is achieved using a recurrent neural network (RNNoise) running strictly in RAM on your machine. Zero audio data is sent to external servers, staying true to our philosophy.
@@ -65,13 +66,14 @@ Une application de communication pair-à-pair (P2P "Full Mesh") multiplateforme,
 
 Ce projet adopte une architecture stricte **zéro-confiance, zéro-trace** :
 
+* **Infrastructure WSS Suisse :** Le serveur de signalisation bénéficie d'un Reverse-Proxy TLS 1.3 ancré sur un domaine souverain suisse (`.ch` avec annuaire Whois anonymisé).
 * **Aucune persistance réseau :** Le serveur de signalisation aveugle et notre propre relais privé TURN (Zéro-Trace) gèrent la mise en relation et le franchissement des NAT de manière anonyme. Cela élimine purement et simplement toute dépendance aux serveurs mondiaux des géants de la tech (comme le STUN de Google), empêchant toute collecte technique (logs) de vos adresses IP en arrière-plan.
 
 
-* **Coffre-fort local :** Votre identité, vos contacts et votre historique sont chiffrés localement via **ChaCha20Poly1305** et **Argon2**.
+* **Coffre-fort local & Anti-Force-Brute :** Protégée par **ChaCha20Poly1305** et **Argon2id** (Normes OWASP 2026 : 64Mo RAM, 3 itérations), votre clé est mathématiquement immunisée contre les attaques GPU offlines. Les écritures sont atomiques pour éviter la corruption.
 
 
-* **Traitement exclusif en RAM :** Les données sensibles et les aperçus de médias résident uniquement en mémoire vive et sont purgés immédiatement au verrouillage.
+* **Traitement exclusif en RAM & mlock :** Aucun passage par le disque dur ou le `pagefile.sys`. Les mots de passe sont détruits instantanément (`secrecy`/`zeroize`) et les clés privées cryptographiques sont scellées en mémoire vive (`region::lock`).
 
 
 * **Annulation de Bruit IA en Local :** Une clarté vocale parfaite est obtenue grâce à un réseau de neurones (RNNoise) s'exécutant strictement en RAM sur votre machine. Aucune donnée audio n'est envoyée à des serveurs externes, contrairement aux solutions tierces classiques.
