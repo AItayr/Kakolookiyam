@@ -115,9 +115,31 @@ impl KakolookiyamApp {
         Container::new(content).width(Length::Fill).height(Length::Fill).center_x(iced::Length::Fill).center_y(iced::Length::Fill).into()
     }
 
+    pub(crate) fn view_loading_screen(&self) -> Element<'_, Message> {
+        let current_text = crate::ui::theme::text_main(&self.current_theme);
+        let current_accent = crate::ui::theme::dynamic_accent(&self.current_theme);
+        
+        let msg = self.status_message.trim_start_matches("LOADING:");
+        
+        let title = crate::ui::i18n::app_text(&self.language, "Sécurisation de la connexion")
+            .size(36)
+            .color(current_accent);
+            
+        let subtitle = crate::ui::i18n::app_text(&self.language, msg)
+            .size(24)
+            .color(current_text);
+
+        let content = iced::widget::column![title, subtitle]
+            .spacing(30)
+            .align_x(iced::Alignment::Center);
+
+        iced::widget::Container::new(content).width(iced::Length::Fill).height(iced::Length::Fill).center_x(iced::Length::Fill).center_y(iced::Length::Fill).into()
+    }
+
     pub(crate) fn view_unlocked(&self) -> Element<'_, Message> {
         if self.active_call.is_some() { return self.view_active_call(); }
         if self.incoming_call.is_some() { return self.view_incoming_call(); }
+        if self.status_message.starts_with("LOADING:") { return self.view_loading_screen(); }
         self.view_dashboard()
     }
 }

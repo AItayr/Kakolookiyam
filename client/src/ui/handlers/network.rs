@@ -516,6 +516,19 @@ impl KakolookiyamApp {
                     }
                 }
             }
+            else if msg.starts_with("TIMEOUT:") {
+                let tgt = msg.trim_start_matches("TIMEOUT:");
+                if self.active_call.is_none() {
+                    self.status_message = "L'interlocuteur n'est pas disponible.".to_string();
+                    let _ = self.tx_network.send(format!("HANGUP:{}", tgt));
+                }
+            }
+            else if msg.starts_with("LOADING:") {
+                // Ignore late loading spams if call is already connected or failed
+                if self.active_call.is_none() {
+                    self.status_message = msg;
+                }
+            }
             else {
                 self.status_message = msg;
             }

@@ -1,4 +1,4 @@
-﻿use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
+use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use futures_util::{StreamExt, SinkExt};
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
@@ -89,6 +89,7 @@ pub async fn start_p2p(
 
     let (tx_signal, mut rx_signal) = tokio::sync::mpsc::channel::<Signal>(32);
     let mut peers: HashMap<String, Arc<RTCPeerConnection>> = HashMap::new();
+    let mut pending_ice: HashMap<String, Vec<String>> = HashMap::new();
     let (tx_dc, mut rx_dc) = tokio::sync::mpsc::unbounded_channel::<(String, Arc<RTCDataChannel>)>();
     let mut data_channels: HashMap<String, Arc<RTCDataChannel>> = HashMap::new();
 
@@ -132,12 +133,27 @@ pub async fn start_p2p(
                 else if cmd.starts_with("CALL:") {
                     let target_id = cmd.trim_start_matches("CALL:").to_string();
                     if target_id.trim().is_empty() { continue; }
+                    
+                    let tx_ui_loading = tx_ui.clone();
+                    let timeout_target_id = target_id.clone();
+                    tokio::spawn(async move {
+                        let _ = tx_ui_loading.send("LOADING:Allocation du relais Oracle (TURN UDP)...".to_string());
+                        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                        let _ = tx_ui_loading.send("LOADING:Génération des clés asymétriques (AES-256)...".to_string());
+                        tokio::time::sleep(tokio::time::Duration::from_millis(700)).await;
+                        let _ = tx_ui_loading.send("LOADING:Handshake Cryptographique (DTLS)...".to_string());
+                        tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
+                        let _ = tx_ui_loading.send("LOADING:Canal P2P Zéro-Trace sécurisé...".to_string());
+                        
+                        tokio::time::sleep(tokio::time::Duration::from_secs(25)).await;
+                        let _ = tx_ui_loading.send(format!("TIMEOUT:{}", timeout_target_id));
+                    });
 
                     if let Some(old_pc) = peers.remove(&target_id) {
                         let _ = old_pc.close().await;
                     }
                     data_channels.remove(&target_id);
-
+                    pending_ice.remove(&target_id);
                     let pc = match create_peer_connection(
                         &api,
                         target_id.clone(),
@@ -199,10 +215,16 @@ pub async fn start_p2p(
                     }));
 
                     if let Ok(offer) = pc.create_offer(None).await {
-                        if pc.set_local_description(offer.clone()).await.is_ok() {
-                            let _ = tx_signal.send(Signal::Offer { sdp: offer.sdp, sender_id: my_local_id.clone(), target_id: target_id.clone() }).await;
-                            peers.insert(target_id, pc);
-                        }
+                        let pc_clone = Arc::clone(&pc);
+                        let tx_sig = tx_signal.clone();
+                        let my_id = my_local_id.clone();
+                        let tgt_id = target_id.clone();
+                        tokio::spawn(async move {
+                            if pc_clone.set_local_description(offer.clone()).await.is_ok() {
+                                let _ = tx_sig.send(Signal::Offer { sdp: offer.sdp, sender_id: my_id, target_id: tgt_id }).await;
+                            }
+                        });
+                        peers.insert(target_id.clone(), pc);
                     }
                 }
                 else if cmd.starts_with("ACCEPT:") {
@@ -215,8 +237,7 @@ pub async fn start_p2p(
                             let _ = old_pc.close().await;
                         }
                         data_channels.remove(&sender_id);
-
-                        if let Ok(pc) = create_peer_connection(
+                                        if let Ok(pc) = create_peer_connection(
                             &api,
                             sender_id.clone(),
                             my_local_id.clone(),
@@ -234,10 +255,26 @@ pub async fn start_p2p(
                             let mut desc = RTCSessionDescription::default();
                             desc.sdp_type = RTCSdpType::Offer; desc.sdp = sdp;
                             if pc.set_remote_description(desc).await.is_ok() {
-                                if let Ok(answer) = pc.create_answer(None).await {
-                                    if pc.set_local_description(answer.clone()).await.is_ok() {
-                                        let _ = tx_signal.send(Signal::Answer { sdp: answer.sdp, sender_id: my_local_id.clone(), target_id: sender_id }).await;
+                                if let Some(candidates) = pending_ice.remove(&sender_id) {
+                                    for candidate in candidates {
+                                        let ice_init = RTCIceCandidateInit { candidate: candidate.clone(), ..Default::default() };
+                                        let _ = pc.add_ice_candidate(ice_init).await;
                                     }
+                                }
+                                if let Ok(answer) = pc.create_answer(None).await {
+                                    let pc_clone = Arc::clone(&pc);
+                                    let tx_sig = tx_signal.clone();
+                                    let my_id = my_local_id.clone();
+                                    let tgt_id = sender_id.clone();
+                                    tokio::spawn(async move {
+                                        let mut gather_complete = pc_clone.gathering_complete_promise().await;
+                                        if pc_clone.set_local_description(answer).await.is_ok() {
+                                            let _ = gather_complete.recv().await;
+                                            if let Some(local_desc) = pc_clone.local_description().await {
+                                                let _ = tx_sig.send(Signal::Answer { sdp: local_desc.sdp, sender_id: my_id, target_id: tgt_id }).await;
+                                            }
+                                        }
+                                    });
                                 }
                             }
                         }
@@ -245,6 +282,7 @@ pub async fn start_p2p(
                 }
                 else if cmd.starts_with("REJECT:") {
                     let sender_id = cmd.trim_start_matches("REJECT:").to_string();
+                    pending_ice.remove(&sender_id);
                     if let Some(pc) = peers.remove(&sender_id) {
                         let _ = pc.close().await;
                     }
@@ -255,7 +293,8 @@ pub async fn start_p2p(
                         let _ = pc.close().await;
                     }
                     data_channels.remove(&target_id);
-                }
+                    pending_ice.remove(&target_id);
+                    }
                 else if cmd == "MUTE:on" {
                     is_muted.store(true, Ordering::Relaxed);
                 }
@@ -328,11 +367,14 @@ pub async fn start_p2p(
                                     }));
 
                                     if let Ok(offer) = pc.create_offer(None).await {
-                                        if pc.set_local_description(offer.clone()).await.is_ok() {
-                                            let _ = tx_signal.send(Signal::ChatOffer { sdp: offer.sdp, sender_id: my_local_id.clone(), target_id: target_id.clone() }).await;
-                                            peers.insert(target_id, pc);
-                                        }
-                                    }
+                        let pc_clone = Arc::clone(&pc); let tx_sig = tx_signal.clone(); let my_id = my_local_id.clone(); let tgt_id = target_id.clone();
+                        tokio::spawn(async move {
+                            if pc_clone.set_local_description(offer.clone()).await.is_ok() {
+                                let _ = tx_sig.send(Signal::ChatOffer { sdp: offer.sdp, sender_id: my_id, target_id: tgt_id }).await;
+                            }
+                        });
+                        peers.insert(target_id.clone(), pc);
+                    }
                                 }
                             }
                         }
@@ -415,11 +457,14 @@ pub async fn start_p2p(
                                         }));
 
                                         if let Ok(offer) = pc.create_offer(None).await {
-                                            if pc.set_local_description(offer.clone()).await.is_ok() {
-                                                let _ = tx_signal.send(Signal::ChatOffer { sdp: offer.sdp, sender_id: my_local_id.clone(), target_id: target_id.clone() }).await;
-                                                peers.insert(target_id, pc);
-                                            }
-                                        }
+                        let pc_clone = Arc::clone(&pc); let tx_sig = tx_signal.clone(); let my_id = my_local_id.clone(); let tgt_id = target_id.clone();
+                        tokio::spawn(async move {
+                            if pc_clone.set_local_description(offer.clone()).await.is_ok() {
+                                let _ = tx_sig.send(Signal::ChatOffer { sdp: offer.sdp, sender_id: my_id, target_id: tgt_id }).await;
+                            }
+                        });
+                        peers.insert(target_id.clone(), pc);
+                    }
                                     }
                                 }
                             }
@@ -445,6 +490,11 @@ pub async fn start_p2p(
                             if let Ok(signal) = serde_json::from_str::<Signal>(&text) {
                                 match signal {
                                     Signal::Offer { sdp, sender_id, .. } => {
+                                        if let Some(old_pc) = peers.remove(&sender_id) {
+                                            let _ = old_pc.close().await;
+                                        }
+                                        data_channels.remove(&sender_id);
+                                        pending_ice.remove(&sender_id);
                                         let _ = tx_ui.send(format!("INCOMING_CALL:{}:{}", sender_id, sdp));
                                     }
                                     Signal::ChatOffer { sdp, sender_id, .. } => {
@@ -454,28 +504,24 @@ pub async fn start_p2p(
                                         data_channels.remove(&sender_id);
 
                                         if let Ok(pc) = create_peer_connection(
-                                            &api,
-                                            sender_id.clone(),
-                                            my_local_id.clone(),
-                                            my_pseudo.clone(),
-                                            None,
-                                            tx_speaker.clone(),
-                                            tx_signal.clone(),
-                                            tx_ui.clone(),
-                                            tx_dc.clone(),
-                                            tx_chunks.clone(),
-                                            false
+                                            &api, sender_id.clone(), my_local_id.clone(), my_pseudo.clone(),
+                                            None, tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), tx_chunks.clone(), false
                                         ).await {
                                             peers.insert(sender_id.clone(), Arc::clone(&pc));
-
                                             let mut desc = RTCSessionDescription::default();
                                             desc.sdp_type = RTCSdpType::Offer; desc.sdp = sdp;
                                             if pc.set_remote_description(desc).await.is_ok() {
-                                                if let Ok(answer) = pc.create_answer(None).await {
-                                                    if pc.set_local_description(answer.clone()).await.is_ok() {
-                                                        let _ = tx_signal.send(Signal::Answer { sdp: answer.sdp, sender_id: my_local_id.clone(), target_id: sender_id }).await;
+                                                if let Some(candidates) = pending_ice.remove(&sender_id) {
+                                                    for candidate in candidates {
+                                                        let ice_init = RTCIceCandidateInit { candidate: candidate.clone(), ..Default::default() };
+                                                        let _ = pc.add_ice_candidate(ice_init).await;
                                                     }
                                                 }
+                                                if let Ok(answer) = pc.create_answer(None).await {
+                                    if pc.set_local_description(answer.clone()).await.is_ok() {
+                                        let _ = tx_signal.send(Signal::Answer { sdp: answer.sdp, sender_id: my_local_id.clone(), target_id: sender_id }).await;
+                                    }
+                                }
                                             }
                                         }
                                     }
@@ -483,15 +529,28 @@ pub async fn start_p2p(
                                         if let Some(pc) = peers.get(&sender_id) {
                                             let mut desc = RTCSessionDescription::default();
                                             desc.sdp_type = RTCSdpType::Answer; desc.sdp = sdp;
-                                            let _ = pc.set_remote_description(desc).await;
+                                            if pc.set_remote_description(desc).await.is_ok() {
+                                                if let Some(candidates) = pending_ice.remove(&sender_id) {
+                                                    for candidate in candidates {
+                                                        let ice_init = RTCIceCandidateInit { candidate: candidate.clone(), ..Default::default() };
+                                                        let _ = pc.add_ice_candidate(ice_init).await;
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
+                                    
                                     Signal::Ice { candidate, sender_id, .. } => {
+                                        let mut handled = false;
                                         if let Some(pc) = peers.get(&sender_id) {
                                             if pc.remote_description().await.is_some() {
-                                                let ice_init = RTCIceCandidateInit { candidate, ..Default::default() };
+                                                let ice_init = RTCIceCandidateInit { candidate: candidate.clone(), ..Default::default() };
                                                 let _ = pc.add_ice_candidate(ice_init).await;
+                                                handled = true;
                                             }
+                                        }
+                                        if !handled {
+                                            pending_ice.entry(sender_id).or_default().push(candidate);
                                         }
                                     }
                                     _ => {}

@@ -8,8 +8,8 @@ use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::policy::ice_transport_policy::RTCIceTransportPolicy;
 use webrtc::ice_transport::ice_server::RTCIceServer;
-use webrtc::ice_transport::ice_candidate::RTCIceCandidate;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
+use webrtc::ice_transport::ice_candidate::RTCIceCandidate;
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::data_channel::data_channel_message::DataChannelMessage;
 use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
@@ -29,23 +29,22 @@ pub async fn create_peer_connection(
     tx_chunks: UnboundedSender<(String, String)>,
     is_call: bool,
 ) -> Result<Arc<RTCPeerConnection>, Box<dyn std::error::Error>> {
-
-        let config = RTCConfiguration {
-        ice_transport_policy: RTCIceTransportPolicy::All, // [TODO] Remettre sur Relay une fois Coturn installe sur le VPS
+    
+    // 1. STRICT RELAY ZERO-TRACE CONFIGURATION
+    // Core engine will literally refuse to touch your local NAT, bypassing IP leaks entirely!
+    let config = RTCConfiguration {
+        ice_transport_policy: RTCIceTransportPolicy::Relay,
         ice_servers: vec![
-            RTCIceServer {
-                urls: vec!["stun:89.168.62.93:3478".to_owned()],
-                ..Default::default()
-            },
             RTCIceServer {
                 urls: vec!["turn:89.168.62.93:3478".to_owned()],
                 username: "kako_relais".to_owned(),
                 credential: "cX@XctAfrSym5ak8".to_owned(),
-                
+                ..Default::default()
             }
         ],
         ..Default::default()
     };
+    
     let pc = Arc::new(api.new_peer_connection(config).await?);
 
     let tx_ui_state = tx_ui.clone();
@@ -54,7 +53,6 @@ pub async fn create_peer_connection(
     pc.on_peer_connection_state_change(Box::new(move |state| {
         let tx = tx_ui_state.clone();
         let tgt = tgt_state.clone();
-
         Box::pin(async move {
             if state == RTCPeerConnectionState::Failed || state == RTCPeerConnectionState::Disconnected {
                 let _ = tx.send(format!("CALL_ENDED:{}", tgt));
@@ -62,15 +60,16 @@ pub async fn create_peer_connection(
         })
     }));
 
+    // RESTORE TRICKLE ICE FOR INSANE FLUIDITY
     let tx_sig_ice = tx_signal.clone();
     let target_ice = target_id.clone();
     let my_id_ice = my_id.clone();
-
+    
     pc.on_ice_candidate(Box::new(move |c: Option<RTCIceCandidate>| {
         let tx_sig_ice = tx_sig_ice.clone();
         let target = target_ice.clone();
         let sender = my_id_ice.clone();
-
+        
         Box::pin(async move {
             if let Some(candidate) = c {
                 if let Ok(json) = candidate.to_json() {
@@ -89,7 +88,6 @@ pub async fn create_peer_connection(
 
         pc.on_track(Box::new(move |track, _, _| {
             let tx_spk = tx_spk.clone();
-
             let track_id = TRACK_ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Box::pin(async move {
                 tokio::spawn(async move {
