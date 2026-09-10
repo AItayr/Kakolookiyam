@@ -90,6 +90,8 @@ pub async fn start_p2p(
     let (tx_signal, mut rx_signal) = tokio::sync::mpsc::channel::<Signal>(32);
     let mut peers: HashMap<String, Arc<RTCPeerConnection>> = HashMap::new();
     let mut pending_ice: HashMap<String, Vec<String>> = HashMap::new();
+    let mut turn_user = "kako_relais".to_string();
+    let mut turn_pass = "cX@XctAfrSym5ak8".to_string();
     let (tx_dc, mut rx_dc) = tokio::sync::mpsc::unbounded_channel::<(String, Arc<RTCDataChannel>)>();
     let mut data_channels: HashMap<String, Arc<RTCDataChannel>> = HashMap::new();
 
@@ -165,10 +167,15 @@ pub async fn start_p2p(
                         tx_ui.clone(),
                         tx_dc.clone(),
                         tx_chunks.clone(),
-                        true
+                        true,
+                        turn_user.clone(),
+                        turn_pass.clone()
                     ).await {
                         Ok(p) => p,
-                        Err(_) => continue,
+                        Err(e) => {
+                            let _ = tx_ui.send(format!("CHAT_RECV:err:Failed PC: {}", e));
+                            continue;
+                        }
                     };
 
                     let data_channel = match pc.create_data_channel("secure_text", None).await {
@@ -248,7 +255,9 @@ pub async fn start_p2p(
                             tx_ui.clone(),
                             tx_dc.clone(),
                             tx_chunks.clone(),
-                            true
+                            true,
+                            turn_user.clone(),
+                            turn_pass.clone()
                         ).await {
                             peers.insert(sender_id.clone(), Arc::clone(&pc));
 
@@ -325,7 +334,9 @@ pub async fn start_p2p(
                                 tx_ui.clone(),
                                 tx_dc.clone(),
                                 tx_chunks.clone(),
-                                false
+                                false,
+                                turn_user.clone(),
+                                turn_pass.clone()
                             ).await {
                                 if let Ok(data_channel) = pc.create_data_channel("secure_text", None).await {
                                     data_channels.insert(target_id.clone(), Arc::clone(&data_channel));
@@ -415,7 +426,9 @@ pub async fn start_p2p(
                                     tx_ui.clone(),
                                     tx_dc.clone(),
                                     tx_chunks.clone(),
-                                    false
+                                    false,
+                                    turn_user.clone(),
+                                    turn_pass.clone()
                                 ).await {
                                     if let Ok(data_channel) = pc.create_data_channel("secure_text", None).await {
                                         data_channels.insert(target_id.clone(), Arc::clone(&data_channel));
@@ -486,6 +499,14 @@ pub async fn start_p2p(
                                 let _ = tx_ui.send(text.to_string());
                                 continue;
                             }
+                            if text.starts_with("TURN_AUTH|") {
+                                let parts: Vec<&str> = text.splitn(3, '|').collect();
+                                if parts.len() == 3 {
+                                    turn_user = parts[1].to_string();
+                                    turn_pass = parts[2].to_string();
+                                }
+                                continue;
+                            }
 
                             if let Ok(signal) = serde_json::from_str::<Signal>(&text) {
                                 match signal {
@@ -505,7 +526,8 @@ pub async fn start_p2p(
 
                                         if let Ok(pc) = create_peer_connection(
                                             &api, sender_id.clone(), my_local_id.clone(), my_pseudo.clone(),
-                                            None, tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), tx_chunks.clone(), false
+                                            None, tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), tx_chunks.clone(), false,
+                                            turn_user.clone(), turn_pass.clone()
                                         ).await {
                                             peers.insert(sender_id.clone(), Arc::clone(&pc));
                                             let mut desc = RTCSessionDescription::default();

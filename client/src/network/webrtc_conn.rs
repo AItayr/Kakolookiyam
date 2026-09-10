@@ -28,6 +28,8 @@ pub async fn create_peer_connection(
     tx_dc: UnboundedSender<(String, Arc<RTCDataChannel>)>,
     tx_chunks: UnboundedSender<(String, String)>,
     is_call: bool,
+    turn_user: String,
+    turn_pass: String,
 ) -> Result<Arc<RTCPeerConnection>, Box<dyn std::error::Error>> {
     
     // 1. STRICT RELAY ZERO-TRACE CONFIGURATION
@@ -37,8 +39,8 @@ pub async fn create_peer_connection(
         ice_servers: vec![
             RTCIceServer {
                 urls: vec!["turn:89.168.62.93:3478".to_owned()],
-                username: "kako_relais".to_owned(),
-                credential: "cX@XctAfrSym5ak8".to_owned(),
+                username: turn_user,
+                credential: turn_pass,
                 ..Default::default()
             }
         ],

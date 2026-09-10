@@ -6,6 +6,31 @@ use tokio_tungstenite::accept_async;
 use futures_util::{StreamExt, SinkExt};
 use serde::{Deserialize, Serialize};
 
+use hmac::{Hmac, Mac};
+use sha1::Sha1;
+use base64::Engine;
+
+type HmacSha1 = Hmac<Sha1>;
+
+fn generate_turn_credentials(user_id: &str) -> (String, String) {
+    // Le secret absolu partagé avec le serveur Oracle (Coturn `static-auth-secret`)
+    let secret = "KAKO_ORACLE_HMAC_SECRET_2026";
+    let unix_time = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    // Expiration: 2 heures (7200 secondes)
+    let expiration = unix_time + 7200;
+    
+    let username = format!("{}:{}", expiration, user_id);
+    
+    let mut mac = HmacSha1::new_from_slice(secret.as_bytes()).expect("HMAC err");
+    mac.update(username.as_bytes());
+    let result = mac.finalize().into_bytes();
+    
+    let password = base64::engine::general_purpose::STANDARD.encode(result);
+    
+    (username, password)
+}
+
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 enum Signal {
@@ -65,8 +90,10 @@ async fn handle_connection(
                             let _ = tx.send("ERROR:ALREADY_CONNECTED".to_string());
                         } else {
                             client_id = id.clone();
+                            let (turn_user, turn_pass) = generate_turn_credentials(&client_id);
                             clients_guard.insert(id, tx.clone());
                             let _ = tx.send("SUCCESS:REGISTERED".to_string());
+                            let _ = tx.send(format!("TURN_AUTH|{}|{}", turn_user, turn_pass));
                         }
                     },
                     Signal::Unregister { id } => {
