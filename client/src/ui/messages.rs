@@ -18,7 +18,7 @@ pub enum Message {
     PeerIdChanged(String),
     ConnectClicked,
     CallContact(String),
-    AcceptCall(String, String),
+    AcceptCall(String, String, String),
     RejectCall(String),
     HangUpCall,
     ToggleMute,

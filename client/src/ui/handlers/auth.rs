@@ -1,4 +1,4 @@
-﻿use secrecy::ExposeSecret;
+use secrecy::ExposeSecret;
 use iced::Task as Command;
 use crate::ui::app::{KakolookiyamApp, AppState};
 use crate::ui::messages::Message;
@@ -54,7 +54,7 @@ impl KakolookiyamApp {
                 if self.incoming_call.is_some() {
                     self.incoming_call_timer += 1;
                     if self.incoming_call_timer >= 15 {
-                        if let Some((id, _, _)) = self.incoming_call.take() {
+                        if let Some((id, _, _, _)) = self.incoming_call.take() {
                             let _ = self.tx_network.send(format!("REJECT:{}", id));
                             self.status_message = "Appel manqué.".to_string();
                         }

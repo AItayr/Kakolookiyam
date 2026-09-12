@@ -1,4 +1,4 @@
-﻿use std::sync::Arc;
+use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 use std::sync::Arc as StdArc;
 
@@ -26,7 +26,7 @@ pub async fn create_peer_connection(
     tx_signal: tokio::sync::mpsc::Sender<Signal>,
     tx_ui: UnboundedSender<String>,
     tx_dc: UnboundedSender<(String, Arc<RTCDataChannel>)>,
-    tx_chunks: UnboundedSender<(String, String)>,
+    tx_chunks: UnboundedSender<(String, Vec<u8>)>,
     is_call: bool,
     turn_user: String,
     turn_pass: String,
@@ -155,20 +155,22 @@ pub async fn create_peer_connection(
             }));
 
             d_clone.on_message(Box::new(move |msg: DataChannelMessage| {
-                let text = String::from_utf8_lossy(&msg.data);
-
-                if text.starts_with("SYS:FILE_META:") || text.starts_with("SYS:ACK_META:") || text.starts_with("SYS:FILE_CHUNK:") || text.starts_with("SYS:ACK_CHUNK:") {
-                    let _ = tx_chunks_clone.send((target_msg_clone.clone(), text.into_owned()));
+                let raw = msg.data.to_vec();
+                if raw.starts_with(b"SYS:FILE_") || raw.starts_with(b"SYS:ACK_") {
+                    let _ = tx_chunks_clone.send((target_msg_clone.clone(), raw));
+                    return Box::pin(async move {});
                 }
-                else if text.starts_with("{\"type\":\"pseudo\"") {
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                        if let Some(friend_pseudo) = json["value"].as_str() {
-                            let _ = tx_ui_msg_clone.send(format!("CONTACT:{}:{}", target_msg_clone, friend_pseudo));
-                            return Box::pin(async move {});
+                if let Ok(text) = String::from_utf8(raw) {
+                    if text.starts_with("{\"type\":\"pseudo\"") {
+                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                            if let Some(friend_pseudo) = json["value"].as_str() {
+                                let _ = tx_ui_msg_clone.send(format!("CONTACT:{}:{}", target_msg_clone, friend_pseudo));
+                                return Box::pin(async move {});
+                            }
                         }
+                    } else {
+                        let _ = tx_ui_msg_clone.send(format!("CHAT_RECV:{}:{}", target_msg_clone, text));
                     }
-                } else {
-                    let _ = tx_ui_msg_clone.send(format!("CHAT_RECV:{}:{}", target_msg_clone, text));
                 }
                 Box::pin(async move {})
             }));

@@ -81,7 +81,7 @@ impl KakolookiyamApp {
         let current_text = text_main(&self.current_theme);
         let current_muted = text_muted(&self.current_theme);
 
-        let (caller_id, caller_pseudo, sdp) = self.incoming_call.as_ref().unwrap();
+        let (caller_id, caller_pseudo, sdp, grp_id) = self.incoming_call.as_ref().unwrap();
 
         let title = crate::ui::i18n::app_text(&self.language, t(&self.language, "call_incoming"))
             .size(40)
@@ -97,7 +97,7 @@ impl KakolookiyamApp {
 
         let btn_accept = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_accept")))
             .style(primary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
-            .on_press(Message::AcceptCall(caller_id.clone(), sdp.clone()))
+            .on_press(Message::AcceptCall(caller_id.to_string(), sdp.to_string(), grp_id.to_string()))
             .padding(15);
 
         let btn_reject = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_reject")))

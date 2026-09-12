@@ -95,15 +95,15 @@ pub async fn start_p2p(
     let (tx_dc, mut rx_dc) = tokio::sync::mpsc::unbounded_channel::<(String, Arc<RTCDataChannel>)>();
     let mut data_channels: HashMap<String, Arc<RTCDataChannel>> = HashMap::new();
 
-    let (tx_chunks, mut rx_chunks) = tokio::sync::mpsc::unbounded_channel::<(String, String)>();
+    let (tx_chunks, mut rx_chunks) = tokio::sync::mpsc::unbounded_channel::<(String, Vec<u8>)>();
     let mut transfer_manager = TransferManager::new();
 
     loop {
         tokio::select! {
             Some(chunk_data) = rx_chunks.recv() => {
                 let sender_id: String = chunk_data.0;
-                let text: String = chunk_data.1;
-                transfer_manager.handle_message(&sender_id, &text, &data_channels, &tx_ui, &my_pseudo).await;
+                let raw_payload: Vec<u8> = chunk_data.1;
+                transfer_manager.handle_message(&sender_id, &raw_payload, &data_channels, &tx_ui, &my_pseudo).await;
             }
 
             Some((tgt, dc)) = rx_dc.recv() => {
@@ -133,7 +133,14 @@ pub async fn start_p2p(
                     transfer_manager.incoming.clear();
                 }
                 else if cmd.starts_with("CALL:") {
-                    let target_id = cmd.trim_start_matches("CALL:").to_string();
+                    let full_target = cmd.trim_start_matches("CALL:").to_string();
+                    let mut target_id = full_target.clone();
+                    let mut grp_ctx = String::new();
+                    
+                    if let Some(idx) = full_target.find("|GRP:") {
+                        grp_ctx = full_target[idx + 5..].to_string();
+                        target_id = full_target[..idx].to_string();
+                    }
                     if target_id.trim().is_empty() { continue; }
                     
                     let tx_ui_loading = tx_ui.clone();
@@ -203,20 +210,22 @@ pub async fn start_p2p(
                     let tx_ui_msg = tx_ui.clone();
                     let tx_chunks_inner = tx_chunks.clone();
                     data_channel.on_message(Box::new(move |msg: DataChannelMessage| {
-                        let text = String::from_utf8_lossy(&msg.data);
-                        if text.starts_with("SYS:FILE_META:") || text.starts_with("SYS:ACK_META:") || text.starts_with("SYS:FILE_CHUNK:") || text.starts_with("SYS:ACK_CHUNK:") {
-                            let _ = tx_chunks_inner.send((tgt_id_msg.clone(), text.into_owned()));
+                        let raw = msg.data.to_vec();
+                        if raw.starts_with(b"SYS:FILE_") || raw.starts_with(b"SYS:ACK_") {
+                            let _ = tx_chunks_inner.send((tgt_id_msg.clone(), raw));
+                            return Box::pin(async move {});
                         }
-                        else if text.starts_with("{\"type\":\"pseudo\"") {
-                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                                if let Some(friend_pseudo) = json["value"].as_str() {
-                                    let _ = tx_ui_msg.send(format!("CONTACT:{}:{}", tgt_id_msg, friend_pseudo));
-                                    return Box::pin(async move {});
+                        if let Ok(text) = String::from_utf8(raw) {
+                            if text.starts_with("{\"type\":\"pseudo\"") {
+                                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                                    if let Some(friend_pseudo) = json["value"].as_str() {
+                                        let _ = tx_ui_msg.send(format!("CONTACT:{}:{}", tgt_id_msg, friend_pseudo));
+                                        return Box::pin(async move {});
+                                    }
                                 }
+                            } else {
+                                let _ = tx_ui_msg.send(format!("CHAT_RECV:{}:{}", tgt_id_msg, text));
                             }
-                        }
-                        else {
-                            let _ = tx_ui_msg.send(format!("CHAT_RECV:{}:{}", tgt_id_msg, text));
                         }
                         Box::pin(async move {})
                     }));
@@ -226,9 +235,14 @@ pub async fn start_p2p(
                         let tx_sig = tx_signal.clone();
                         let my_id = my_local_id.clone();
                         let tgt_id = target_id.clone();
+                        let grp_context_clone = grp_ctx.clone();
                         tokio::spawn(async move {
                             if pc_clone.set_local_description(offer.clone()).await.is_ok() {
-                                let _ = tx_sig.send(Signal::Offer { sdp: offer.sdp, sender_id: my_id, target_id: tgt_id }).await;
+                                let mut final_sdp = offer.sdp;
+                                if !grp_context_clone.is_empty() {
+                                    final_sdp = format!("{}|||GRP:{}", final_sdp, grp_context_clone);
+                                }
+                                let _ = tx_sig.send(Signal::Offer { sdp: final_sdp, sender_id: my_id, target_id: tgt_id }).await;
                             }
                         });
                         peers.insert(target_id.clone(), pc);
@@ -359,23 +373,25 @@ pub async fn start_p2p(
                                     let tx_ui_msg = tx_ui.clone();
                                     let tx_chunks_inner = tx_chunks.clone();
                                     data_channel.on_message(Box::new(move |msg: DataChannelMessage| {
-                                        let text = String::from_utf8_lossy(&msg.data);
-                                        if text.starts_with("SYS:FILE_META:") || text.starts_with("SYS:ACK_META:") || text.starts_with("SYS:FILE_CHUNK:") || text.starts_with("SYS:ACK_CHUNK:") {
-                                            let _ = tx_chunks_inner.send((tgt_id_msg.clone(), text.into_owned()));
-                                        }
-                                        else if text.starts_with("{\"type\":\"pseudo\"") {
-                                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                                                if let Some(friend_pseudo) = json["value"].as_str() {
-                                                    let _ = tx_ui_msg.send(format!("CONTACT:{}:{}", tgt_id_msg, friend_pseudo));
-                                                    return Box::pin(async move {});
-                                                }
-                                            }
-                                        }
-                                        else {
-                                            let _ = tx_ui_msg.send(format!("CHAT_RECV:{}:{}", tgt_id_msg, text));
-                                        }
-                                        Box::pin(async move {})
-                                    }));
+                        let raw = msg.data.to_vec();
+                        if raw.starts_with(b"SYS:FILE_") || raw.starts_with(b"SYS:ACK_") {
+                            let _ = tx_chunks_inner.send((tgt_id_msg.clone(), raw));
+                            return Box::pin(async move {});
+                        }
+                        if let Ok(text) = String::from_utf8(raw) {
+                            if text.starts_with("{\"type\":\"pseudo\"") {
+                                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                                    if let Some(friend_pseudo) = json["value"].as_str() {
+                                        let _ = tx_ui_msg.send(format!("CONTACT:{}:{}", tgt_id_msg, friend_pseudo));
+                                        return Box::pin(async move {});
+                                    }
+                                }
+                            } else {
+                                let _ = tx_ui_msg.send(format!("CHAT_RECV:{}:{}", tgt_id_msg, text));
+                            }
+                        }
+                        Box::pin(async move {})
+                    }));
 
                                     if let Ok(offer) = pc.create_offer(None).await {
                         let pc_clone = Arc::clone(&pc); let tx_sig = tx_signal.clone(); let my_id = my_local_id.clone(); let tgt_id = target_id.clone();
@@ -451,23 +467,25 @@ pub async fn start_p2p(
                                         let tx_ui_msg = tx_ui.clone();
                                         let tx_chunks_inner = tx_chunks.clone();
                                         data_channel.on_message(Box::new(move |msg: DataChannelMessage| {
-                                            let text = String::from_utf8_lossy(&msg.data);
-                                            if text.starts_with("SYS:FILE_META:") || text.starts_with("SYS:ACK_META:") || text.starts_with("SYS:FILE_CHUNK:") || text.starts_with("SYS:ACK_CHUNK:") {
-                                                let _ = tx_chunks_inner.send((tgt_id_msg.clone(), text.into_owned()));
-                                            }
-                                            else if text.starts_with("{\"type\":\"pseudo\"") {
-                                                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                                                    if let Some(friend_pseudo) = json["value"].as_str() {
-                                                        let _ = tx_ui_msg.send(format!("CONTACT:{}:{}", tgt_id_msg, friend_pseudo));
-                                                        return Box::pin(async move {});
-                                                    }
-                                                }
-                                            }
-                                            else {
-                                                let _ = tx_ui_msg.send(format!("CHAT_RECV:{}:{}", tgt_id_msg, text));
-                                            }
-                                            Box::pin(async move {})
-                                        }));
+                        let raw = msg.data.to_vec();
+                        if raw.starts_with(b"SYS:FILE_") || raw.starts_with(b"SYS:ACK_") {
+                            let _ = tx_chunks_inner.send((tgt_id_msg.clone(), raw));
+                            return Box::pin(async move {});
+                        }
+                        if let Ok(text) = String::from_utf8(raw) {
+                            if text.starts_with("{\"type\":\"pseudo\"") {
+                                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                                    if let Some(friend_pseudo) = json["value"].as_str() {
+                                        let _ = tx_ui_msg.send(format!("CONTACT:{}:{}", tgt_id_msg, friend_pseudo));
+                                        return Box::pin(async move {});
+                                    }
+                                }
+                            } else {
+                                let _ = tx_ui_msg.send(format!("CHAT_RECV:{}:{}", tgt_id_msg, text));
+                            }
+                        }
+                        Box::pin(async move {})
+                    }));
 
                                         if let Ok(offer) = pc.create_offer(None).await {
                         let pc_clone = Arc::clone(&pc); let tx_sig = tx_signal.clone(); let my_id = my_local_id.clone(); let tgt_id = target_id.clone();
@@ -510,13 +528,20 @@ pub async fn start_p2p(
 
                             if let Ok(signal) = serde_json::from_str::<Signal>(&text) {
                                 match signal {
-                                    Signal::Offer { sdp, sender_id, .. } => {
+                                    Signal::Offer { mut sdp, sender_id, .. } => {
                                         if let Some(old_pc) = peers.remove(&sender_id) {
                                             let _ = old_pc.close().await;
                                         }
                                         data_channels.remove(&sender_id);
                                         pending_ice.remove(&sender_id);
-                                        let _ = tx_ui.send(format!("INCOMING_CALL:{}:{}", sender_id, sdp));
+                                        
+                                        let mut grp_context = String::new();
+                                        if let Some(idx) = sdp.find("|||GRP:") {
+                                            grp_context = sdp[idx + 7..].to_string();
+                                            sdp = sdp[..idx].to_string();
+                                        }
+                                        
+                                        let _ = tx_ui.send(format!("INCOMING_CALL:{}:{}:{}", sender_id, grp_context, sdp));
                                     }
                                     Signal::ChatOffer { sdp, sender_id, .. } => {
                                         if let Some(old_pc) = peers.remove(&sender_id) {

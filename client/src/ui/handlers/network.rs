@@ -1,4 +1,4 @@
-﻿use secrecy::ExposeSecret;
+use secrecy::ExposeSecret;
 use iced::Task as Command;
 use crate::ui::app::{KakolookiyamApp, AppState};
 use crate::ui::messages::Message;
@@ -419,11 +419,12 @@ impl KakolookiyamApp {
                 }
             }
             else if msg.starts_with("INCOMING_CALL:") {
-                let parts: Vec<&str> = msg.splitn(3, ':').collect();
+                let parts: Vec<&str> = msg.splitn(4, ':').collect();
 
-                if parts.len() == 3 {
+                if parts.len() == 4 {
                     let caller_id = parts[1].trim().to_string();
-                    let sdp = parts[2].to_string();
+                    let caller_grp_id = parts[2].trim().to_string();
+                    let sdp = parts[3].to_string();
 
                                         if let Some((active_id, _)) = &self.active_call {
                         if active_id.starts_with("grp_") {
@@ -447,14 +448,22 @@ impl KakolookiyamApp {
                         }
                     }
 
-                    let caller_pseudo = if let Some(vd) = &self.vault_data {
+                    let mut caller_pseudo = if let Some(vd) = &self.vault_data {
                         vd.contacts.get(&caller_id).cloned().unwrap_or_else(|| "Inconnu".to_string())
                     } else {
                         "Inconnu".to_string()
                     };
+                    
+                    if !caller_grp_id.is_empty() {
+                        if let Some(vd) = &self.vault_data {
+                            if let Some(grp) = vd.groups.get(&caller_grp_id) {
+                                caller_pseudo = grp.name.clone();
+                            }
+                        }
+                    }
 
                     self.incoming_call_timer = 0;
-                    self.incoming_call = Some((caller_id, caller_pseudo, sdp));
+                    self.incoming_call = Some((caller_id, caller_pseudo, sdp, caller_grp_id));
                 }
             }
             else if msg.starts_with("CALL_ACTIVE:") {
@@ -508,7 +517,7 @@ impl KakolookiyamApp {
                     self.status_message = "L'interlocuteur a raccroché.".to_string();
                 }
 
-                if let Some((inc_id, _, _)) = &self.incoming_call {
+                if let Some((inc_id, _, _, _)) = &self.incoming_call {
                     if inc_id == &id {
                         self.incoming_call = None;
                         self.incoming_call_timer = 0;

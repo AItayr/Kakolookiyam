@@ -1,4 +1,4 @@
-﻿use iced::{time, Task as Command, Element, Event, Subscription, Theme};
+use iced::{time, Task as Command, Element, Event, Subscription, Theme};
 use std::sync::Arc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
@@ -37,7 +37,7 @@ pub struct KakolookiyamApp {
     pub(crate) tx_identity: Option<std::sync::mpsc::Sender<(String, String)>>,
 
     pub(crate) idle_seconds: u32,
-    pub(crate) incoming_call: Option<(String, String, String)>,
+    pub(crate) incoming_call: Option<(String, String, String, String)>,
     pub(crate) incoming_call_timer: u32,
     pub(crate) active_call: Option<(String, String)>,
     pub(crate) is_muted: bool,
@@ -161,7 +161,7 @@ impl KakolookiyamApp {
             => self.handle_auth(message),
 
             Message::PeerIdChanged(_) | Message::ConnectClicked | Message::CallContact(_) |
-            Message::AcceptCall(_, _) | Message::RejectCall(_) | Message::HangUpCall |
+            Message::AcceptCall(_, _, _) | Message::RejectCall(_) | Message::HangUpCall |
             Message::ToggleMute
             => self.handle_call(message),
 

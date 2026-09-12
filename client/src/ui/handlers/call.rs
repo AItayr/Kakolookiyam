@@ -23,6 +23,7 @@ impl KakolookiyamApp {
 
                             let tx = self.tx_network.clone();
                             let members = group.members.clone();
+                            let target_id_clone = target_id.clone();
 
                             self.active_call = Some((target_id.clone(), group.name.clone()));
                             self.chat_history.clear();
@@ -37,7 +38,7 @@ impl KakolookiyamApp {
                                 async move {
                                     for member_id in members {
                                         if member_id != my_id {
-                                            let _ = tx.send(format!("CALL:{}", member_id));
+                                            let _ = tx.send(format!("CALL:{}|GRP:{}", member_id, target_id_clone));
                                             tokio::time::sleep(std::time::Duration::from_millis(250)).await;
                                         }
                                     }
@@ -52,20 +53,45 @@ impl KakolookiyamApp {
                     let _ = self.tx_network.send(format!("CALL:{}", target_id));
                 }
             }
-            Message::AcceptCall(id, sdp) => {
-                let pseudo = self.incoming_call.as_ref().unwrap().1.clone();
+            Message::AcceptCall(id, sdp, grp_id) => {
+                let mut pseudo = self.incoming_call.as_ref().unwrap().1.clone();
+                let mut actual_id = id.clone();
 
                 self.incoming_call = None;
                 self.incoming_call_timer = 0;
-                self.status_message = "🔗 Connexion sécurisée en cours...".to_string();
+                self.status_message = "?? Connexion sécurisée en cours...".to_string();
                 let _ = self.tx_network.send(format!("ACCEPT:{}:{}", id, sdp));
 
-                self.active_call = Some((id.clone(), pseudo));
+                if let Some(vd) = &self.vault_data {
+                    if !grp_id.is_empty() {
+                        if let Some(grp) = vd.groups.get(&grp_id) {
+                            actual_id = grp_id.clone();
+                            pseudo = grp.name.clone();
+                            
+                            let members_clone = grp.members.clone();
+                            let my_pub_id = crate::crypto::derive_public_id(&vd.private_key);
+                            let target_grp_clone = grp_id.clone();
+                            let tx = self.tx_network.clone();
+                            let caller_id = id.clone();
+                            
+                            tokio::spawn(async move {
+                                for member_id in members_clone {
+                                    if member_id != my_pub_id && member_id != caller_id && my_pub_id > member_id {
+                                        let _ = tx.send(format!("CALL:{}|GRP:{}", member_id, target_grp_clone));
+                                        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+
+                self.active_call = Some((actual_id.clone(), pseudo));
                 self.chat_input.clear();
                 self.chat_history.clear();
 
                 if let Some(vd) = &self.vault_data {
-                    if let Some(history) = vd.chat_history.get(&id) {
+                    if let Some(history) = vd.chat_history.get(&actual_id) {
                         for msg in history {
                             self.chat_history.push((msg.author.clone(), msg.content.clone()));
                         }
