@@ -27,7 +27,7 @@ pub enum Signal {
     Register { id: String },
     Unregister { id: String },
     Offer { sdp: String, sender_id: String, target_id: String },
-    ChatOffer { sdp: String, sender_id: String, target_id: String },
+    ChatOffer { sdp: String, sender_id: String, target_id: String, pseudo: String, timestamp: u64, signature: String },
     Answer { sdp: String, sender_id: String, target_id: String },
     Ice { candidate: String, sender_id: String, target_id: String },
     Ping { msg: String }
@@ -40,8 +40,15 @@ pub async fn start_p2p(
     tx_ui: UnboundedSender<String>,
     mut my_local_id: String,
     mut my_pseudo: String,
+    hex_seed: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
 
+    let mut my_secret: Vec<u8> = Vec::new();
+    for i in 0..32 {
+        if let Ok(b) = u8::from_str_radix(&hex_seed[i*2..i*2+2], 16) {
+            my_secret.push(b);
+        }
+    }
     let mut m = MediaEngine::default();
     m.register_default_codecs()?;
     let api = APIBuilder::new().with_media_engine(m).build();
@@ -90,13 +97,14 @@ pub async fn start_p2p(
     let (tx_signal, mut rx_signal) = tokio::sync::mpsc::channel::<Signal>(32);
     let mut peers: HashMap<String, Arc<RTCPeerConnection>> = HashMap::new();
     let mut pending_ice: HashMap<String, Vec<String>> = HashMap::new();
-    let mut turn_user = "kako_relais".to_string();
-    let mut turn_pass = "cX@XctAfrSym5ak8".to_string();
+    let mut turn_user = String::new();
+    let mut turn_pass = String::new();
     let (tx_dc, mut rx_dc) = tokio::sync::mpsc::unbounded_channel::<(String, Arc<RTCDataChannel>)>();
     let mut data_channels: HashMap<String, Arc<RTCDataChannel>> = HashMap::new();
 
     let (tx_chunks, mut rx_chunks) = tokio::sync::mpsc::unbounded_channel::<(String, Vec<u8>)>();
     let mut transfer_manager = TransferManager::new();
+    let mut trusted_contacts: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     loop {
         tokio::select! {
@@ -110,11 +118,25 @@ pub async fn start_p2p(
                 data_channels.insert(tgt, dc);
             }
             Some(cmd) = rx_ui.recv() => {
-                if cmd.starts_with("REGISTER:") {
-                    let parts: Vec<&str> = cmd.splitn(3, ':').collect();
-                    if parts.len() == 3 {
+                if cmd.starts_with("CONTACTS_SYNC") {
+                    trusted_contacts.clear();
+                    let parts: Vec<&str> = cmd.split(':').collect();
+                    for i in 1..parts.len() {
+                        trusted_contacts.insert(parts[i].to_string());
+                    }
+                }
+                else if cmd.starts_with("REGISTER:") {
+                    let parts: Vec<&str> = cmd.splitn(4, ':').collect();
+                    if parts.len() == 4 {
                         my_local_id = parts[1].to_string();
                         my_pseudo = parts[2].to_string();
+                        my_secret.clear();
+                        let hex_seed = parts[3];
+                        for i in 0..32 {
+                            if let Ok(b) = u8::from_str_radix(&hex_seed[i*2..i*2+2], 16) {
+                                my_secret.push(b);
+                            }
+                        }
                         let _ = tx_signal.send(Signal::Register { id: my_local_id.clone() }).await;
                     } else if parts.len() == 2 {
                         my_local_id = parts[1].to_string();
@@ -163,6 +185,7 @@ pub async fn start_p2p(
                     }
                     data_channels.remove(&target_id);
                     pending_ice.remove(&target_id);
+                    transfer_manager.cleanup(&target_id);
                     let pc = match create_peer_connection(
                         &api,
                         target_id.clone(),
@@ -185,7 +208,7 @@ pub async fn start_p2p(
                         }
                     };
 
-                    let data_channel = match pc.create_data_channel("secure_text", None).await {
+                    let data_channel = match pc.create_data_channel("secure_text", Some(webrtc::data_channel::data_channel_init::RTCDataChannelInit { ordered: Some(true), max_retransmits: None, ..Default::default() })).await {
                         Ok(dc) => dc,
                         Err(_) => continue,
                     };
@@ -309,6 +332,7 @@ pub async fn start_p2p(
                     if let Some(pc) = peers.remove(&sender_id) {
                         let _ = pc.close().await;
                     }
+                    transfer_manager.cleanup(&sender_id);
                 }
                 else if cmd.starts_with("HANGUP:") {
                     let target_id = cmd.trim_start_matches("HANGUP:").to_string();
@@ -317,7 +341,8 @@ pub async fn start_p2p(
                     }
                     data_channels.remove(&target_id);
                     pending_ice.remove(&target_id);
-                    }
+                    transfer_manager.cleanup(&target_id);
+                }
                 else if cmd == "MUTE:on" {
                     is_muted.store(true, Ordering::Relaxed);
                 }
@@ -352,7 +377,7 @@ pub async fn start_p2p(
                                 turn_user.clone(),
                                 turn_pass.clone()
                             ).await {
-                                if let Ok(data_channel) = pc.create_data_channel("secure_text", None).await {
+                                if let Ok(data_channel) = pc.create_data_channel("secure_text", Some(webrtc::data_channel::data_channel_init::RTCDataChannelInit { ordered: Some(true), max_retransmits: None, ..Default::default() })).await {
                                     data_channels.insert(target_id.clone(), Arc::clone(&data_channel));
 
                                     let d_open = Arc::clone(&data_channel);
@@ -365,7 +390,7 @@ pub async fn start_p2p(
                                         let d = Arc::clone(&d_open);
                                         Box::pin(async move {
                                             let _ = d.send_text(format!("{{\"type\":\"pseudo\",\"value\":\"{}\"}}", p2)).await;
-                                            let _ = d.send_text(txt).await;
+                                            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await; let _ = d.send_text(txt).await;
                                         })
                                     }));
 
@@ -395,9 +420,13 @@ pub async fn start_p2p(
 
                                     if let Ok(offer) = pc.create_offer(None).await {
                         let pc_clone = Arc::clone(&pc); let tx_sig = tx_signal.clone(); let my_id = my_local_id.clone(); let tgt_id = target_id.clone();
+                        let my_secret_clone = my_secret.clone();
+                        let my_pseudo_clone = my_pseudo.clone();
                         tokio::spawn(async move {
                             if pc_clone.set_local_description(offer.clone()).await.is_ok() {
-                                let _ = tx_sig.send(Signal::ChatOffer { sdp: offer.sdp, sender_id: my_id, target_id: tgt_id }).await;
+                                let tstamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                                let sig = crate::crypto::sign_announcement(&my_secret_clone, &my_pseudo_clone, tstamp);
+                                let _ = tx_sig.send(Signal::ChatOffer { sdp: offer.sdp, sender_id: my_id, target_id: tgt_id, pseudo: my_pseudo_clone.clone(), timestamp: tstamp, signature: sig }).await;
                             }
                         });
                         peers.insert(target_id.clone(), pc);
@@ -446,7 +475,7 @@ pub async fn start_p2p(
                                     turn_user.clone(),
                                     turn_pass.clone()
                                 ).await {
-                                    if let Ok(data_channel) = pc.create_data_channel("secure_text", None).await {
+                                    if let Ok(data_channel) = pc.create_data_channel("secure_text", Some(webrtc::data_channel::data_channel_init::RTCDataChannelInit { ordered: Some(true), max_retransmits: None, ..Default::default() })).await {
                                         data_channels.insert(target_id.clone(), Arc::clone(&data_channel));
 
                                         let d_open = Arc::clone(&data_channel);
@@ -459,7 +488,7 @@ pub async fn start_p2p(
                                             let d = Arc::clone(&d_open);
                                             Box::pin(async move {
                                                 let _ = d.send_text(format!("{{\"type\":\"pseudo\",\"value\":\"{}\"}}", p2)).await;
-                                                let _ = d.send_text(m).await;
+                                                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await; let _ = d.send_text(m).await;
                                             })
                                         }));
 
@@ -489,9 +518,13 @@ pub async fn start_p2p(
 
                                         if let Ok(offer) = pc.create_offer(None).await {
                         let pc_clone = Arc::clone(&pc); let tx_sig = tx_signal.clone(); let my_id = my_local_id.clone(); let tgt_id = target_id.clone();
+                        let my_secret_clone = my_secret.clone();
+                        let my_pseudo_clone = my_pseudo.clone();
                         tokio::spawn(async move {
                             if pc_clone.set_local_description(offer.clone()).await.is_ok() {
-                                let _ = tx_sig.send(Signal::ChatOffer { sdp: offer.sdp, sender_id: my_id, target_id: tgt_id }).await;
+                                let tstamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                                let sig = crate::crypto::sign_announcement(&my_secret_clone, &my_pseudo_clone, tstamp);
+                                let _ = tx_sig.send(Signal::ChatOffer { sdp: offer.sdp, sender_id: my_id, target_id: tgt_id, pseudo: my_pseudo_clone.clone(), timestamp: tstamp, signature: sig }).await;
                             }
                         });
                         peers.insert(target_id.clone(), pc);
@@ -543,7 +576,11 @@ pub async fn start_p2p(
                                         
                                         let _ = tx_ui.send(format!("INCOMING_CALL:{}:{}:{}", sender_id, grp_context, sdp));
                                     }
-                                    Signal::ChatOffer { sdp, sender_id, .. } => {
+                                    Signal::ChatOffer { sdp, sender_id, pseudo, timestamp, signature, .. } => {
+                                        if !trusted_contacts.contains(&sender_id) { continue; }
+                                        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                                        if timestamp < now - 60 || timestamp > now + 60 { continue; }
+                                        if !crate::crypto::verify_announcement(&sender_id, &pseudo, timestamp, &signature) { continue; }
                                         if let Some(old_pc) = peers.remove(&sender_id) {
                                             let _ = old_pc.close().await;
                                         }
@@ -612,3 +649,21 @@ pub async fn start_p2p(
     }
     Ok(())
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

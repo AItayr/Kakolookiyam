@@ -1,4 +1,4 @@
-﻿use argon2::{
+use argon2::{
     password_hash::{PasswordHasher, SaltString},
     Argon2,
 };
@@ -10,6 +10,7 @@ use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Write;
+use ring::signature::KeyPair;
 use std::fs;
 use std::path::PathBuf;
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -74,16 +75,28 @@ pub fn get_app_dir() -> PathBuf {
     
     let readme_path = path.join("A_PROPOS_DE_VOS_DONNEES.txt");
     if !readme_path.exists() {
-        let content = "Kakolookiyam : Dossier Coffre-Fort / Vault Folder / مجلد الخزنة\r\n\r\n\
-[FR] Ce dossier héberge toutes vos données chiffrées localement.\r\n\
-Si vous souhaitez supprimer votre compte et toutes ses données, vous pouvez simplement effacer ce dossier.\r\n\
-Aucun historique n'est récupérable en ligne.\r\n\r\n\
-[EN] This folder hosts all your locally encrypted data.\r\n\
-If you wish to delete your account and all its data, you can simply delete this folder.\r\n\
-No history is recoverable online.\r\n\r\n\
-[AR] يستضيف هذا المجلد جميع بياناتك المشفرة محليًا.\r\n\
-إذا كنت ترغب في حذف حسابك وجميع بياناته، يمكنك ببساطة حذف هذا المجلد.\r\n\
-لا يمكن استرداد أي سجل عبر الإنترنت.";
+        let content = "Kakolookiyam : Dossier Coffre-Fort / Vault Folder / مجلد الخزنة
+
+\
+[FR] Ce dossier héberge toutes vos données chiffrées localement.
+\
+Si vous souhaitez supprimer votre compte et toutes ses données, vous pouvez simplement effacer ce dossier.
+\
+Aucun historique n\'est récupérable en ligne.
+
+\
+[EN] This folder hosts all your locally encrypted data.
+\
+If you wish to delete your account and all its data, you can simply delete this folder.
+\
+No history is recoverable online.
+
+\
+[AR] يستضيف هذا المجلد جميع بياناتك المشفرة محليا.
+\
+إذا كنت ترغب في حذف حسابك وجميع بياناته، يمكنك ببساطة حذف هذا المجلد.
+\
+لا يمكن استرجاع أي سجل عبر الإنترنت.";
         let _ = fs::write(readme_path, content);
     }
     
@@ -284,11 +297,64 @@ pub fn generate_secure_secret() -> [u8; 32] {
 }
 
 pub fn derive_public_id(secret: &[u8]) -> String {
-    let mut hex = String::new();
-    for byte in secret.iter().take(16) {
-        write!(&mut hex, "{:02x}", byte).unwrap();
+    // Note: secret must be exactly 32 bytes for Ed25519 (unless called with random short slices like in media, then we pad/hash)
+    if secret.len() != 32 {
+        let mut hex = String::new();
+        for byte in secret.iter().take(16) {
+            write!(&mut hex, "{:02x}", byte).unwrap();
+        }
+        return hex;
     }
-    hex
+    if let Ok(key_pair) = ring::signature::Ed25519KeyPair::from_seed_unchecked(secret) {
+        let pub_key = key_pair.public_key().as_ref();
+        let mut hex = String::new();
+        for byte in pub_key {
+            write!(&mut hex, "{:02x}", byte).unwrap();
+        }
+        hex
+    } else {
+        String::new()
+    }
+}
+
+pub fn sign_announcement(secret: &[u8], pseudo: &str, timestamp: u64) -> String {
+    if let Ok(key_pair) = ring::signature::Ed25519KeyPair::from_seed_unchecked(secret) {
+        let pub_id = derive_public_id(secret);
+        let message = format!("{}:{}:{}", pub_id, pseudo, timestamp);
+        let signature = key_pair.sign(message.as_bytes());
+        let mut hex = String::new();
+        for byte in signature.as_ref() {
+            write!(&mut hex, "{:02x}", byte).unwrap();
+        }
+        hex
+    } else {
+        String::new()
+    }
+}
+
+pub fn verify_announcement(pub_id_hex: &str, pseudo: &str, timestamp: u64, signature_hex: &str) -> bool {
+    use ring::signature::UnparsedPublicKey;
+    let mut pub_key_bytes = [0u8; 32];
+    if pub_id_hex.len() != 64 { return false; }
+    for i in 0..32 {
+        if let Ok(b) = u8::from_str_radix(&pub_id_hex[i*2..i*2+2], 16) {
+            pub_key_bytes[i] = b;
+        } else {
+            return false;
+        }
+    }
+    let mut sig_bytes = [0u8; 64];
+    if signature_hex.len() != 128 { return false; }
+    for i in 0..64 {
+        if let Ok(b) = u8::from_str_radix(&signature_hex[i*2..i*2+2], 16) {
+            sig_bytes[i] = b;
+        } else {
+            return false;
+        }
+    }
+    let message = format!("{}:{}:{}", pub_id_hex, pseudo, timestamp);
+    let public_key = UnparsedPublicKey::new(&ring::signature::ED25519, pub_key_bytes);
+    public_key.verify(message.as_bytes(), &sig_bytes).is_ok()
 }
 
 pub fn encrypt_and_save_media(pseudo: &str, _file_name: &str, raw_data: &[u8]) -> Result<([u8; 32], String), &'static str> {
@@ -296,7 +362,7 @@ pub fn encrypt_and_save_media(pseudo: &str, _file_name: &str, raw_data: &[u8]) -
     let cipher = ChaCha20Poly1305::new(&key.into());
     let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
 
-    let ciphertext = cipher.encrypt(&nonce, raw_data).map_err(|_| "Erreur de chiffrement du média")?;
+    let ciphertext = cipher.encrypt(&nonce, raw_data).map_err(|_| "Erreur de chiffrement du media")?;
 
     let media_folder = get_media_dir(pseudo);
     let mut rnd_name = [0u8; 16];
@@ -308,13 +374,13 @@ pub fn encrypt_and_save_media(pseudo: &str, _file_name: &str, raw_data: &[u8]) -
     file_data.extend_from_slice(&nonce);
     file_data.extend_from_slice(&ciphertext);
 
-    fs::write(&save_path, file_data).map_err(|_| "Impossible de sauvegarder le fichier chiffré")?;
+    fs::write(&save_path, file_data).map_err(|_| "Impossible de sauvegarder le fichier chiffre")?;
 
     Ok((key, save_path))
 }
 
 pub fn decrypt_media(path: &str, key: &[u8; 32]) -> Result<Vec<u8>, &'static str> {
-    let file_data = fs::read(path).map_err(|_| "Impossible de lire le fichier chiffré")?;
+    let file_data = fs::read(path).map_err(|_| "Impossible de lire le fichier chiffre")?;
     if file_data.len() < 12 {
         return Err("Fichier corrompu");
     }
@@ -323,7 +389,8 @@ pub fn decrypt_media(path: &str, key: &[u8; 32]) -> Result<Vec<u8>, &'static str
     let ciphertext = &file_data[12..];
 
     let cipher = ChaCha20Poly1305::new(key.into());
-    let dec = cipher.decrypt(nonce, ciphertext).map_err(|_| "Décodage impossible - Clé invalide")?;
+    let dec = cipher.decrypt(nonce, ciphertext).map_err(|_| "Decodage impossible - Cle invalide")?;
     
     Ok(dec)
 }
+

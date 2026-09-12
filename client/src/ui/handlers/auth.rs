@@ -100,10 +100,19 @@ impl KakolookiyamApp {
                             self.auth_error = Some("Création réseau en cours...".to_string());
 
                             let id = crypto::derive_public_id(&v_data.private_key);
+                            let mut hex_seed = String::new();
+                            for b in &v_data.private_key { use std::fmt::Write; write!(&mut hex_seed, "{:02x}", b).unwrap(); }
+
                             if let Some(tx) = self.tx_identity.take() {
-                                let _ = tx.send((id, v_data.pseudo.clone()));
+                                let _ = tx.send((id.clone(), v_data.pseudo.clone(), hex_seed.clone()));
+                                let mut sync_str = String::from("CONTACTS_SYNC");
+                                for (c_id, _) in &v_data.contacts { sync_str.push_str(":"); sync_str.push_str(c_id); }
+                                let _ = self.tx_network.send(sync_str);
                             } else {
-                                let _ = self.tx_network.send(format!("REGISTER:{}:{}", id, v_data.pseudo));
+                                let _ = self.tx_network.send(format!("REGISTER:{}:{}:{}", id, v_data.pseudo, hex_seed));
+                                let mut sync_str = String::from("CONTACTS_SYNC");
+                                for (c_id, _) in &v_data.contacts { sync_str.push_str(":"); sync_str.push_str(c_id); }
+                                let _ = self.tx_network.send(sync_str);
                             }
                             self.vault_data = Some(v_data);
                         }
@@ -126,10 +135,19 @@ impl KakolookiyamApp {
                             self.auth_error = Some("Authentification réseau en cours...".to_string());
 
                             let id = crypto::derive_public_id(&v_data.private_key);
+                            let mut hex_seed = String::new();
+                            for b in &v_data.private_key { use std::fmt::Write; write!(&mut hex_seed, "{:02x}", b).unwrap(); }
+
                             if let Some(tx) = self.tx_identity.take() {
-                                let _ = tx.send((id, v_data.pseudo.clone()));
+                                let _ = tx.send((id.clone(), v_data.pseudo.clone(), hex_seed.clone()));
+                                let mut sync_str = String::from("CONTACTS_SYNC");
+                                for (c_id, _) in &v_data.contacts { sync_str.push_str(":"); sync_str.push_str(c_id); }
+                                let _ = self.tx_network.send(sync_str);
                             } else {
-                                let _ = self.tx_network.send(format!("REGISTER:{}:{}", id, v_data.pseudo));
+                                let _ = self.tx_network.send(format!("REGISTER:{}:{}:{}", id, v_data.pseudo, hex_seed));
+                                let mut sync_str = String::from("CONTACTS_SYNC");
+                                for (c_id, _) in &v_data.contacts { sync_str.push_str(":"); sync_str.push_str(c_id); }
+                                let _ = self.tx_network.send(sync_str);
                             }
                             self.vault_data = Some(v_data);
                         }

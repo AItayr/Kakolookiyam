@@ -37,6 +37,12 @@ impl TransferManager {
         }
     }
 
+    pub fn cleanup(&mut self, target_id: &str) {
+        let prefix = format!("{}_", target_id);
+        self.outgoing.retain(|k, _| !k.starts_with(&prefix));
+        self.incoming.retain(|k, _| !k.starts_with(&prefix));
+    }
+
     pub async fn handle_message(
         &mut self,
         sender_id: &str,
@@ -71,13 +77,24 @@ impl TransferManager {
              let filename = std::str::from_utf8(parts[2]).unwrap_or("");
              let transfer_key = format!("{}_{}", sender_id, filename);
 
-             if let Some(transfer) = self.outgoing.get(&transfer_key) {
-                 let end = std::cmp::min(CHUNK_SIZE, transfer.file_data.len());
-                 let mut payload = format!("SYS:FILE_CHUNK:{}:0:", filename).into_bytes();
-                 payload.extend_from_slice(&transfer.file_data[0..end]);
+             if let Some(mut transfer) = self.outgoing.remove(&transfer_key) {
+                 if let Some(dc) = data_channels.get(sender_id).cloned() {
+                     let filename_owned = filename.to_string();
+                     tokio::spawn(async move {
+                         for index in 0..transfer.total_chunks {
+                             let start = index * CHUNK_SIZE;
+                             let end = std::cmp::min(start + CHUNK_SIZE, transfer.file_data.len());
+                             
+                             let mut payload = format!("SYS:FILE_CHUNK:{}:{}:", filename_owned, index).into_bytes();
+                             payload.extend_from_slice(&transfer.file_data[start..end]);
 
-                 if let Some(dc) = data_channels.get(sender_id) {
-                     let _ = dc.send(&bytes::Bytes::from(payload)).await;
+                             if let Err(_) = dc.send(&bytes::Bytes::from(payload)).await {
+                                 break;
+                             }
+tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                         }
+                         transfer.file_data.zeroize();
+                     });
                  }
              }
         }
@@ -92,10 +109,6 @@ impl TransferManager {
                  if index < transfer.total_chunks {
                      transfer.file_buffer.extend_from_slice(chunk_data);
                      transfer.received_chunks += 1;
-
-                     if let Some(dc) = data_channels.get(sender_id) {
-                         let _ = dc.send_text(format!("SYS:ACK_CHUNK:{}:{}", filename, index)).await;
-                     }
 
                      if transfer.received_chunks == transfer.total_chunks {
                          transfer_done = true;
@@ -122,28 +135,6 @@ impl TransferManager {
                          }
                          owned_buffer.zeroize();
                      });
-                 }
-             }
-        }
-        else if sys_cmd == "ACK_CHUNK" && parts.len() >= 4 {
-             let filename = std::str::from_utf8(parts[2]).unwrap_or("");
-             let index: usize = std::str::from_utf8(parts[3]).unwrap_or("0").parse().unwrap_or(0);
-             let transfer_key = format!("{}_{}", sender_id, filename);
-
-             if let Some(transfer) = self.outgoing.get(&transfer_key) {
-                 let next_index = index + 1;
-                 if next_index < transfer.total_chunks {
-                     let start = next_index * CHUNK_SIZE;
-                     let end = std::cmp::min(start + CHUNK_SIZE, transfer.file_data.len());
-                     
-                     let mut payload = format!("SYS:FILE_CHUNK:{}:{}:", filename, next_index).into_bytes();
-                     payload.extend_from_slice(&transfer.file_data[start..end]);
-
-                     if let Some(dc) = data_channels.get(sender_id) {
-                         let _ = dc.send(&bytes::Bytes::from(payload)).await;
-                     }
-                 } else {
-                     self.outgoing.remove(&transfer_key); 
                  }
              }
         }

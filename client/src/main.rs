@@ -18,7 +18,7 @@ pub fn main() -> iced::Result {
 
     let (tx_ui_to_p2p, rx_ui_to_p2p) = mpsc::unbounded_channel::<String>();
     let (tx_p2p_to_ui, rx_p2p_to_ui) = mpsc::unbounded_channel::<String>();
-    let (tx_identity, rx_identity) = std::sync::mpsc::channel::<(String, String)>();
+    let (tx_identity, rx_identity) = std::sync::mpsc::channel::<(String, String, String)>();
 
     std::thread::spawn(move || {
         let (tx_mic, rx_mic) = tokio::sync::mpsc::channel::<Vec<u8>>(500);
@@ -26,7 +26,7 @@ pub fn main() -> iced::Result {
 
         audio::start_hardware_audio(tx_mic, rx_speaker);
 
-        let (my_id_b64, my_pseudo) = rx_identity.recv().expect("L'interface s'est fermée avant le déverrouillage.");
+        let (my_id_b64, my_pseudo, my_hex_seed) = rx_identity.recv().expect("L'interface s'est fermee avant le deverrouillage.");
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
@@ -36,7 +36,8 @@ pub fn main() -> iced::Result {
                 rx_ui_to_p2p,
                 tx_p2p_to_ui,
                 my_id_b64,
-                my_pseudo
+                my_pseudo,
+                my_hex_seed
             ).await;
         });
     });

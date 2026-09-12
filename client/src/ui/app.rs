@@ -16,7 +16,7 @@ pub enum AppState {
 pub struct Flags {
     pub tx_network: UnboundedSender<String>,
     pub rx_network: UnboundedReceiver<String>,
-    pub tx_identity: std::sync::mpsc::Sender<(String, String)>,
+    pub tx_identity: std::sync::mpsc::Sender<(String, String, String)>,
 }
 
 pub struct KakolookiyamApp {
@@ -34,7 +34,7 @@ pub struct KakolookiyamApp {
     pub(crate) status_message: String,
     pub(crate) tx_network: UnboundedSender<String>,
     pub(crate) rx_network: Arc<Mutex<Option<UnboundedReceiver<String>>>>,
-    pub(crate) tx_identity: Option<std::sync::mpsc::Sender<(String, String)>>,
+    pub(crate) tx_identity: Option<std::sync::mpsc::Sender<(String, String, String)>>,
 
     pub(crate) idle_seconds: u32,
     pub(crate) incoming_call: Option<(String, String, String, String)>,
