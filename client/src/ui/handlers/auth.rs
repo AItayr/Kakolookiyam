@@ -92,24 +92,27 @@ impl KakolookiyamApp {
                         contacts: std::collections::HashMap::new(),
                         groups: std::collections::HashMap::new(),
                         chat_history: std::collections::HashMap::new(),
+                        session_key: None,
+                        session_salt: None,
                     };
 
                     match crypto::save_vault(self.password_input.expose_secret(), &mut v_data) {
                         Ok(_) => {
                             self.master_password = Some(secrecy::Secret::new(self.password_input.expose_secret().clone()));
-                            self.auth_error = Some("Création réseau en cours...".to_string());
+                            self.auth_error = None;
 
                             let id = crypto::derive_public_id(&v_data.private_key);
                             let mut hex_seed = String::new();
                             for b in &v_data.private_key { use std::fmt::Write; write!(&mut hex_seed, "{:02x}", b).unwrap(); }
 
                             if let Some(tx) = self.tx_identity.take() {
-                                let _ = tx.send((id.clone(), v_data.pseudo.clone(), hex_seed.clone()));
+                                let _ = tx.send((id.clone(), v_data.pseudo.clone(), v_data.private_key));
                                 let mut sync_str = String::from("CONTACTS_SYNC");
                                 for (c_id, _) in &v_data.contacts { sync_str.push_str(":"); sync_str.push_str(c_id); }
                                 let _ = self.tx_network.send(sync_str);
                             } else {
-                                let _ = self.tx_network.send(format!("REGISTER:{}:{}:{}", id, v_data.pseudo, hex_seed));
+                                let _ = self.tx_network.send(format!("REGISTER:{}:{}", id, v_data.pseudo));
+                                let _ = self.tx_secrets.send(v_data.private_key);
                                 let mut sync_str = String::from("CONTACTS_SYNC");
                                 for (c_id, _) in &v_data.contacts { sync_str.push_str(":"); sync_str.push_str(c_id); }
                                 let _ = self.tx_network.send(sync_str);
@@ -132,19 +135,20 @@ impl KakolookiyamApp {
                     match crypto::unlock_vault(trimmed, self.password_input.expose_secret()) {
                         Ok(v_data) => {
                             self.master_password = Some(secrecy::Secret::new(self.password_input.expose_secret().clone()));
-                            self.auth_error = Some("Authentification réseau en cours...".to_string());
+                            self.auth_error = None;
 
                             let id = crypto::derive_public_id(&v_data.private_key);
                             let mut hex_seed = String::new();
                             for b in &v_data.private_key { use std::fmt::Write; write!(&mut hex_seed, "{:02x}", b).unwrap(); }
 
                             if let Some(tx) = self.tx_identity.take() {
-                                let _ = tx.send((id.clone(), v_data.pseudo.clone(), hex_seed.clone()));
+                                let _ = tx.send((id.clone(), v_data.pseudo.clone(), v_data.private_key));
                                 let mut sync_str = String::from("CONTACTS_SYNC");
                                 for (c_id, _) in &v_data.contacts { sync_str.push_str(":"); sync_str.push_str(c_id); }
                                 let _ = self.tx_network.send(sync_str);
                             } else {
-                                let _ = self.tx_network.send(format!("REGISTER:{}:{}:{}", id, v_data.pseudo, hex_seed));
+                                let _ = self.tx_network.send(format!("REGISTER:{}:{}", id, v_data.pseudo));
+                                let _ = self.tx_secrets.send(v_data.private_key);
                                 let mut sync_str = String::from("CONTACTS_SYNC");
                                 for (c_id, _) in &v_data.contacts { sync_str.push_str(":"); sync_str.push_str(c_id); }
                                 let _ = self.tx_network.send(sync_str);

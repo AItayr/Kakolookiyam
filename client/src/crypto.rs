@@ -42,11 +42,18 @@ pub struct VaultData {
     pub groups: HashMap<String, GroupData>,
     #[zeroize(skip)]
     pub chat_history: HashMap<String, Vec<MessageEntry>>,
+    #[serde(skip)]
+    pub session_key: Option<[u8; 32]>,
+    #[serde(skip)]
+    pub session_salt: Option<String>,
 }
 
 impl VaultData {
     pub fn zeroize_deep(&mut self) {
         self.private_key.zeroize();
+        if let Some(mut k) = self.session_key.take() {
+            k.zeroize();
+        }
         self.pseudo.zeroize();
         for (_, msgs) in self.chat_history.iter_mut() {
             for m in msgs.iter_mut() {
@@ -169,18 +176,27 @@ fn derive_key(password: &str, salt: &SaltString) -> [u8; 32] {
     key
 }
 
-pub fn save_vault(password: &str, data: &VaultData) -> Result<(), &'static str> {
+pub fn save_vault(password: &str, data: &mut VaultData) -> Result<(), &'static str> {
     validate_password(password)?;
 
-    let salt = SaltString::generate(&mut OsRng);
-    let key = derive_key(password, &salt);
+    let (key, salt_str) = if let (Some(k), Some(s)) = (data.session_key, &data.session_salt) {
+        (k, s.clone())
+    } else {
+        let salt = SaltString::generate(&mut OsRng);
+        let key = derive_key(password, &salt);
+        let salt_string = salt.as_str().to_string();
+        data.session_key = Some(key);
+        data.session_salt = Some(salt_string.clone());
+        (key, salt_string)
+    };
+
     let cipher = ChaCha20Poly1305::new(&key.into());
     let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
 
     let payload = serde_json::to_vec(data).map_err(|_| "Erreur JSON")?;
     let ciphertext = cipher.encrypt(&nonce, payload.as_ref()).map_err(|_| "Erreur de chiffrement")?;
 
-    let salt_bytes = salt.as_str().as_bytes();
+    let salt_bytes = salt_str.as_bytes();
     let mut file_data = Vec::new();
 
     file_data.extend_from_slice(&(salt_bytes.len() as u32).to_le_bytes());
@@ -242,7 +258,10 @@ pub fn unlock_vault(pseudo: &str, password: &str) -> Result<VaultData, &'static 
 
     let payload = cipher.decrypt(nonce, ciphertext).map_err(|_| "Mot de passe erroné ou corruption de données")?;
 
-    let vault_data: VaultData = serde_json::from_slice(&payload).map_err(|_| "Format de fichier invalide")?;
+    let mut vault_data: VaultData = serde_json::from_slice(&payload).map_err(|_| "Format de fichier invalide")?;
+    
+    vault_data.session_key = Some(key);
+    vault_data.session_salt = Some(salt_str.to_string());
 
     // [MITIGATION SWAP/PAGEFILE] Verrouille la clé privée en RAM pure pour interdire la pagination sur le disque 
     let _ = region::lock(vault_data.private_key.as_ptr(), vault_data.private_key.len());
@@ -284,7 +303,7 @@ pub fn add_message_to_vault(password: &str, vault_data: &mut VaultData, dest: &s
     }
 
     if modified {
-        let _ = save_vault(password, &vault_data);
+        let _ = save_vault(password, vault_data);
     }
 
     Ok(vault_data.clone())

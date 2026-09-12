@@ -13,7 +13,8 @@ pub struct OutgoingTransfer {
     pub total_chunks: usize,
 }
 
-#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+// Removed Clone to allow std::fs::File, skip zeroize on it
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct IncomingTransfer {
     #[zeroize(skip)]
     pub key_b64: String,
@@ -21,7 +22,10 @@ pub struct IncomingTransfer {
     pub total_chunks: usize,
     #[zeroize(skip)]
     pub received_chunks: usize,
-    pub file_buffer: Vec<u8>,
+    #[zeroize(skip)]
+    pub temp_path: String,
+    #[zeroize(skip)]
+    pub file_handle: Option<std::fs::File>,
 }
 
 pub struct TransferManager {
@@ -59,14 +63,27 @@ impl TransferManager {
         if sys_cmd == "FILE_META" && parts.len() == 5 {
             let filename = std::str::from_utf8(parts[2]).unwrap_or("").to_string();
             let total: usize = std::str::from_utf8(parts[3]).unwrap_or("0").parse().unwrap_or(0);
-            let key_b64 = std::str::from_utf8(parts[4]).unwrap_or("").to_string();
+            
+            // SECURITY FIX: HARD LIMIT ON CHUNKS (1 GB max)
+            if total > 65536 {
+                return;
+            }
 
+            let key_b64 = std::str::from_utf8(parts[4]).unwrap_or("").to_string();
             let file_id = format!("{}_{}", sender_id, filename);
+            let temp_path = format!("{}/kako_tmp_{}", std::env::temp_dir().display(), file_id.replace(|c: char| !c.is_alphanumeric(), "_"));
+
+            // Initialize empty file for streaming
+            let _ = tokio::fs::write(&temp_path, b"").await;
+
+            let handle = std::fs::OpenOptions::new().write(true).create(true).truncate(true).open(&temp_path).ok();
+            
             self.incoming.insert(file_id, IncomingTransfer {
                 key_b64,
                 total_chunks: total,
                 received_chunks: 0,
-                file_buffer: Vec::with_capacity(total * CHUNK_SIZE),
+                temp_path,
+                file_handle: handle,
             });
 
             if let Some(dc) = data_channels.get(sender_id) {
@@ -91,7 +108,7 @@ impl TransferManager {
                              if let Err(_) = dc.send(&bytes::Bytes::from(payload)).await {
                                  break;
                              }
-tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                             tokio::time::sleep(std::time::Duration::from_millis(5)).await;
                          }
                          transfer.file_data.zeroize();
                      });
@@ -105,24 +122,36 @@ tokio::time::sleep(std::time::Duration::from_millis(5)).await;
 
              let file_id = format!("{}_{}", sender_id, filename);
              let mut transfer_done = false;
+             
              if let Some(transfer) = self.incoming.get_mut(&file_id) {
                  if index < transfer.total_chunks {
-                     transfer.file_buffer.extend_from_slice(chunk_data);
-                     transfer.received_chunks += 1;
+                     // SECURITY FIX: STREAM TO DISK
+                     if let Some(file) = &mut transfer.file_handle {
+                         use std::io::Write;
+                         let _ = file.write_all(chunk_data);
+                     }
 
+                     transfer.received_chunks += 1;
+                     if transfer.received_chunks == transfer.total_chunks {
+                         if let Some(mut f) = transfer.file_handle.take() {
+                             let _ = f.sync_all(); // Flush disk guarantees
+                         }
+                     }
                      if transfer.received_chunks == transfer.total_chunks {
                          transfer_done = true;
                      }
                  }
              }
+
              if transfer_done {
-                 if let Some(mut transfer) = self.incoming.remove(&file_id) {
-                     let mut owned_buffer = std::mem::take(&mut transfer.file_buffer);
+                 if let Some(transfer) = self.incoming.remove(&file_id) {
                      let key_owned = transfer.key_b64.clone();
                      let sender_owned = sender_id.to_string();
                      let filename_owned = filename.to_string();
                      let tx_ui_clone = tx_ui.clone();
                      let pseudo_clone = my_pseudo.to_string();
+                     let temp_path_owned = transfer.temp_path.clone();
+
                      tokio::spawn(async move {
                          let media_dir = crate::crypto::get_media_dir(&pseudo_clone);
                          let safe_filename = filename_owned.replace('|', "_");
@@ -130,10 +159,16 @@ tokio::time::sleep(std::time::Duration::from_millis(5)).await;
                          path_buf.push(safe_filename);
                          let save_path = path_buf.to_string_lossy().to_string();
 
-                         if tokio::fs::write(&save_path, &owned_buffer).await.is_ok() {
+                         // Move/Rename file from temp_path to save_path
+                         if tokio::fs::rename(&temp_path_owned, &save_path).await.is_ok() {
                              let _ = tx_ui_clone.send(format!("FILE_RECV:{}:{}:{}:{}", sender_owned, filename_owned, key_owned, save_path));
+                         } else {
+                             // Fallback to copy+remove if across file systems
+                             if tokio::fs::copy(&temp_path_owned, &save_path).await.is_ok() {
+                                 let _ = tokio::fs::remove_file(&temp_path_owned).await;
+                                 let _ = tx_ui_clone.send(format!("FILE_RECV:{}:{}:{}:{}", sender_owned, filename_owned, key_owned, save_path));
+                             }
                          }
-                         owned_buffer.zeroize();
                      });
                  }
              }

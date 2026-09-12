@@ -18,7 +18,8 @@ pub fn main() -> iced::Result {
 
     let (tx_ui_to_p2p, rx_ui_to_p2p) = mpsc::unbounded_channel::<String>();
     let (tx_p2p_to_ui, rx_p2p_to_ui) = mpsc::unbounded_channel::<String>();
-    let (tx_identity, rx_identity) = std::sync::mpsc::channel::<(String, String, String)>();
+    let (tx_identity, rx_identity) = std::sync::mpsc::channel::<(String, String, [u8; 32])>();
+    let (tx_secrets, rx_secrets) = tokio::sync::mpsc::unbounded_channel::<[u8; 32]>();
 
     std::thread::spawn(move || {
         let (tx_mic, rx_mic) = tokio::sync::mpsc::channel::<Vec<u8>>(500);
@@ -26,7 +27,7 @@ pub fn main() -> iced::Result {
 
         audio::start_hardware_audio(tx_mic, rx_speaker);
 
-        let (my_id_b64, my_pseudo, my_hex_seed) = rx_identity.recv().expect("L'interface s'est fermee avant le deverrouillage.");
+        let (my_id_b64, my_pseudo, my_secret) = rx_identity.recv().expect("L'interface s'est fermee avant le deverrouillage.");
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
@@ -37,7 +38,8 @@ pub fn main() -> iced::Result {
                 tx_p2p_to_ui,
                 my_id_b64,
                 my_pseudo,
-                my_hex_seed
+                my_secret,
+                rx_secrets
             ).await;
         });
     });
@@ -46,6 +48,7 @@ pub fn main() -> iced::Result {
         tx_network: tx_ui_to_p2p,
         rx_network: rx_p2p_to_ui,
         tx_identity,
+        tx_secrets,
     };
 
     let default_font = Font {

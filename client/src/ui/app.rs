@@ -16,7 +16,8 @@ pub enum AppState {
 pub struct Flags {
     pub tx_network: UnboundedSender<String>,
     pub rx_network: UnboundedReceiver<String>,
-    pub tx_identity: std::sync::mpsc::Sender<(String, String, String)>,
+    pub tx_identity: std::sync::mpsc::Sender<(String, String, [u8; 32])>,
+    pub tx_secrets: tokio::sync::mpsc::UnboundedSender<[u8; 32]>,
 }
 
 pub struct KakolookiyamApp {
@@ -34,7 +35,8 @@ pub struct KakolookiyamApp {
     pub(crate) status_message: String,
     pub(crate) tx_network: UnboundedSender<String>,
     pub(crate) rx_network: Arc<Mutex<Option<UnboundedReceiver<String>>>>,
-    pub(crate) tx_identity: Option<std::sync::mpsc::Sender<(String, String, String)>>,
+    pub(crate) tx_identity: Option<std::sync::mpsc::Sender<(String, String, [u8; 32])>>,
+    pub(crate) tx_secrets: tokio::sync::mpsc::UnboundedSender<[u8; 32]>,
 
     pub(crate) idle_seconds: u32,
     pub(crate) incoming_call: Option<(String, String, String, String)>,
@@ -83,6 +85,7 @@ impl KakolookiyamApp {
                 tx_network: flags.tx_network,
                 rx_network: Arc::new(Mutex::new(Some(flags.rx_network))),
                 tx_identity: Some(flags.tx_identity),
+                tx_secrets: flags.tx_secrets,
                 idle_seconds: 0,
                 incoming_call: None,
                 incoming_call_timer: 0,

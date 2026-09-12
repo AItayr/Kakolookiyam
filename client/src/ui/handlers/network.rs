@@ -323,21 +323,31 @@ impl KakolookiyamApp {
                         let sys_parts: Vec<&str> = text.splitn(5, ':').collect();
 
                         if sys_parts.len() == 5 {
-                            let grp_id = sys_parts[2].trim().to_string();
-                            let grp_name = sys_parts[3].trim().to_string();
-                            let members: Vec<String> = sys_parts[4].split(',').map(|s| s.trim().to_string()).collect();
+                            let grp_id = sys_parts[2].trim().chars().take(100).collect::<String>();
+                            let grp_name = sys_parts[3].trim().chars().take(50).collect::<String>();
+                            let members: Vec<String> = sys_parts[4].split(',').take(100).map(|s| s.trim().chars().take(100).collect::<String>()).collect();
 
                             if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
                                 let is_new = !vd.groups.contains_key(&grp_id);
+                                let mut authorized = is_new;
+                                if !is_new {
+                                    if let Some(existing) = vd.groups.get(&grp_id) {
+                                        if existing.members.contains(&sender_id) {
+                                            authorized = true;
+                                        }
+                                    }
+                                }
 
-                                vd.groups.insert(grp_id.clone(), crate::crypto::GroupData {
-                                    name: grp_name.clone(),
-                                    members
-                                });
-                                let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
+                                if authorized {
+                                    vd.groups.insert(grp_id.clone(), crate::crypto::GroupData {
+                                        name: grp_name.clone(),
+                                        members
+                                    });
+                                    let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
 
-                                if is_new {
-                                    self.status_message = format!("✅ Invité dans le serveur {} !", grp_name);
+                                    if is_new {
+                                        self.status_message = format!("✅ Invité dans le serveur {} !", grp_name);
+                                    }
                                 }
                             }
                         }
