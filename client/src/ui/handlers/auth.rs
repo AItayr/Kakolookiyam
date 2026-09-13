@@ -102,8 +102,6 @@ impl KakolookiyamApp {
                             self.auth_error = None;
 
                             let id = crypto::derive_public_id(&v_data.private_key);
-                            let mut hex_seed = String::new();
-                            for b in &v_data.private_key { use std::fmt::Write; write!(&mut hex_seed, "{:02x}", b).unwrap(); }
 
                             if let Some(tx) = self.tx_identity.take() {
                                 let _ = tx.send((id.clone(), v_data.pseudo.clone(), v_data.private_key));
@@ -138,8 +136,6 @@ impl KakolookiyamApp {
                             self.auth_error = None;
 
                             let id = crypto::derive_public_id(&v_data.private_key);
-                            let mut hex_seed = String::new();
-                            for b in &v_data.private_key { use std::fmt::Write; write!(&mut hex_seed, "{:02x}", b).unwrap(); }
 
                             if let Some(tx) = self.tx_identity.take() {
                                 let _ = tx.send((id.clone(), v_data.pseudo.clone(), v_data.private_key));

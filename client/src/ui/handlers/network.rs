@@ -177,6 +177,20 @@ impl KakolookiyamApp {
                         let sys_parts: Vec<&str> = text.splitn(6, ':').collect();
                         if sys_parts.len() == 6 {
                             let t_id = sys_parts[2].trim().to_string();
+                            
+                            // [MITIGATION] HIGH-1d: Vrification d'autorisation SYNC_RES
+                            let mut authorized = false;
+                            if let Some(vd) = &self.vault_data {
+                                if t_id.starts_with("grp_") {
+                                    if let Some(group) = vd.groups.get(&t_id) {
+                                        if group.members.contains(&sender_id) { authorized = true; }
+                                    }
+                                } else if t_id == sender_id {
+                                    authorized = true;
+                                }
+                            }
+                            if !authorized { return Command::none(); }
+                            
                             let ts_str = sys_parts[3].trim();
                             let msg_type = sys_parts[4].trim();
                             let payload = sys_parts[5];
@@ -281,6 +295,7 @@ impl KakolookiyamApp {
         if !already_in_group {
             if let Some(vd) = &self.vault_data {
                 if let Some(group) = vd.groups.get(&grp_id) {
+                    if !group.members.contains(&sender_id) { return Command::none(); }
                     let my_id = crate::crypto::derive_public_id(&vd.private_key);
 
                     self.active_call = Some((grp_id.clone(), group.name.clone()));
@@ -378,7 +393,21 @@ impl KakolookiyamApp {
                         let sys_parts: Vec<&str> = text.splitn(4, ':').collect();
 
                         if sys_parts.len() == 4 {
-                            target_chat_id = sys_parts[2].trim().to_string();
+                            let possible_target = sys_parts[2].trim().to_string();
+                            
+                            // [MITIGATION] HIGH-1b: Vrification stricte de l'appartenance au groupe
+                            let mut authorized = false;
+                            if let Some(vd) = &self.vault_data {
+                                if let Some(group) = vd.groups.get(&possible_target) {
+                                    if group.members.contains(&sender_id) {
+                                        authorized = true;
+                                    }
+                                }
+                            }
+                            
+                            if !authorized { return Command::none(); } // Ignorer le message non autoris
+                            
+                            target_chat_id = possible_target;
                             display_text = sys_parts[3].to_string();
                         }
                     }

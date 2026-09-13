@@ -78,7 +78,10 @@ pub async fn create_peer_connection(
                     let _ = tx_sig_ice.send(Signal::Ice {
                         candidate: json.candidate,
                         sender_id: sender,
-                        target_id: target
+                        target_id: target,
+                        pseudo: String::new(),
+                        timestamp: 0,
+                        signature: String::new()
                     }).await;
                 }
             }

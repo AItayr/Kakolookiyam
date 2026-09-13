@@ -24,12 +24,12 @@ use super::webrtc_conn::create_peer_connection;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum Signal {
-    Register { id: String },
+    Register { id: String, pseudo: String, timestamp: u64, signature: String },
     Unregister { id: String },
     Offer { sdp: String, sender_id: String, target_id: String, pseudo: String, timestamp: u64, signature: String },
     ChatOffer { sdp: String, sender_id: String, target_id: String, pseudo: String, timestamp: u64, signature: String },
-    Answer { sdp: String, sender_id: String, target_id: String },
-    Ice { candidate: String, sender_id: String, target_id: String },
+    Answer { sdp: String, sender_id: String, target_id: String, pseudo: String, timestamp: u64, signature: String },
+    Ice { candidate: String, sender_id: String, target_id: String, pseudo: String, timestamp: u64, signature: String },
     Ping { msg: String }
 }
 
@@ -87,7 +87,9 @@ pub async fn start_p2p(
     };
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
 
-    let reg = Signal::Register { id: my_local_id.clone() };
+    let tstamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    let sig = crate::crypto::sign_announcement(&my_secret_arr, &my_pseudo, tstamp);
+    let reg = Signal::Register { id: my_local_id.clone(), pseudo: my_pseudo.clone(), timestamp: tstamp, signature: sig };
     let _ = ws_sender.send(Message::Text(serde_json::to_string(&reg).unwrap().into())).await;
 
     let (tx_signal, mut rx_signal) = tokio::sync::mpsc::channel::<Signal>(32);
@@ -129,10 +131,10 @@ pub async fn start_p2p(
                         if let Ok(new_secret) = rx_secrets.try_recv() {
                             my_secret = new_secret.to_vec();
                         }
-                        let _ = tx_signal.send(Signal::Register { id: my_local_id.clone() }).await;
+                        let _ = tx_signal.send(Signal::Register { id: my_local_id.clone(), pseudo: String::new(), timestamp: 0, signature: String::new() }).await;
                     } else if parts.len() == 2 {
                         my_local_id = parts[1].to_string();
-                        let _ = tx_signal.send(Signal::Register { id: my_local_id.clone() }).await;
+                        let _ = tx_signal.send(Signal::Register { id: my_local_id.clone(), pseudo: String::new(), timestamp: 0, signature: String::new() }).await;
                     }
                 }
                 else if cmd.starts_with("LOGOUT:") {
@@ -313,7 +315,7 @@ pub async fn start_p2p(
                                         if pc_clone.set_local_description(answer).await.is_ok() {
                                             let _ = gather_complete.recv().await;
                                             if let Some(local_desc) = pc_clone.local_description().await {
-                                                let _ = tx_sig.send(Signal::Answer { sdp: local_desc.sdp, sender_id: my_id, target_id: tgt_id }).await;
+                                                let _ = tx_sig.send(Signal::Answer { sdp: local_desc.sdp, sender_id: my_id, target_id: tgt_id, pseudo: String::new(), timestamp: 0, signature: String::new() }).await;
                                             }
                                         }
                                     });
@@ -532,7 +534,25 @@ pub async fn start_p2p(
                     }
                 }
             }
-            Some(signal) = rx_signal.recv() => {
+            Some(mut signal) = rx_signal.recv() => {
+                let tstamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                let sig = crate::crypto::sign_announcement(&my_secret, &my_pseudo, tstamp);
+                match &mut signal {
+                    Signal::Answer { pseudo, timestamp, signature, .. } |
+                    Signal::Ice { pseudo, timestamp, signature, .. } => {
+                        *pseudo = my_pseudo.clone();
+                        *timestamp = tstamp;
+                        *signature = sig;
+                    },
+                    Signal::Register { id, pseudo, timestamp, signature } => {
+                        // Normally ID is already set
+                        *pseudo = my_pseudo.clone();
+                        *timestamp = tstamp;
+                        *signature = crate::crypto::sign_announcement(&my_secret, &my_pseudo, tstamp);
+                    },
+                    _ => {}
+                }
+                
                 if let Ok(json) = serde_json::to_string(&signal) {
                     let _ = ws_sender.send(Message::Text(json.into())).await;
                 }
@@ -604,13 +624,15 @@ pub async fn start_p2p(
                                                 }
                                                 if let Ok(answer) = pc.create_answer(None).await {
                                     if pc.set_local_description(answer.clone()).await.is_ok() {
-                                        let _ = tx_signal.send(Signal::Answer { sdp: answer.sdp, sender_id: my_local_id.clone(), target_id: sender_id }).await;
+                                        let _ = tx_signal.send(Signal::Answer { sdp: answer.sdp, sender_id: my_local_id.clone(), target_id: sender_id, pseudo: String::new(), timestamp: 0, signature: String::new() }).await;
                                     }
                                 }
                                             }
                                         }
                                     }
-                                    Signal::Answer { sdp, sender_id, .. } => {
+                                    Signal::Answer { sdp, sender_id, pseudo, timestamp, signature, .. } => {
+                                        if !crate::crypto::verify_announcement(&sender_id, &pseudo, timestamp, &signature) { continue; }
+
                                         if let Some(pc) = peers.get(&sender_id) {
                                             let mut desc = RTCSessionDescription::default();
                                             desc.sdp_type = RTCSdpType::Answer; desc.sdp = sdp;
@@ -625,7 +647,9 @@ pub async fn start_p2p(
                                         }
                                     }
                                     
-                                    Signal::Ice { candidate, sender_id, .. } => {
+                                    Signal::Ice { candidate, sender_id, pseudo, timestamp, signature, .. } => {
+                                        if !crate::crypto::verify_announcement(&sender_id, &pseudo, timestamp, &signature) { continue; }
+
                                         let mut handled = false;
                                         if let Some(pc) = peers.get(&sender_id) {
                                             if pc.remote_description().await.is_some() {
