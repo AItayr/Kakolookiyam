@@ -38,6 +38,9 @@ pub struct VaultData {
     pub pseudo: String,
     #[zeroize(skip)]
     pub contacts: HashMap<String, String>,
+    #[serde(default)]
+    #[zeroize(skip)]
+    pub pending_requests: HashMap<String, String>,
     #[zeroize(skip)]
     pub groups: HashMap<String, GroupData>,
     #[zeroize(skip)]

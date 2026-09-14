@@ -169,7 +169,8 @@ impl KakolookiyamApp {
             => self.handle_call(message),
 
             Message::SelectChat(_) | Message::DeselectChat | Message::ChatInputChanged(_) |
-            Message::SendChatMessage | Message::CopyIdClicked | Message::CopyContactId(_)
+            Message::SendChatMessage | Message::CopyIdClicked | Message::CopyContactId(_) |
+            Message::AcceptRequest(_) | Message::RejectRequest(_)
             => self.handle_chat(message),
 
             Message::OpenFileDialog | Message::FileSelected(_) | Message::FileRead(_) |

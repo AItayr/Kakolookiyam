@@ -1,3 +1,4 @@
+use secrecy::ExposeSecret;
 use iced::Task as Command;
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
@@ -11,6 +12,15 @@ impl KakolookiyamApp {
                 self.peer_id_input = val;
             }
             Message::ConnectClicked => {
+                if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
+                    if !self.peer_id_input.trim().is_empty() {
+                        let id = self.peer_id_input.trim().to_string();
+                        if !vd.contacts.contains_key(&id) && !vd.pending_requests.contains_key(&id) {
+                            vd.contacts.insert(id.clone(), "Ajout manuel (Inconnu)".to_string());
+                            let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
+                        }
+                    }
+                }
                 self.status_message = "🔗 En attente de l'interlocuteur...".to_string();
                 let _ = self.tx_network.send(format!("CALL:{}", self.peer_id_input));
             }

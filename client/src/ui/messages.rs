@@ -31,6 +31,8 @@ pub enum Message {
     SendChatMessage,
     CopyIdClicked,
     CopyContactId(String),
+    AcceptRequest(String),
+    RejectRequest(String),
 
     // --- GESTION DES GROUPES ---
     NewGroupInputChanged(String),

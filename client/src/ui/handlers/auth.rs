@@ -90,6 +90,7 @@ impl KakolookiyamApp {
                         private_key: crypto::generate_secure_secret(),
                         pseudo: trimmed.to_string(),
                         contacts: std::collections::HashMap::new(),
+                        pending_requests: std::collections::HashMap::new(),
                         groups: std::collections::HashMap::new(),
                         chat_history: std::collections::HashMap::new(),
                         session_key: None,

@@ -257,6 +257,14 @@ impl KakolookiyamApp {
                                         };
 
                                         if is_new {
+                                            // -- EVENT SOURCING: Auto-cicatrisation des departs! --
+                                            if parsed_content.starts_with("SYS:EVT:LEAVE:") {
+                                                let left_id = parsed_content.trim_start_matches("SYS:EVT:LEAVE:").trim();
+                                                if let Some(group) = vd.groups.get_mut(&t_id) {
+                                                    group.members.retain(|m| m.trim().to_lowercase() != left_id.to_lowercase());
+                                                }
+                                            }
+
                                             let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
                                             let is_currently_viewed = self.selected_chat.as_ref() == Some(&t_id)
                                                                    || self.active_call.as_ref().map(|(id, _)| id) == Some(&t_id);
@@ -451,6 +459,16 @@ impl KakolookiyamApp {
 
                     if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
                         if !vd.contacts.contains_key(&c_id) {
+                            if !vd.pending_requests.contains_key(&c_id) {
+                                vd.pending_requests.insert(c_id, c_pseudo);
+                                let _ = crypto::save_vault(pwd.expose_secret(), vd);
+                                self.status_message = "Nouvelle demande de contact en attente !".to_string();
+                            } else {
+                                // Mettre   jour le pseudo de la demande en attente
+                                vd.pending_requests.insert(c_id, c_pseudo);
+                            }
+                        } else {
+                            // C'est un de nos contacts. Mettons   jour son pseudo officiel s'il tait inconnu !
                             vd.contacts.insert(c_id, c_pseudo);
                             let _ = crypto::save_vault(pwd.expose_secret(), vd);
                         }
@@ -465,7 +483,34 @@ impl KakolookiyamApp {
                     let caller_grp_id = parts[2].trim().to_string();
                     let sdp = parts[3].to_string();
 
-                                        if let Some((active_id, _)) = &self.active_call {
+                                        // --- [MED-4] Anti-Spam / Ligne Occupée ---
+                    if let Some((active_id, _)) = &self.active_call {
+                        if active_id != &caller_grp_id && active_id != &caller_id {
+                            // BLOCK if we are P2P and someone else calls us, OR we are in a group and someone OUTSIDE the group calls us.
+                            // However, we MUST NOT block if it's a group call and someone from the same group is calling us.
+                            // But wait! If `caller_grp_id` is empty, someone is calling us P2P!
+                            // If `caller_grp_id` is empty, AND `caller_id` != `active_id`, we MUST REJECT!
+                            if caller_grp_id.is_empty() || caller_grp_id != *active_id {
+                                let _ = self.tx_network.send(format!("REJECT:{}", caller_id));
+                                if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
+                                    let entry = crate::crypto::MessageEntry {
+                                        author: "Système".to_string(),
+                                        content: "📞 Appel manqué (Ligne occupée)".to_string(),
+                                        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+                                        is_media: false,
+                                        media_key: None,
+                                        media_path: None,
+                                    };
+                                    vd.chat_history.entry(caller_id.clone()).or_default().push(entry);
+                                    let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
+                                }
+                                return iced::Task::none(); // On ignore silencieusement l'appel à l'écran
+                            }
+                        }
+                    }
+                    
+                    // Old flawed auto-accept logic is removed.
+                    if let Some((active_id, _)) = &self.active_call {
                         if active_id.starts_with("grp_") {
                             if let Some(vd) = &self.vault_data {
                                 if let Some(group) = vd.groups.get(active_id) {
@@ -475,16 +520,7 @@ impl KakolookiyamApp {
                                     }
                                 }
                             }
-                        } else {
-                            if let Some(vd) = &self.vault_data {
-                                for (_grp_id, group) in &vd.groups {
-                                    if group.members.contains(active_id) && group.members.contains(&caller_id) {
-                                        let _ = self.tx_network.send(format!("ACCEPT:{}:{}", caller_id, sdp));
-                                        return Command::none();
-                                    }
-                                }
-                            }
-                        }
+                        } 
                     }
 
                     let mut caller_pseudo = if let Some(vd) = &self.vault_data {

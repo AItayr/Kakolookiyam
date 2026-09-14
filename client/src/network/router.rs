@@ -544,7 +544,7 @@ pub async fn start_p2p(
                         *timestamp = tstamp;
                         *signature = sig;
                     },
-                    Signal::Register { id, pseudo, timestamp, signature } => {
+                    Signal::Register { id: _id, pseudo, timestamp, signature } => {
                         // Normally ID is already set
                         *pseudo = my_pseudo.clone();
                         *timestamp = tstamp;
@@ -578,7 +578,7 @@ pub async fn start_p2p(
                             if let Ok(signal) = serde_json::from_str::<Signal>(&text) {
                                 match signal {
                                     Signal::Offer { mut sdp, sender_id, pseudo, timestamp, signature, .. } => {
-                                        if !trusted_contacts.contains(&sender_id) { continue; }
+                                        // [FIX]: Allow unknown contacts to send offer so they can appear in pending_requests!
                                         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
                                         if timestamp < now - 60 || timestamp > now + 60 { continue; }
                                         if !crate::crypto::verify_announcement(&sender_id, &pseudo, timestamp, &signature) { continue; }
@@ -598,7 +598,7 @@ pub async fn start_p2p(
                                         let _ = tx_ui.send(format!("INCOMING_CALL:{}:{}:{}", sender_id, grp_context, sdp));
                                     }
                                     Signal::ChatOffer { sdp, sender_id, pseudo, timestamp, signature, .. } => {
-                                        if !trusted_contacts.contains(&sender_id) { continue; }
+                                        // [FIX]: Allow unknown contacts to send offer so they can appear in pending_requests!
                                         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
                                         if timestamp < now - 60 || timestamp > now + 60 { continue; }
                                         if !crate::crypto::verify_announcement(&sender_id, &pseudo, timestamp, &signature) { continue; }

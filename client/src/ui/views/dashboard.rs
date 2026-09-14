@@ -130,6 +130,21 @@ impl KakolookiyamApp {
         .spacing(15)
         .width(Length::Fill);
 
+        if !vd.pending_requests.is_empty() {
+            sidebar = sidebar.push(crate::ui::i18n::app_text(&self.language, "DEMANDES EN ATTENTE").size(16).color(iced::Color::from_rgb(1.0, 0.4, 0.4)));
+            for (id, pseudo) in &vd.pending_requests {
+                let req_row = row![
+                    crate::ui::i18n::app_text(&self.language, pseudo).size(16),
+                    Space::new().width(Length::Fill),
+                    button(crate::ui::i18n::app_text(&self.language, "V")).style(primary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style).on_press(Message::AcceptRequest(id.clone())).padding(5),
+                    button(crate::ui::i18n::app_text(&self.language, "X")).style(hangup_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style).on_press(Message::RejectRequest(id.clone())).padding(5)
+                ].spacing(5).align_y(Alignment::Center);
+                sidebar = sidebar.push(req_row);
+            }
+            sidebar = sidebar.push(Space::new().height(10));
+            sidebar = sidebar.push(iced::widget::rule::horizontal(1));
+        }
+
         sidebar = sidebar.push(crate::ui::i18n::app_text(&self.language, t(&self.language, "contacts")).size(16).color(current_muted));
 
         for (id, pseudo) in &vd.contacts {
@@ -302,6 +317,16 @@ impl KakolookiyamApp {
 
                     if let Some(history) = vd.chat_history.get(target_id) {
                         for msg in history {
+                            if msg.content.starts_with("SYS:EVT:LEAVE:") {
+                                let left_user = msg.content.trim_start_matches("SYS:EVT:LEAVE:");
+                                chat_messages = chat_messages.push(
+                                    container(crate::ui::i18n::app_text(&self.language, format!("? Le membre {} a quitt le groupe.", left_user)).size(14).color(iced::Color::from_rgb(0.8, 0.4, 0.4)))
+                                        .width(Length::Fill)
+                                        .center_x(iced::Length::Fill)
+                                );
+                                continue;
+                            }
+
                             let color = color_for_user(&msg.author, &self.current_theme);
 
                             if msg.is_media {

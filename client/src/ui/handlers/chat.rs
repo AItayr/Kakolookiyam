@@ -95,6 +95,22 @@ impl KakolookiyamApp {
                     return clipboard::write(crypto::derive_public_id(&vd.private_key));
                 }
             }
+            Message::AcceptRequest(id) => {
+                if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
+                    if let Some(pseudo) = vd.pending_requests.remove(&id) {
+                        vd.contacts.insert(id.clone(), pseudo);
+                        let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
+                        self.status_message = "?? Contact ajout !".to_string();
+                    }
+                }
+            }
+            Message::RejectRequest(id) => {
+                if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
+                    vd.pending_requests.remove(&id);
+                    let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
+                    self.status_message = "?? Demande rejete.".to_string();
+                }
+            }
             Message::CopyContactId(id) => {
                 self.status_message = "✅ ID copié dans le presse-papiers !".to_string();
                 return clipboard::write(id);
