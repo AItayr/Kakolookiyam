@@ -162,6 +162,13 @@ impl KakolookiyamApp {
                         return Command::none();
                     }
 
+                    if text == "SYS:CALL_BUSY" {
+                        self.status_message = "L'interlocuteur est déjà en ligne (Occupé).".to_string();
+                        let _ = self.tx_network.send(format!("HANGUP:{}", sender_id));
+                        self.active_call = None;
+                        return Command::none();
+                    }
+
                     if text.starts_with("SYS:SYNC_REQ:") {
                         let sys_parts: Vec<&str> = text.splitn(4, ':').collect();
                         if sys_parts.len() == 4 {
@@ -436,6 +443,14 @@ impl KakolookiyamApp {
                             media_path: None,
                         };
 
+                        // EVENT SOURCING: Auto-cicatrisation des dparts en STR (Temps Rel)
+                        if display_text.starts_with("SYS:EVT:LEAVE:") {
+                            let left_id = display_text.trim_start_matches("SYS:EVT:LEAVE:").trim();
+                            if let Some(group) = vd.groups.get_mut(&target_chat_id) {
+                                group.members.retain(|m| m.trim().to_lowercase() != left_id.to_lowercase());
+                            }
+                        }
+
                         vd.chat_history.entry(target_chat_id.clone()).or_default().push(entry);
                         let _ = crypto::save_vault(pwd.expose_secret(), vd);
                     }
@@ -491,6 +506,8 @@ impl KakolookiyamApp {
                             // But wait! If `caller_grp_id` is empty, someone is calling us P2P!
                             // If `caller_grp_id` is empty, AND `caller_id` != `active_id`, we MUST REJECT!
                             if caller_grp_id.is_empty() || caller_grp_id != *active_id {
+                                // [MED-4] Auto-Signal au correspondant pour qu'il ne poireaute pas 25s
+                                let _ = self.tx_network.send(format!("CHAT_SEND:{}:SYS:CALL_BUSY", caller_id));
                                 let _ = self.tx_network.send(format!("REJECT:{}", caller_id));
                                 if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
                                     let entry = crate::crypto::MessageEntry {
@@ -544,6 +561,11 @@ impl KakolookiyamApp {
             else if msg.starts_with("CALL_ACTIVE:") {
                 let id = msg.trim_start_matches("CALL_ACTIVE:").trim().to_string();
 
+                // Dbloquer l'ui d'appel de l'appelant
+                if self.status_message.starts_with("LOADING:") {
+                    self.status_message.clear();
+                }
+
                 if let Some((active_id, _)) = &self.active_call {
                                         if active_id.starts_with("grp_") {
                         let _ = self.tx_network.send(format!("CHAT_SEND:{}:SYS:CALL_CONTEXT:{}", id, active_id));
@@ -568,6 +590,29 @@ impl KakolookiyamApp {
                         }
                     }
                     return self.trigger_history_sync(&id);
+                }
+            }
+            else if msg.starts_with("CALL_BUSY:") {
+                let id = msg.trim_start_matches("CALL_BUSY:").trim().to_string();
+                let _ = self.tx_network.send(format!("HANGUP:{}", id));
+                
+                let mut pseudo = "L'interlocuteur".to_string();
+                if let Some(vd) = &self.vault_data {
+                    if let Some(contact_pseudo) = vd.contacts.get(&id) {
+                        pseudo = contact_pseudo.clone();
+                    }
+                }
+                
+                self.status_message = format!("📞 {} est déjà en ligne (Occupé).", pseudo);
+                
+                if let Some((active_id, _)) = &self.active_call {
+                    if active_id == &id {
+                        self.active_call = None;
+                        self.is_muted = false;
+                        let _ = self.tx_network.send("MUTE:off".to_string());
+                        self.chat_input.clear();
+                        self.chat_history.clear();
+                    }
                 }
             }
             else if msg.starts_with("CALL_ENDED:") {
@@ -603,14 +648,19 @@ impl KakolookiyamApp {
             else if msg.starts_with("TIMEOUT:") {
                 let tgt = msg.trim_start_matches("TIMEOUT:");
                 if self.active_call.is_none() {
-                    self.status_message = "L'interlocuteur n'est pas disponible.".to_string();
-                    let _ = self.tx_network.send(format!("HANGUP:{}", tgt));
+                    // [MED-4 UX] Ne pas timeout si l'appel a dj chou ou raccroch
+                    if self.status_message.starts_with("LOADING:") || self.status_message.contains("attente") {
+                        self.status_message = "L'interlocuteur n'est pas disponible.".to_string();
+                        let _ = self.tx_network.send(format!("HANGUP:{}", tgt));
+                    }
                 }
             }
             else if msg.starts_with("LOADING:") {
-                // Ignore late loading spams if call is already connected or failed
+                // Ignore late loading spams if call is already connected or failed (Anti-rebond UI)
                 if self.active_call.is_none() {
-                    self.status_message = msg;
+                    if self.status_message.starts_with("LOADING:") || self.status_message.contains("attente") {
+                        self.status_message = msg;
+                    }
                 }
             }
             else {

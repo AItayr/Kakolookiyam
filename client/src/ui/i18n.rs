@@ -252,10 +252,14 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::En, "btn_add_call") => "Add & Call",
         (Language::Ar, "btn_add_call") => "إضافة واتصال",
 
+        (Language::Fr, "member_left") => "🚪 Le membre {name} a quitté le groupe.",
+        (Language::En, "member_left") => "🚪 Member {name} has left the group.",
+        (Language::Ar, "member_left") => "🚪 غادر العضو {name} المجموعة.",
+
         // Appels
-        (Language::Fr, "call_active") => "Appel en cours",
-        (Language::En, "call_active") => "Active call",
-        (Language::Ar, "call_active") => "مكالمة جارية",
+        (Language::Fr, "banner_call_active") => "Appel en cours",
+        (Language::En, "banner_call_active") => "Active call",
+        (Language::Ar, "banner_call_active") => "مكالمة جارية",
         (Language::Fr, "call_secure_with") => "En communication sécurisée avec",
         (Language::En, "call_secure_with") => "In secure communication with",
         (Language::Ar, "call_secure_with") => "في اتصال آمن مع",

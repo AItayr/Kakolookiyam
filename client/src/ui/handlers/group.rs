@@ -133,9 +133,10 @@ impl KakolookiyamApp {
                                 let my_id = crate::crypto::derive_public_id(&vd.private_key);
                                 for member_id in &group.members {
                                     if member_id != &my_id {
+                                        // EVENT SOURCING: Envoi d'un vritable CHAT GRP pour l'historique de groupe !
                                         let _ = self.tx_network.send(format!(
-                                            "CHAT_SEND:{}:SYS:GROUP_LEAVE:{}",
-                                            member_id, grp_id
+                                            "CHAT_SEND:{}:SYS:GRP_MSG:{}:SYS:EVT:LEAVE:{}",
+                                            member_id, grp_id, my_id
                                         ));
                                     }
                                 }

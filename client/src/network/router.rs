@@ -331,6 +331,9 @@ pub async fn start_p2p(
                         let _ = pc.close().await;
                     }
                     transfer_manager.cleanup(&sender_id);
+                    
+                    // [MED-4 UX] Signale immédiatement à l'appelant que la ligne est occupée !
+                    let _ = tx_signal.send(Signal::Answer { sdp: "BUSY".to_string(), sender_id: my_local_id.clone(), target_id: sender_id, pseudo: String::new(), timestamp: 0, signature: String::new() }).await;
                 }
                 else if cmd.starts_with("HANGUP:") {
                     let target_id = cmd.trim_start_matches("HANGUP:").to_string();
@@ -632,6 +635,15 @@ pub async fn start_p2p(
                                     }
                                     Signal::Answer { sdp, sender_id, pseudo, timestamp, signature, .. } => {
                                         if !crate::crypto::verify_announcement(&sender_id, &pseudo, timestamp, &signature) { continue; }
+
+                                        if sdp == "BUSY" {
+                                            let _ = tx_ui.send(format!("CALL_BUSY:{}", sender_id));
+                                            if let Some(pc) = peers.remove(&sender_id) {
+                                                let _ = pc.close().await;
+                                            }
+                                            data_channels.remove(&sender_id);
+                                            continue;
+                                        }
 
                                         if let Some(pc) = peers.get(&sender_id) {
                                             let mut desc = RTCSessionDescription::default();

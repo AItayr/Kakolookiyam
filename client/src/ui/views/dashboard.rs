@@ -318,9 +318,12 @@ impl KakolookiyamApp {
                     if let Some(history) = vd.chat_history.get(target_id) {
                         for msg in history {
                             if msg.content.starts_with("SYS:EVT:LEAVE:") {
-                                let left_user = msg.content.trim_start_matches("SYS:EVT:LEAVE:");
+                                let left_user = msg.content.trim_start_matches("SYS:EVT:LEAVE:").trim();
+                                let display_name = vd.contacts.get(left_user).cloned().unwrap_or_else(|| left_user.to_string());
+                                let message_text = t(&self.language, "member_left").replace("{name}", &display_name);
+                                
                                 chat_messages = chat_messages.push(
-                                    container(crate::ui::i18n::app_text(&self.language, format!("? Le membre {} a quitt le groupe.", left_user)).size(14).color(iced::Color::from_rgb(0.8, 0.4, 0.4)))
+                                    container(crate::ui::i18n::app_text(&self.language, message_text).size(14).color(iced::Color::from_rgb(0.8, 0.4, 0.4)))
                                         .width(Length::Fill)
                                         .center_x(iced::Length::Fill)
                                 );
@@ -460,8 +463,42 @@ impl KakolookiyamApp {
         .width(Length::Fill)
         .align_x(alignment::Horizontal::Right);
 
-        let content = column![layout, bottom_bar].width(Length::Fill).height(Length::Fill);
+        let mut content_col = column![];
 
-        Container::new(content).width(Length::Fill).height(Length::Fill).into()
+        // --- BANDEAU D'APPEL (MED-4 UX) ---
+        if let Some((_call_id, call_pseudo)) = &self.active_call {
+            let mute_text = if self.is_muted { t(&self.language, "mic_enable") } else { t(&self.language, "mic_disable") };
+            let btn_mute = button(crate::ui::i18n::app_text(&self.language, mute_text))
+                .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
+                .on_press(Message::ToggleMute).padding(10);
+            let btn_hangup = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_hangup")))
+                .style(hangup_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
+                .on_press(Message::HangUpCall).padding(10);
+            
+            let banner = container(
+                row![
+                    row![
+                        crate::ui::i18n::app_text(&self.language, t(&self.language, "banner_call_active")).size(16).color(iced::Color::WHITE),
+                        crate::ui::i18n::app_text(&self.language, " : ").size(16).color(iced::Color::WHITE),
+                        crate::ui::i18n::app_text(&self.language, call_pseudo).size(16).color(iced::Color::WHITE),
+                    ].align_y(Alignment::Center),
+                    Space::new().width(Length::Fill),
+                    row![btn_mute, btn_hangup].spacing(15)
+                ].align_y(Alignment::Center)
+            )
+            .width(Length::Fill)
+            .padding([15, 20])
+            .style(move |_theme| iced::widget::container::Style {
+                text_color: Some(iced::Color::WHITE),
+                background: Some(iced::Background::Color(crate::ui::theme::dynamic_accent(_theme))),
+                border: iced::Border { radius: 0.0.into(), width: 0.0, color: iced::Color::TRANSPARENT },
+                shadow: iced::Shadow::default(), ..Default::default()
+            });
+            content_col = content_col.push(banner);
+        }
+
+        content_col = content_col.push(layout).push(bottom_bar).width(Length::Fill).height(Length::Fill);
+
+        Container::new(content_col).width(Length::Fill).height(Length::Fill).into()
     }
 }

@@ -12,6 +12,10 @@ impl KakolookiyamApp {
                 self.peer_id_input = val;
             }
             Message::ConnectClicked => {
+                if self.active_call.is_some() {
+                    let _ = self.handle_call(Message::HangUpCall);
+                }
+
                 if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
                     if !self.peer_id_input.trim().is_empty() {
                         let id = self.peer_id_input.trim().to_string();
@@ -25,6 +29,10 @@ impl KakolookiyamApp {
                 let _ = self.tx_network.send(format!("CALL:{}", self.peer_id_input));
             }
             Message::CallContact(target_id) => {
+                if self.active_call.is_some() {
+                    let _ = self.handle_call(Message::HangUpCall);
+                }
+
                 if target_id.starts_with("grp_") {
                     self.status_message = "📞 Conférence de groupe en cours...".to_string();
                     if let Some(vd) = &self.vault_data {

@@ -7,6 +7,7 @@ use crate::ui::theme::{text_main, text_muted, color_for_user, primary_button, se
 use crate::ui::i18n::t;
 
 impl KakolookiyamApp {
+    #[allow(dead_code)]
     pub(crate) fn view_active_call(&self) -> Element<'_, Message> {
         let current_text = text_main(&self.current_theme);
         let current_muted = text_muted(&self.current_theme);
@@ -137,7 +138,8 @@ impl KakolookiyamApp {
     }
 
     pub(crate) fn view_unlocked(&self) -> Element<'_, Message> {
-        if self.active_call.is_some() { return self.view_active_call(); }
+        // [MED-4 UX] On ne bloque plus la vue complte lorsqu'un appel est actif. Le bandeau d'appel 
+        // est directement affich tout en haut du dashboard ! (cf view_dashboard)
         if self.incoming_call.is_some() { return self.view_incoming_call(); }
         if self.status_message.starts_with("LOADING:") { return self.view_loading_screen(); }
         self.view_dashboard()
