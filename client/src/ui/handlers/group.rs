@@ -131,19 +131,24 @@ impl KakolookiyamApp {
                         if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
                             if let Some(group) = vd.groups.get(&grp_id) {
                                 let my_id = crate::crypto::derive_public_id(&vd.private_key);
+                                let is_creator = if let Some(group) = vd.groups.get(&grp_id) { group.members.first() == Some(&my_id) } else { false };
                                 for member_id in &group.members {
                                     if member_id != &my_id {
-                                        // EVENT SOURCING: Envoi d'un vritable CHAT GRP pour l'historique de groupe !
-                                        let _ = self.tx_network.send(format!(
-                                            "CHAT_SEND:{}:SYS:GRP_MSG:{}:SYS:EVT:LEAVE:{}",
-                                            member_id, grp_id, my_id
-                                        ));
+                                        if is_creator {
+                                            let _ = self.tx_network.send(format!("CHAT_SEND:{}:SYS:GRP_DEL:{}", member_id, grp_id));
+                                        } else {
+                                            let _ = self.tx_network.send(format!(
+                                                "CHAT_SEND:{}:SYS:GRP_MSG:{}:SYS:EVT:LEAVE:{}:{}",
+                                                member_id, grp_id, my_id, std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()
+                                            ));
+                                        }
                                     }
                                 }
                             }
 
                             vd.groups.remove(&grp_id);
                             vd.chat_history.remove(&grp_id);
+                            vd.tombstones.insert(grp_id.clone());
                             let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
 
                             self.selected_chat = None;

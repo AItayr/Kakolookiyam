@@ -1,4 +1,3 @@
-use secrecy::ExposeSecret;
 use iced::Task as Command;
 use crate::ui::app::{KakolookiyamApp, AppState};
 use crate::ui::messages::Message;
@@ -55,7 +54,7 @@ impl KakolookiyamApp {
                             if let Ok(timestamp) = ts_str.parse::<u64>() {
                                 if let Ok(decoded_bytes) = BASE64_STANDARD.decode(b64_content) {
                                     if let Ok(content_str) = String::from_utf8(decoded_bytes) {
-                                        if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
+                                        if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
 
                                             let mut modified = false;
                                             let mut newly_added = false;
@@ -63,7 +62,7 @@ impl KakolookiyamApp {
                                             {
                                                 let history = vd.chat_history.entry(target_id.clone()).or_default();
 
-                                                if let Some(existing) = history.iter_mut().find(|m| m.timestamp == timestamp && m.author == author && m.content == content_str) {
+                                                if let Some(existing) = history.iter_mut().find(|m| m.is_media && (m.timestamp.max(timestamp) - m.timestamp.min(timestamp) <= 5)) {
                                                     if existing.media_path.as_deref() != Some(&path) {
                                                         existing.media_path = Some(path.clone());
                                                         existing.media_key = Some(key_bytes);
@@ -86,9 +85,8 @@ impl KakolookiyamApp {
                                             }
 
                                             if modified {
-                                                let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
-                                                let is_currently_viewed = self.selected_chat.as_ref() == Some(&target_id)
-                                                                       || self.active_call.as_ref().map(|(id, _)| id) == Some(&target_id);
+                                                self.needs_save = true;
+                                                let is_currently_viewed = self.selected_chat.as_ref() == Some(&target_id);
 
                                                 if is_currently_viewed {
                                                     self.chat_history.clear();
@@ -126,7 +124,7 @@ impl KakolookiyamApp {
                         "Inconnu".to_string()
                     };
 
-                    if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
+                    if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
                         let entry = crypto::MessageEntry {
                             author: sender_pseudo.clone(),
                             content: format!("📎 Fichier reçu : {}", display_filename),
@@ -137,11 +135,10 @@ impl KakolookiyamApp {
                         };
 
                         vd.chat_history.entry(target_chat_id.clone()).or_default().push(entry);
-                        let _ = crypto::save_vault(pwd.expose_secret(), vd);
+                        self.needs_save = true;
                     }
 
-                    let is_currently_viewed = self.selected_chat.as_ref() == Some(&target_chat_id)
-                                           || self.active_call.as_ref().map(|(id, _)| id) == Some(&target_chat_id);
+                    let is_currently_viewed = self.selected_chat.as_ref() == Some(&target_chat_id);
 
                     if is_currently_viewed {
                         self.chat_history.push((sender_pseudo, format!("📎 Fichier reçu : {}", display_filename)));
@@ -169,6 +166,30 @@ impl KakolookiyamApp {
                         return Command::none();
                     }
 
+                    if text.starts_with("SYS:GRP_DEL:") {
+                        let sys_parts: Vec<&str> = text.splitn(3, ':').collect();
+                        if sys_parts.len() == 3 {
+                            let grp_id = sys_parts[2].trim().to_string();
+                            if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
+                                let mut is_creator = false;
+                                if let Some(group) = vd.groups.get(&grp_id) {
+                                    if group.members.first() == Some(&sender_id) {
+                                        is_creator = true;
+                                    }
+                                }
+                                if is_creator {
+                                    vd.groups.remove(&grp_id);
+                                    self.needs_save = true;
+                                    self.status_message = "🔴 Le créateur a dissous le serveur.".to_string();
+                                    if self.selected_chat.as_ref() == Some(&grp_id) {
+                                        self.selected_chat = None;
+                                    }
+                                }
+                            }
+                        }
+                        return Command::none();
+                    }
+                    
                     if text.starts_with("SYS:SYNC_REQ:") {
                         let sys_parts: Vec<&str> = text.splitn(4, ':').collect();
                         if sys_parts.len() == 4 {
@@ -198,7 +219,10 @@ impl KakolookiyamApp {
                             }
                             if !authorized { return Command::none(); }
                             
-                            let ts_str = sys_parts[3].trim();
+                            if let Some(vd) = &self.vault_data {
+                                  if vd.tombstones.contains(&t_id) { return Command::none(); }
+                              }
+                              let ts_str = sys_parts[3].trim();
                             let msg_type = sys_parts[4].trim();
                             let payload = sys_parts[5];
 
@@ -242,7 +266,7 @@ impl KakolookiyamApp {
                                 }
 
                                 if !parsed_author.is_empty() && !parsed_content.is_empty() {
-                                    if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
+                                    if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
                                         let entry = crypto::MessageEntry {
                                             author: parsed_author.clone(),
                                             content: parsed_content.clone(),
@@ -254,7 +278,15 @@ impl KakolookiyamApp {
 
                                         let is_new = {
                                             let history = vd.chat_history.entry(t_id.clone()).or_default();
-                                            if !history.iter().any(|m| m.timestamp == timestamp && m.author == parsed_author && m.content == parsed_content) {
+                                            let is_dup = history.iter().any(|m| {
+    let t_diff = m.timestamp.max(timestamp) - m.timestamp.min(timestamp);
+    if t_diff > 5 { return false; }
+    if m.content == parsed_content { return true; }
+    if m.is_media && is_media { return true; }
+    if (m.author.starts_with("Syst") || m.author == "Moi") && (parsed_author.starts_with("Syst") || parsed_author == "Moi") && m.content.contains("APPEL") { return true; }
+    false
+});
+if !is_dup {
                                                 history.push(entry);
                                                 history.sort_by_key(|m| m.timestamp);
                                                 true
@@ -266,23 +298,24 @@ impl KakolookiyamApp {
                                         if is_new {
                                             // -- EVENT SOURCING: Auto-cicatrisation des departs! --
                                             if parsed_content.starts_with("SYS:EVT:LEAVE:") {
-                                                let left_id = parsed_content.trim_start_matches("SYS:EVT:LEAVE:").trim();
-                                                if let Some(group) = vd.groups.get_mut(&t_id) {
-                                                    group.members.retain(|m| m.trim().to_lowercase() != left_id.to_lowercase());
+                                                let payload = parsed_content.trim_start_matches("SYS:EVT:LEAVE:").trim();
+                                                let parts: Vec<&str> = payload.splitn(2, ':').collect();
+                                                if parts.len() == 2 {
+                                                    let left_id = parts[0];
+                                                    let _ts_str = parts[1];
+                                                    if left_id.to_lowercase() == parsed_author.to_lowercase() {
+                                                        if let Some(group) = vd.groups.get_mut(&t_id) {
+                                                            group.members.retain(|m| m.trim().to_lowercase() != left_id.to_lowercase());
+                                                        }
+                                                    }
                                                 }
                                             }
 
-                                            let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
-                                            let is_currently_viewed = self.selected_chat.as_ref() == Some(&t_id)
-                                                                   || self.active_call.as_ref().map(|(id, _)| id) == Some(&t_id);
+                                            self.needs_save = true;
+                                            let is_currently_viewed = self.selected_chat.as_ref() == Some(&t_id);
 
                                             if is_currently_viewed {
-                                                self.chat_history.clear();
-                                                if let Some(history) = vd.chat_history.get(&t_id) {
-                                                    for msg in history {
-                                                        self.chat_history.push((msg.author.clone(), msg.content.clone()));
-                                                    }
-                                                }
+                                                self.chat_history.push((parsed_author.clone(), parsed_content.clone()));
                                             } else {
                                                 *self.unread_counts.entry(t_id.clone()).or_insert(0) += 1;
                                             }
@@ -357,7 +390,8 @@ impl KakolookiyamApp {
                             let grp_name = sys_parts[3].trim().chars().take(50).collect::<String>();
                             let members: Vec<String> = sys_parts[4].split(',').take(100).map(|s| s.trim().chars().take(100).collect::<String>()).collect();
 
-                            if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
+                            if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
+                                if vd.tombstones.contains(&grp_id) { return Command::none(); }
                                 let is_new = !vd.groups.contains_key(&grp_id);
                                 let mut authorized = is_new;
                                 if !is_new {
@@ -369,11 +403,20 @@ impl KakolookiyamApp {
                                 }
 
                                 if authorized {
-                                    vd.groups.insert(grp_id.clone(), crate::crypto::GroupData {
-                                        name: grp_name.clone(),
-                                        members
-                                    });
-                                    let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
+                                    let mut changed = true;
+                                    if let Some(existing) = vd.groups.get(&grp_id) {
+                                        if existing.name == grp_name && existing.members == members {
+                                            changed = false;
+                                        }
+                                    }
+                                    
+                                    if changed {
+                                        vd.groups.insert(grp_id.clone(), crate::crypto::GroupData {
+                                            name: grp_name.clone(),
+                                            members
+                                        });
+                                        self.needs_save = true;
+                                    }
 
                                     if is_new {
                                         self.status_message = format!("✅ Invité dans le serveur {} !", grp_name);
@@ -390,10 +433,10 @@ impl KakolookiyamApp {
                         if sys_parts.len() == 3 {
                             let grp_id = sys_parts[2].trim().to_string();
 
-                            if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
+                            if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
                                 if let Some(group) = vd.groups.get_mut(&grp_id) {
                                     group.members.retain(|m| m.trim() != sender_id);
-                                    let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
+                                    self.needs_save = true;
                                     self.status_message = "🚪 Un membre a quitté le serveur.".to_string();
                                 }
                             }
@@ -433,7 +476,7 @@ impl KakolookiyamApp {
                         "Inconnu".to_string()
                     };
 
-                    if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
+                    if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
                         let entry = crypto::MessageEntry {
                             author: sender_pseudo.clone(),
                             content: display_text.clone(),
@@ -445,18 +488,26 @@ impl KakolookiyamApp {
 
                         // EVENT SOURCING: Auto-cicatrisation des dparts en STR (Temps Rel)
                         if display_text.starts_with("SYS:EVT:LEAVE:") {
-                            let left_id = display_text.trim_start_matches("SYS:EVT:LEAVE:").trim();
-                            if let Some(group) = vd.groups.get_mut(&target_chat_id) {
-                                group.members.retain(|m| m.trim().to_lowercase() != left_id.to_lowercase());
+                            let payload = display_text.trim_start_matches("SYS:EVT:LEAVE:").trim();
+                            let parts: Vec<&str> = payload.splitn(2, ':').collect();
+                            if parts.len() == 2 {
+                                let left_id = parts[0];
+                                let ts_str = parts[1];
+                                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                                let fresh = ts_str.parse::<u64>().map(|ts| ts >= now.saturating_sub(60) && ts <= now + 60).unwrap_or(false);
+                                if fresh && left_id.to_lowercase() == sender_id.to_lowercase() {
+                                    if let Some(group) = vd.groups.get_mut(&target_chat_id) {
+                                        group.members.retain(|m| m.trim().to_lowercase() != left_id.to_lowercase());
+                                    }
+                                }
                             }
                         }
 
                         vd.chat_history.entry(target_chat_id.clone()).or_default().push(entry);
-                        let _ = crypto::save_vault(pwd.expose_secret(), vd);
+                        self.needs_save = true;
                     }
 
-                    let is_currently_viewed = self.selected_chat.as_ref() == Some(&target_chat_id)
-                                           || self.active_call.as_ref().map(|(id, _)| id) == Some(&target_chat_id);
+                    let is_currently_viewed = self.selected_chat.as_ref() == Some(&target_chat_id);
 
                     if is_currently_viewed {
                         self.chat_history.push((sender_pseudo, display_text));
@@ -472,11 +523,11 @@ impl KakolookiyamApp {
                     let c_id = parts[1].trim().to_string();
                     let c_pseudo = parts[2].trim().to_string();
 
-                    if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
+                    if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
                         if !vd.contacts.contains_key(&c_id) {
                             if !vd.pending_requests.contains_key(&c_id) {
                                 vd.pending_requests.insert(c_id, c_pseudo);
-                                let _ = crypto::save_vault(pwd.expose_secret(), vd);
+                                self.needs_save = true;
                                 self.status_message = "Nouvelle demande de contact en attente !".to_string();
                             } else {
                                 // Mettre   jour le pseudo de la demande en attente
@@ -485,7 +536,7 @@ impl KakolookiyamApp {
                         } else {
                             // C'est un de nos contacts. Mettons   jour son pseudo officiel s'il tait inconnu !
                             vd.contacts.insert(c_id, c_pseudo);
-                            let _ = crypto::save_vault(pwd.expose_secret(), vd);
+                            self.needs_save = true;
                         }
                     }
                 }
@@ -509,7 +560,7 @@ impl KakolookiyamApp {
                                 // [MED-4] Auto-Signal au correspondant pour qu'il ne poireaute pas 25s
                                 let _ = self.tx_network.send(format!("CHAT_SEND:{}:SYS:CALL_BUSY", caller_id));
                                 let _ = self.tx_network.send(format!("REJECT:{}", caller_id));
-                                if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
+                                if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
                                     let entry = crate::crypto::MessageEntry {
                                         author: "Système".to_string(),
                                         content: "📞 Appel manqué (Ligne occupée)".to_string(),
@@ -519,7 +570,7 @@ impl KakolookiyamApp {
                                         media_path: None,
                                     };
                                     vd.chat_history.entry(caller_id.clone()).or_default().push(entry);
-                                    let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
+                                    self.needs_save = true;
                                 }
                                 return iced::Task::none(); // On ignore silencieusement l'appel à l'écran
                             }
@@ -554,6 +605,13 @@ impl KakolookiyamApp {
                         }
                     }
 
+                    if let Some((_, _, _, inc_grp)) = &self.incoming_call {
+                        if !inc_grp.is_empty() && inc_grp == &caller_grp_id {
+                            self.queued_group_offers.push((caller_id.clone(), sdp.clone()));
+                            return Command::none();
+                        }
+                    }
+                    
                     self.incoming_call_timer = 0;
                     self.incoming_call = Some((caller_id, caller_pseudo, sdp, caller_grp_id));
                 }

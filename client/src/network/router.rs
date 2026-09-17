@@ -33,6 +33,26 @@ pub enum Signal {
     Ping { msg: String }
 }
 
+
+struct RateLimiter {
+    hits: std::collections::HashMap<String, (u32, u64)>,
+}
+
+impl RateLimiter {
+    fn new() -> Self { Self { hits: Default::default() } }
+    fn check(&mut self, id: &str, max_hits: u32, window_secs: u64) -> bool {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        if self.hits.len() > 2000 {
+            self.hits.retain(|_, (_, start)| now - *start < window_secs * 4);
+        }
+        let entry = self.hits.entry(id.to_string()).or_insert((0, now));
+        if now - entry.1 >= window_secs { *entry = (1, now); return true; }
+        if entry.0 >= max_hits { return false; }
+        entry.0 += 1;
+        true
+    }
+}
+
 pub async fn start_p2p(
     mut rx_mic: tokio::sync::mpsc::Receiver<Vec<u8>>,
     tx_speaker: std::sync::mpsc::Sender<(usize, Vec<i16>)>,
@@ -103,6 +123,9 @@ pub async fn start_p2p(
     let (tx_chunks, mut rx_chunks) = tokio::sync::mpsc::unbounded_channel::<(String, Vec<u8>)>();
     let mut transfer_manager = TransferManager::new();
     let mut trusted_contacts: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut blocked_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut offer_limiter = RateLimiter::new();
+    let mut global_limiter = RateLimiter::new();
 
     loop {
         tokio::select! {
@@ -123,9 +146,16 @@ pub async fn start_p2p(
                         trusted_contacts.insert(parts[i].to_string());
                     }
                 }
+                else if cmd.starts_with("BLOCKED_SYNC") {
+                    blocked_ids.clear();
+                    let parts: Vec<&str> = cmd.split(':').collect();
+                    for i in 1..parts.len() {
+                        blocked_ids.insert(parts[i].to_string());
+                    }
+                }
                 else if cmd.starts_with("REGISTER:") {
                     let parts: Vec<&str> = cmd.splitn(4, ':').collect();
-                    if parts.len() == 4 {
+                    if parts.len() == 4 || parts.len() == 3 {
                         my_local_id = parts[1].to_string();
                         my_pseudo = parts[2].to_string();
                         if let Ok(new_secret) = rx_secrets.try_recv() {
@@ -581,7 +611,12 @@ pub async fn start_p2p(
                             if let Ok(signal) = serde_json::from_str::<Signal>(&text) {
                                 match signal {
                                     Signal::Offer { mut sdp, sender_id, pseudo, timestamp, signature, .. } => {
-                                        // [FIX]: Allow unknown contacts to send offer so they can appear in pending_requests!
+                                                                                if blocked_ids.contains(&sender_id) { continue; }
+                                        let is_known = trusted_contacts.contains(&sender_id);
+                                        let (max_hits, window) = if is_known { (10, 60) } else { (1, 30) };
+                                        if !offer_limiter.check(&sender_id, max_hits, window) { continue; }
+                                        if !is_known && !global_limiter.check("__global_unknown__", 2, 60) { continue; } // [MED-4] Limite stricte pour les inconnus
+
                                         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
                                         if timestamp < now - 60 || timestamp > now + 60 { continue; }
                                         if !crate::crypto::verify_announcement(&sender_id, &pseudo, timestamp, &signature) { continue; }
@@ -601,7 +636,12 @@ pub async fn start_p2p(
                                         let _ = tx_ui.send(format!("INCOMING_CALL:{}:{}:{}", sender_id, grp_context, sdp));
                                     }
                                     Signal::ChatOffer { sdp, sender_id, pseudo, timestamp, signature, .. } => {
-                                        // [FIX]: Allow unknown contacts to send offer so they can appear in pending_requests!
+                                                                                if blocked_ids.contains(&sender_id) { continue; }
+                                        let is_known = trusted_contacts.contains(&sender_id);
+                                        let (max_hits, window) = if is_known { (10, 60) } else { (1, 30) };
+                                        if !offer_limiter.check(&sender_id, max_hits, window) { continue; }
+                                        if !is_known && !global_limiter.check("__global_unknown__", 2, 60) { continue; } // [MED-4] Limite stricte pour les inconnus
+
                                         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
                                         if timestamp < now - 60 || timestamp > now + 60 { continue; }
                                         if !crate::crypto::verify_announcement(&sender_id, &pseudo, timestamp, &signature) { continue; }

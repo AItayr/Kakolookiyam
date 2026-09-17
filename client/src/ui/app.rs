@@ -41,6 +41,7 @@ pub struct KakolookiyamApp {
     pub(crate) idle_seconds: u32,
     pub(crate) incoming_call: Option<(String, String, String, String)>,
     pub(crate) incoming_call_timer: u32,
+    pub(crate) queued_group_offers: Vec<(String, String)>,
     pub(crate) active_call: Option<(String, String)>,
     pub(crate) is_muted: bool,
 
@@ -56,6 +57,7 @@ pub struct KakolookiyamApp {
     pub(crate) current_theme: Theme,
     pub(crate) show_settings: bool,
     pub(crate) show_group_options: bool,
+    pub(crate) needs_save: bool,
 
     // --- Variables d'interface (Paramètres) ---
     pub(crate) selected_mic: String,
@@ -89,6 +91,7 @@ impl KakolookiyamApp {
                 idle_seconds: 0,
                 incoming_call: None,
                 incoming_call_timer: 0,
+            queued_group_offers: Vec::new(),
                 active_call: None,
                 is_muted: false,
                 selected_chat: None,
@@ -100,6 +103,7 @@ impl KakolookiyamApp {
                 current_theme: Theme::Dark,
                 show_settings: false,
                 show_group_options: false,
+            needs_save: false,
                 selected_mic: "Défaut".to_string(),
             available_mics: crate::audio::get_available_microphones(),
             available_speakers: crate::audio::get_available_speakers(),
@@ -170,7 +174,7 @@ impl KakolookiyamApp {
 
             Message::SelectChat(_) | Message::DeselectChat | Message::ChatInputChanged(_) |
             Message::SendChatMessage | Message::CopyIdClicked | Message::CopyContactId(_) |
-            Message::AcceptRequest(_) | Message::RejectRequest(_)
+            Message::AcceptRequest(_) | Message::RejectRequest(_) | Message::BlockContact(_)
             => self.handle_chat(message),
 
             Message::OpenFileDialog | Message::FileSelected(_) | Message::FileRead(_) |

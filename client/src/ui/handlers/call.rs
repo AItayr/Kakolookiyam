@@ -79,6 +79,14 @@ impl KakolookiyamApp {
                 self.incoming_call_timer = 0;
                 self.status_message = "?? Connexion sécurisée en cours...".to_string();
                 let _ = self.tx_network.send(format!("ACCEPT:{}:{}", id, sdp));
+                
+                if !grp_id.is_empty() {
+                    for (queued_id, queued_sdp) in self.queued_group_offers.drain(..) {
+                        let _ = self.tx_network.send(format!("ACCEPT:{}:{}", queued_id, queued_sdp));
+                    }
+                } else {
+                    self.queued_group_offers.clear();
+                }
 
                 if let Some(vd) = &self.vault_data {
                     if !grp_id.is_empty() {

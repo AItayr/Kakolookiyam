@@ -41,10 +41,16 @@ pub struct VaultData {
     #[serde(default)]
     #[zeroize(skip)]
     pub pending_requests: HashMap<String, String>,
+    #[serde(default)]
+    #[zeroize(skip)]
+    pub blocked_ids: std::collections::HashSet<String>,
     #[zeroize(skip)]
     pub groups: HashMap<String, GroupData>,
     #[zeroize(skip)]
     pub chat_history: HashMap<String, Vec<MessageEntry>>,
+    #[serde(default)]
+    #[zeroize(skip)]
+    pub tombstones: std::collections::HashSet<String>,
     #[serde(skip)]
     pub session_key: Option<[u8; 32]>,
     #[serde(skip)]

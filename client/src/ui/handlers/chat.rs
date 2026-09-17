@@ -111,6 +111,7 @@ impl KakolookiyamApp {
                     self.status_message = "?? Demande rejete.".to_string();
                 }
             }
+            Message::BlockContact(id) => return self.handle_block_contact(id),
             Message::CopyContactId(id) => {
                 self.status_message = "✅ ID copié dans le presse-papiers !".to_string();
                 return clipboard::write(id);
@@ -119,4 +120,20 @@ impl KakolookiyamApp {
         }
         Command::none()
     }
+    pub(crate) fn handle_block_contact(&mut self, id: String) -> iced::Task<Message> {
+        if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
+            vd.pending_requests.remove(&id);
+            vd.blocked_ids.insert(id.clone());
+            let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
+            
+            // Sync with Router
+            let mut sync_str = String::from("BLOCKED_SYNC");
+            for b_id in vd.blocked_ids.iter() {
+                sync_str.push_str(&format!(":{}", b_id));
+            }
+            let _ = self.tx_network.send(sync_str);
+        }
+        iced::Task::none()
+    }
+
 }

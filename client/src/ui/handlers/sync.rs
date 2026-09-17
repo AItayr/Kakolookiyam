@@ -101,9 +101,41 @@ impl KakolookiyamApp {
     pub(crate) fn handle_sync_request(&self, requester_id: String, target_id_for_requester: String, last_ts: u64) -> Command<Message> {
         if let Some(vd) = &self.vault_data {
             let is_group = target_id_for_requester.starts_with("grp_");
-            let local_target_id = if is_group { target_id_for_requester.clone() } else { requester_id.clone() };
+              let local_target_id = if is_group { target_id_for_requester.clone() } else { requester_id.clone() };
+              
+              if is_group && vd.tombstones.contains(&local_target_id) {
+                  let tx = self.tx_network.clone();
+                  let p_req = requester_id.clone();
+                  let p_tgt = local_target_id.clone();
+                  return Command::perform(async move {
+                      let _ = tx.send(format!("CHAT_SEND:{}:SYS:GRP_DEL:{}", p_req, p_tgt));
+                  }, |_| Message::ResetInactivity);
+              }
 
-            let is_authorized = if is_group {
+            // [FIX] On profit de toute requete de synchro entrante pour "Pousser" nos groupes
+              // vers l'utilisateur s'il est membre, au cas où il aurait été ajouté en étant hors-ligne !
+              if !is_group && !vd.groups.is_empty() {
+                  let tx_push = self.tx_network.clone();
+                  let req_id = requester_id.clone();
+                  let mut syncs = Vec::new();
+                  for (g_id, g_data) in &vd.groups {
+                      if g_data.members.contains(&requester_id) {
+                          let m_str = g_data.members.join(",");
+                          syncs.push(format!("CHAT_SEND:{}:SYS:GROUP_SYNC:{}:{}:{}", req_id, g_id, g_data.name, m_str));
+                      }
+                  }
+                  if !syncs.is_empty() {
+                      // Fire and forget pour eviter de bloquer
+                      tokio::spawn(async move {
+                          for s in syncs {
+                              let _ = tx_push.send(s);
+                              tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                          }
+                      });
+                  }
+              }
+
+              let is_authorized = if is_group {
                 vd.groups.get(&local_target_id).map_or(false, |g| g.members.contains(&requester_id))
             } else {
                 true

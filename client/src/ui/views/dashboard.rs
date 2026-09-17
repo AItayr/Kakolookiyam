@@ -137,7 +137,8 @@ impl KakolookiyamApp {
                     crate::ui::i18n::app_text(&self.language, pseudo).size(16),
                     Space::new().width(Length::Fill),
                     button(crate::ui::i18n::app_text(&self.language, "V")).style(primary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style).on_press(Message::AcceptRequest(id.clone())).padding(5),
-                    button(crate::ui::i18n::app_text(&self.language, "X")).style(hangup_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style).on_press(Message::RejectRequest(id.clone())).padding(5)
+                    button(crate::ui::i18n::app_text(&self.language, "X")).style(hangup_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style).on_press(Message::RejectRequest(id.clone())).padding(5),
+                            button(crate::ui::i18n::app_text(&self.language, "B")).style(hangup_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style).on_press(Message::BlockContact(id.clone())).padding(5)
                 ].spacing(5).align_y(Alignment::Center);
                 sidebar = sidebar.push(req_row);
             }
@@ -318,7 +319,9 @@ impl KakolookiyamApp {
                     if let Some(history) = vd.chat_history.get(target_id) {
                         for msg in history {
                             if msg.content.starts_with("SYS:EVT:LEAVE:") {
-                                let left_user = msg.content.trim_start_matches("SYS:EVT:LEAVE:").trim();
+                                let payload = msg.content.trim_start_matches("SYS:EVT:LEAVE:").trim();
+                        let parts: Vec<&str> = payload.splitn(2, ':').collect();
+                        let left_user = parts[0];
                                 let display_name = vd.contacts.get(left_user).cloned().unwrap_or_else(|| left_user.to_string());
                                 let message_text = t(&self.language, "member_left").replace("{name}", &display_name);
                                 

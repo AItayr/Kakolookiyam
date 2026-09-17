@@ -33,6 +33,7 @@ pub enum Message {
     CopyContactId(String),
     AcceptRequest(String),
     RejectRequest(String),
+    BlockContact(String),
 
     // --- GESTION DES GROUPES ---
     NewGroupInputChanged(String),

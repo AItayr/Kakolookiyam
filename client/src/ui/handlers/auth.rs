@@ -51,6 +51,12 @@ impl KakolookiyamApp {
                 self.auth_error = Some(err_msg);
             }
             Message::TickInactivity => {
+                if self.needs_save {
+                    self.needs_save = false;
+                    if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
+                        let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
+                    }
+                }
                 if self.incoming_call.is_some() {
                     self.incoming_call_timer += 1;
                     if self.incoming_call_timer >= 15 {
@@ -93,6 +99,8 @@ impl KakolookiyamApp {
                         pending_requests: std::collections::HashMap::new(),
                         groups: std::collections::HashMap::new(),
                         chat_history: std::collections::HashMap::new(),
+                        blocked_ids: std::collections::HashSet::new(),
+                        tombstones: std::collections::HashSet::new(),
                         session_key: None,
                         session_salt: None,
                     };
