@@ -318,7 +318,21 @@ impl KakolookiyamApp {
 
                     if let Some(history) = vd.chat_history.get(target_id) {
                         for msg in history {
+                            
+                            let timestamp_str = {
+                                use chrono::{DateTime, Local};
+                                let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(msg.timestamp);
+                                let dt = DateTime::<Local>::from(d);
+                                let now = Local::now().date_naive();
+                                if dt.date_naive() == now {
+                                    dt.format("%H:%M").to_string()
+                                } else {
+                                    dt.format("%d/%m %H:%M").to_string()
+                                }
+                            };
+
                             let mut display_author = msg.author.clone();
+
                             if display_author == "Système" || display_author.contains("Syst") || display_author == "System" || display_author == "النظام" || display_author == "SYS:AUTHOR" {
                                 display_author = crate::ui::i18n::t(&self.language, "system_author");
                             } else if display_author == "Moi" || display_author == "Me" || display_author == "أنا" || display_author == "SYS:ME" {
@@ -361,10 +375,17 @@ impl KakolookiyamApp {
                                 let is_image = msg.content.to_lowercase().contains(".png")
                                             || msg.content.to_lowercase().contains(".jpg");
 
-                                let text_element = crate::ui::i18n::app_text(&self.language, format!("{}: {}", display_author, display_content))
+                                let message_content = crate::ui::i18n::app_text(&self.language, format!("{}: {}", display_author, display_content))
                                     .size(16)
-                                    .color(color)
-                                    .width(Length::Fill);
+                                    .color(color);
+                                
+                                let timestamp_content = crate::ui::i18n::app_text(&self.language, timestamp_str.clone())
+                                    .size(12)
+                                    .color(current_muted);
+                                
+                                let text_element = row![message_content, Space::new().width(Length::Fill), timestamp_content]
+                                    .width(Length::Fill)
+                                    .align_y(Alignment::Center);
 
                                 let mut btn_row = row![
                                     button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_extract")))
@@ -389,12 +410,19 @@ impl KakolookiyamApp {
 
                                 chat_messages = chat_messages.push(media_row);
                             } else {
-                                chat_messages = chat_messages.push(
-                                    crate::ui::i18n::app_text(&self.language, format!("{}: {}", display_author, display_content))
+                                let message_content = crate::ui::i18n::app_text(&self.language, format!("{}: {}", display_author, display_content))
                                         .size(16)
-                                        .color(color)
+                                        .color(color);
+                                    
+                                    let timestamp_content = crate::ui::i18n::app_text(&self.language, timestamp_str.clone())
+                                        .size(12)
+                                        .color(current_muted);
+                                    
+                                    let message_row = row![message_content, Space::new().width(Length::Fill), timestamp_content]
                                         .width(Length::Fill)
-                                );
+                                        .align_y(Alignment::Center);
+
+                                    chat_messages = chat_messages.push(message_row);
                             }
                         }
                     } else {
