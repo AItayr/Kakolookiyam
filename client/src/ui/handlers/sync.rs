@@ -162,7 +162,7 @@ impl KakolookiyamApp {
                     for msg in missing_messages {
                         use base64::prelude::*;
                         let safe_content = BASE64_STANDARD.encode(msg.content.as_bytes());
-                        let actual_author = if msg.author == "Moi" { &my_pseudo } else { &msg.author };
+                        let actual_author = if msg.author == "Moi" || msg.author == "Me" || msg.author == "أنا" { my_pseudo.clone() } else { msg.author.clone() };
 
                         if msg.is_media {
                             if let (Some(key), Some(path)) = (msg.media_key, &msg.media_path) {

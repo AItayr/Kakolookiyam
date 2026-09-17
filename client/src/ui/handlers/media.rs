@@ -46,7 +46,7 @@ impl KakolookiyamApp {
                 self.idle_seconds = 0;
                 if let Some((file_name, raw_data)) = data_opt {
                     if file_name == "ERROR_SIZE" {
-                        self.status_message = "❌ Erreur : Le fichier dépasse la limite de 50 Mo.".to_string();
+                        self.status_message = crate::ui::i18n::t(&self.language, "status_file_too_large");
                         return Command::none();
                     }
 
@@ -95,8 +95,8 @@ impl KakolookiyamApp {
                                 }
 
                                 let entry = crate::crypto::MessageEntry {
-                                    author: "Moi".to_string(),
-                                    content: format!("📎 Fichier partagé : {}", file_name),
+                                    author: crate::ui::i18n::t(&self.language, "me_author"),
+                                    content: format!("{} {}", crate::ui::i18n::t(&self.language, "msg_file_shared"), file_name),
                                     timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
                                     is_media: true,
                                     media_key: Some(key_bytes),
@@ -110,7 +110,7 @@ impl KakolookiyamApp {
                                 let mut raw_data_mut = raw_data;
                                 raw_data_mut.zeroize();
 
-                                self.chat_history.push(("Moi".to_string(), format!("📎 Fichier partagé : {}", file_name)));
+                                self.chat_history.push((crate::ui::i18n::t(&self.language, "me_author"), format!("{} {}", crate::ui::i18n::t(&self.language, "msg_file_shared"), file_name)));
 
                                 return broadcast_cmd;
                             }
@@ -122,7 +122,7 @@ impl KakolookiyamApp {
             Message::OpenMedia(filename, key, path) => {
                 self.idle_seconds = 0;
                 return Command::perform(async move {
-                    let clean_name = filename.replace("📎 Fichier reçu : ", "").replace("📎 Fichier partagé : ", "");
+                    let clean_name = filename.replace("📎 Fichier reçu : ", "").replace("📎 File received: ", "").replace("📎 تم استلام الملف: ", "").replace("📎 Fichier partagé : ", "");
                     let dest = rfd::AsyncFileDialog::new()
                         .set_title("Extraction...")
                         .set_file_name(&clean_name)
@@ -169,7 +169,7 @@ impl KakolookiyamApp {
             // --- APERÇU RAM MULTITHREADÉ ---
             Message::PreviewMedia(path, key) => {
                 self.idle_seconds = 0;
-                self.status_message = "⏳ Chargement sécurisé de l'aperçu...".to_string();
+                self.status_message = crate::ui::i18n::t(&self.language, "status_pwd_loading");
 
                 return Command::perform(async move {
                     // La cryptographie lourde est envoyée sur un autre thread pour libérer l'UI
@@ -184,16 +184,16 @@ impl KakolookiyamApp {
                 self.idle_seconds = 0;
                 if let Some(decrypted_bytes) = data_opt {
                     self.media_preview = Some(iced::widget::image::Handle::from_bytes(decrypted_bytes));
-                    self.status_message = "✅ Aperçu média chargé en mémoire RAM (Zéro-Trace).".to_string();
+                    self.status_message = crate::ui::i18n::t(&self.language, "status_media_ram");
                 } else {
-                    self.status_message = "❌ Impossible de générer l'aperçu.".to_string();
+                    self.status_message = crate::ui::i18n::t(&self.language, "status_media_error");
                 }
             }
 
             Message::ClosePreview => {
                 self.idle_seconds = 0;
                 self.media_preview = None;
-                self.status_message = "✅ Aperçu fermé (Données purgées de la RAM).".to_string();
+                        self.status_message = crate::ui::i18n::t(&self.language, "status_media_purged");
             }
 
             _ => {}

@@ -252,9 +252,9 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::En, "btn_add_call") => "Add & Call",
         (Language::Ar, "btn_add_call") => "إضافة واتصال",
 
-        (Language::Fr, "member_left") => "🚪 Le membre {name} a quitté le groupe.",
-        (Language::En, "member_left") => "🚪 Member {name} has left the group.",
-        (Language::Ar, "member_left") => "🚪 غادر العضو {name} المجموعة.",
+        (Language::Fr, "member_left") => "Le membre {name} a quitté le groupe.",
+        (Language::En, "member_left") => "Member {name} has left the group.",
+        (Language::Ar, "member_left") => " غادر العضو {name} المجموعة.",
 
         // Appels
         (Language::Fr, "banner_call_active") => "Appel en cours",
@@ -294,7 +294,181 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::En, "chat_placeholder_stealth") => "Write a stealth message...",
         (Language::Ar, "chat_placeholder_stealth") => "اكتب رسالة خفية...",
 
+        
+        // --- NEW STATUS MESSAGES FIX ---
+        (Language::Fr, "status_call_missed") => " Appel manqué.",
+        (Language::En, "status_call_missed") => " Missed call.",
+        (Language::Ar, "status_call_missed") => " مكالمة فائتة.",
+
+        (Language::Fr, "err_choose_pseudo") => "Veuillez choisir un pseudo.",
+        (Language::En, "err_choose_pseudo") => "Please choose a username.",
+        (Language::Ar, "err_choose_pseudo") => "يرجى اختيار اسم مستخدم.",
+
+        (Language::Fr, "err_profile_exists") => "Ce profil existe déjà sur cet ordinateur.",
+        (Language::En, "err_profile_exists") => "This profile already exists on this computer.",
+        (Language::Ar, "err_profile_exists") => "هذا الملف الشخصي موجود بالفعل على هذا الكمبيوتر.",
+
+        (Language::Fr, "err_passwords_match") => "Mots de passe distincts.",
+        (Language::En, "err_passwords_match") => "Passwords do not match.",
+        (Language::Ar, "err_passwords_match") => "كلمات المرور غير متطابقة.",
+
+        (Language::Fr, "err_enter_pseudo") => "Veuillez entrer votre pseudo.",
+        (Language::En, "err_enter_pseudo") => "Please enter your username.",
+        (Language::Ar, "err_enter_pseudo") => "الرجاء إدخال اسم المستخدم الخاص بك.",
+
+        (Language::Fr, "err_enter_password") => "Veuillez entrer un mot de passe.",
+        (Language::En, "err_enter_password") => "Please enter a password.",
+        (Language::Ar, "err_enter_password") => "الرجاء إدخال كلمة مرور.",
+
+        (Language::Fr, "status_call_waiting") => " En attente de l'interlocuteur...",
+        (Language::En, "status_call_waiting") => " Waiting for the interlocutor...",
+        (Language::Ar, "status_call_waiting") => " في انتظار المتصل...",
+
+        (Language::Fr, "status_call_group") => " Conférence de groupe en cours...",
+        (Language::En, "status_call_group") => " Group conference in progress...",
+        (Language::Ar, "status_call_group") => " مؤتمر جماعي قيد التقدم...",
+
+        (Language::Fr, "status_call_secure") => " Connexion sécurisée en cours...",
+        (Language::En, "status_call_secure") => " Securing connection...",
+        (Language::Ar, "status_call_secure") => " جارٍ تأمين الاتصال...",
+
+        (Language::Fr, "status_call_rejected") => "❌ Appel rejeté.",
+        (Language::En, "status_call_rejected") => "❌ Call rejected.",
+        (Language::Ar, "status_call_rejected") => "❌ مكالمة مرفوضة.",
+
+        (Language::Fr, "status_call_ended") => "Appel terminé.",
+        (Language::En, "status_call_ended") => "Call ended.",
+        (Language::Ar, "status_call_ended") => "انتهت المكالمة.",
+
+        (Language::Fr, "status_contact_added") => "✅ Contact ajouté !",
+        (Language::En, "status_contact_added") => "✅ Contact added!",
+        (Language::Ar, "status_contact_added") => "✅ تمت إضافة جهة الاتصال!",
+
+        (Language::Fr, "status_request_rejected") => "❌ Demande rejetée.",
+        (Language::En, "status_request_rejected") => "❌ Request rejected.",
+        (Language::Ar, "status_request_rejected") => "❌ تم رفض الطلب.",
+
+        (Language::Fr, "status_id_copied") => "✅ ID copié dans le presse-papiers !",
+        (Language::En, "status_id_copied") => "✅ ID copied to clipboard!",
+        (Language::Ar, "status_id_copied") => "✅ تم نسخ المعرف إلى الحافظة!",
+
+        (Language::Fr, "status_member_exists") => "❌ Ce membre est déjà dans le groupe.",
+        (Language::En, "status_member_exists") => "❌ This member is already in the group.",
+        (Language::Ar, "status_member_exists") => "❌ هذا العضو موجود بالفعل في المجموعة.",
+
+        (Language::Fr, "status_member_invited") => "✅ Membre invité et synchronisé !",
+        (Language::En, "status_member_invited") => "✅ Member invited and synchronized!",
+        (Language::Ar, "status_member_invited") => "✅ تمت دعوة العضو ومزامنته!",
+
+        (Language::Fr, "status_contact_synced") => "✅ Contact ajouté et synchronisé !",
+        (Language::En, "status_contact_synced") => "✅ Contact added and synchronized!",
+        (Language::Ar, "status_contact_synced") => "✅ تمت إضافة جهة الاتصال ومزامنتها!",
+
+        (Language::Fr, "status_group_left") => "☑️ Groupe quitté avec succès.",
+        (Language::En, "status_group_left") => "☑️ Group successfully left.",
+        (Language::Ar, "status_group_left") => "☑️ تم مغادرة المجموعة بنجاح.",
+
+        (Language::Fr, "status_file_too_large") => "❌ Erreur : Le fichier dépasse la limite de 50 Mo.",
+        (Language::En, "status_file_too_large") => "❌ Error: The file exceeds the 50 MB limit.",
+        (Language::Ar, "status_file_too_large") => "❌ خطأ: يتجاوز الملف حد 50 ميغابايت.",
+
+        (Language::Fr, "status_pwd_loading") => "⏳ Chargement sécurisé de l'aperçu...",
+        (Language::En, "status_pwd_loading") => "⏳ Securely loading preview...",
+        (Language::Ar, "status_pwd_loading") => "⏳ جاري تحميل المعاينة بشكل آمن...",
+
+        (Language::Fr, "status_media_ram") => "✅ Aperçu média chargé en mémoire RAM (Zéro-Trace).",
+        (Language::En, "status_media_ram") => "✅ Media preview loaded into RAM (Zero-Trace).",
+        (Language::Ar, "status_media_ram") => "✅ تم تحميل معاينة الوسائط في ذاكرة الوصول العشوائي (صفر أثر).",
+
+        (Language::Fr, "status_media_error") => "❌ Impossible de générer l'aperçu.",
+        (Language::En, "status_media_error") => "❌ Unable to generate preview.",
+        (Language::Ar, "status_media_error") => "❌ تعذر إنشاء معاينة.",
+
+        (Language::Fr, "status_media_purged") => " Aperçu fermé (Données purgées de la RAM).",
+        (Language::En, "status_media_purged") => " Preview closed (Data purged from RAM).",
+        (Language::Ar, "status_media_purged") => " تم إغلاق المعاينة (تم مسح البيانات من ذاكرة الوصول العشوائي).",
+
+        (Language::Fr, "status_remote_busy") => "L'interlocuteur est déjà en ligne (Occupé).",
+        (Language::En, "status_remote_busy") => "The interlocutor is already on a call (Busy).",
+        (Language::Ar, "status_remote_busy") => "المتصل متصل بالفعل (مشغول).",
+
+        (Language::Fr, "status_server_dissolved") => "🔴 Le créateur a dissous le serveur.",
+        (Language::En, "status_server_dissolved") => "🔴 The creator has dissolved the server.",
+        (Language::Ar, "status_server_dissolved") => "🔴 حل المؤسس الخادم.",
+
+        (Language::Fr, "status_conf_joined") => "✅ Conférence rejointe : {name}",
+        (Language::En, "status_conf_joined") => "✅ Conference joined: {name}",
+        (Language::Ar, "status_conf_joined") => "✅ تم الانضمام إلى المؤتمر: {name}",
+
+        (Language::Fr, "status_server_invited") => "✅ Invité dans le serveur {name} !",
+        (Language::En, "status_server_invited") => "✅ Invited to server {name}!",
+        (Language::Ar, "status_server_invited") => "✅ تمت دعوتك إلى الخادم {name}!",
+
+        (Language::Fr, "status_member_left") => "Un membre a quitté le serveur.",
+        (Language::En, "status_member_left") => "A member has left the server.",
+        (Language::Ar, "status_member_left") => " غادر عضو الخادم.",
+
+        (Language::Fr, "status_new_request") => "Nouvelle demande de contact en attente !",
+        (Language::En, "status_new_request") => "New contact request pending!",
+        (Language::Ar, "status_new_request") => "طلب اتصال جديد معلق!",
+
+        (Language::Fr, "status_remote_busy_named") => "📞 {name} est déjà en ligne (Occupé).",
+        (Language::En, "status_remote_busy_named") => "📞 {name} is already on a call (Busy).",
+        (Language::Ar, "status_remote_busy_named") => "📞 {name} متصل بالفعل (مشغول).",
+
+        (Language::Fr, "status_remote_hangup") => "L'interlocuteur a raccroché.",
+        (Language::En, "status_remote_hangup") => "The interlocutor hung up.",
+        (Language::Ar, "status_remote_hangup") => "أنهى المتصل المكالمة.",
+
+        (Language::Fr, "status_caller_hangup") => "L'appelant a raccroché.",
+        (Language::En, "status_caller_hangup") => "The caller hung up.",
+        (Language::Ar, "status_caller_hangup") => "أنهى المتصل المكالمة.",
+
+        (Language::Fr, "status_remote_unavailable") => "L'interlocuteur n'est pas disponible.",
+        (Language::En, "status_remote_unavailable") => "The interlocutor is not available.",
+        (Language::Ar, "status_remote_unavailable") => "المتصل غير متاح.",
+
+        (Language::Fr, "securing_connection") => "Sécurisation de la connexion",
+        (Language::En, "securing_connection") => "Securing connection",
+        (Language::Ar, "securing_connection") => "تأمين الاتصال",
+
+        (Language::Fr, "pending_requests_title") => "DEMANDES EN ATTENTE",
+        (Language::En, "pending_requests_title") => "PENDING REQUESTS",
+        (Language::Ar, "pending_requests_title") => "الطلبات المعلقة",
+
+        
+        (Language::Fr, "me_author") => "Moi",
+        (Language::En, "me_author") => "Me",
+        (Language::Ar, "me_author") => "أنا",
+
+        (Language::Fr, "system_author") => "Système",
+        (Language::En, "system_author") => "System",
+        (Language::Ar, "system_author") => "النظام",
+
+        (Language::Fr, "msg_missed_call") => "📞 Appel manqué (Ligne occupée)",
+        (Language::En, "msg_missed_call") => "📞 Missed call (Line busy)",
+        (Language::Ar, "msg_missed_call") => "📞 مكالمة فائتة (الخط مشغول)",
+
+        (Language::Fr, "msg_file_received") => "📎 Fichier reçu :",
+        (Language::En, "msg_file_received") => "📎 File received:",
+        (Language::Ar, "msg_file_received") => "📎 تم استلام الملف:",
+
+        (Language::Fr, "msg_file_shared") => "📎 Fichier partagé :",
+        (Language::En, "msg_file_shared") => "📎 File shared:",
+        (Language::Ar, "msg_file_shared") => "📎 الملف المشترك:",
+
+        (Language::Fr, "msg_secure_canal") => "Canal P2P Zéro-Trace sécurisé...",
+        (Language::En, "msg_secure_canal") => "P2P Zero-Trace Channel secured...",
+        (Language::Ar, "msg_secure_canal") => "تأمين قناة P2P خالية من التتبع...",
+
+        
+        (Language::Fr, "ready_to_call") => "Prêt à appeler...",
+        (Language::En, "ready_to_call") => "Ready to call...",
+        (Language::Ar, "ready_to_call") => "جاهز للاتصال...",
         _ => key,
+
+
+
     };
     text.to_string()
 }

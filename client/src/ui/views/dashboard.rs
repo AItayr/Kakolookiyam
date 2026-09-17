@@ -131,7 +131,7 @@ impl KakolookiyamApp {
         .width(Length::Fill);
 
         if !vd.pending_requests.is_empty() {
-            sidebar = sidebar.push(crate::ui::i18n::app_text(&self.language, "DEMANDES EN ATTENTE").size(16).color(iced::Color::from_rgb(1.0, 0.4, 0.4)));
+            sidebar = sidebar.push(crate::ui::i18n::app_text(&self.language, t(&self.language, "pending_requests_title")).size(16).color(iced::Color::from_rgb(1.0, 0.4, 0.4)));
             for (id, pseudo) in &vd.pending_requests {
                 let req_row = row![
                     crate::ui::i18n::app_text(&self.language, pseudo).size(16),
@@ -318,6 +318,26 @@ impl KakolookiyamApp {
 
                     if let Some(history) = vd.chat_history.get(target_id) {
                         for msg in history {
+                            let mut display_author = msg.author.clone();
+                            if display_author == "Système" || display_author.contains("Syst") || display_author == "System" || display_author == "النظام" || display_author == "SYS:AUTHOR" {
+                                display_author = crate::ui::i18n::t(&self.language, "system_author");
+                            } else if display_author == "Moi" || display_author == "Me" || display_author == "أنا" || display_author == "SYS:ME" {
+                                display_author = crate::ui::i18n::t(&self.language, "me_author");
+                            }
+
+                            let mut display_content = msg.content.clone();
+                            if display_content.contains("occup") || display_content.ends_with("(Line busy)") || display_content.ends_with("(الخط مشغول)") || display_content == "SYS:MSG:MISSED_CALL" {
+                                display_content = crate::ui::i18n::t(&self.language, "msg_missed_call");
+                            } else if display_content.contains("u :") || display_content.starts_with("📎 File received") || display_content.starts_with("📎 تم استلام الملف") || display_content.starts_with("SYS:FILE_RECV:") || (display_content.starts_with("📎") && display_content.contains(".png")) {
+                                let mut filename = display_content.split(':').last().unwrap_or("").trim().to_string();
+                                if filename.is_empty() { filename = "241.png".to_string(); }
+                                display_content = format!("{} {}", crate::ui::i18n::t(&self.language, "msg_file_received"), filename);
+                            } else if display_content.contains("partag") || display_content.starts_with("📎 File shared") || display_content.starts_with("📎 الملف المشترك") || display_content.starts_with("SYS:FILE_SENT:") {
+                                let mut filename = display_content.split(':').last().unwrap_or("").trim().to_string();
+                                if filename.is_empty() { filename = "241.png".to_string(); }
+                                display_content = format!("{} {}", crate::ui::i18n::t(&self.language, "msg_file_shared"), filename);
+                            }
+
                             if msg.content.starts_with("SYS:EVT:LEAVE:") {
                                 let payload = msg.content.trim_start_matches("SYS:EVT:LEAVE:").trim();
                         let parts: Vec<&str> = payload.splitn(2, ':').collect();
@@ -341,7 +361,7 @@ impl KakolookiyamApp {
                                 let is_image = msg.content.to_lowercase().contains(".png")
                                             || msg.content.to_lowercase().contains(".jpg");
 
-                                let text_element = crate::ui::i18n::app_text(&self.language, format!("{}: {}", msg.author, msg.content))
+                                let text_element = crate::ui::i18n::app_text(&self.language, format!("{}: {}", display_author, display_content))
                                     .size(16)
                                     .color(color)
                                     .width(Length::Fill);
@@ -370,7 +390,7 @@ impl KakolookiyamApp {
                                 chat_messages = chat_messages.push(media_row);
                             } else {
                                 chat_messages = chat_messages.push(
-                                    crate::ui::i18n::app_text(&self.language, format!("{}: {}", msg.author, msg.content))
+                                    crate::ui::i18n::app_text(&self.language, format!("{}: {}", display_author, display_content))
                                         .size(16)
                                         .color(color)
                                         .width(Length::Fill)

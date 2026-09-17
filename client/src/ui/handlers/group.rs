@@ -58,7 +58,7 @@ impl KakolookiyamApp {
                                         group.members.push(new_member.clone());
                                         sync_data = Some((group.name.clone(), group.members.clone()));
                                     } else {
-                                        self.status_message = "⚠️ Ce membre est déjà dans le groupe.".to_string();
+                        self.status_message = crate::ui::i18n::t(&self.language, "status_member_exists");
                                     }
                                 }
 
@@ -75,7 +75,7 @@ impl KakolookiyamApp {
                                             ));
                                         }
                                     }
-                                    self.status_message = "✅ Membre invité et synchronisé !".to_string();
+                                    self.status_message = crate::ui::i18n::t(&self.language, "status_member_invited");
                                 }
                                 self.new_member_input.clear();
                             }
@@ -98,7 +98,7 @@ impl KakolookiyamApp {
                                     group.members.push(clean_id.clone());
                                     sync_data = Some((group.name.clone(), group.members.clone()));
                                 } else {
-                                    self.status_message = "⚠️ Ce membre est déjà dans le groupe.".to_string();
+                        self.status_message = crate::ui::i18n::t(&self.language, "status_member_exists");
                                 }
                             }
 
@@ -115,7 +115,7 @@ impl KakolookiyamApp {
                                         ));
                                     }
                                 }
-                                self.status_message = "✅ Contact ajouté et synchronisé !".to_string();
+                                self.status_message = crate::ui::i18n::t(&self.language, "status_contact_synced");
                             }
                         }
                     }
@@ -154,7 +154,7 @@ impl KakolookiyamApp {
                             self.selected_chat = None;
                             self.chat_history.clear();
                             self.show_group_options = false;
-                            self.status_message = "✅ Groupe quitté avec succès.".to_string();
+                        self.status_message = crate::ui::i18n::t(&self.language, "status_group_left");
                         }
                     }
                 }

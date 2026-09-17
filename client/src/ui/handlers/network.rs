@@ -127,7 +127,7 @@ impl KakolookiyamApp {
                     if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
                         let entry = crypto::MessageEntry {
                             author: sender_pseudo.clone(),
-                            content: format!("📎 Fichier reçu : {}", display_filename),
+                            content: format!("{} {}", crate::ui::i18n::t(&self.language, "msg_file_received"), display_filename),
                             timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
                             is_media: true,
                             media_key: Some(key_bytes),
@@ -141,7 +141,7 @@ impl KakolookiyamApp {
                     let is_currently_viewed = self.selected_chat.as_ref() == Some(&target_chat_id);
 
                     if is_currently_viewed {
-                        self.chat_history.push((sender_pseudo, format!("📎 Fichier reçu : {}", display_filename)));
+                        self.chat_history.push((sender_pseudo, format!("{} {}", crate::ui::i18n::t(&self.language, "msg_file_received"), display_filename)));
                     } else {
                         *self.unread_counts.entry(target_chat_id.clone()).or_insert(0) += 1;
                     }
@@ -160,7 +160,7 @@ impl KakolookiyamApp {
                     }
 
                     if text == "SYS:CALL_BUSY" {
-                        self.status_message = "L'interlocuteur est déjà en ligne (Occupé).".to_string();
+                        self.status_message = crate::ui::i18n::t(&self.language, "status_remote_busy");
                         let _ = self.tx_network.send(format!("HANGUP:{}", sender_id));
                         self.active_call = None;
                         return Command::none();
@@ -180,7 +180,7 @@ impl KakolookiyamApp {
                                 if is_creator {
                                     vd.groups.remove(&grp_id);
                                     self.needs_save = true;
-                                    self.status_message = "🔴 Le créateur a dissous le serveur.".to_string();
+                                    self.status_message = crate::ui::i18n::t(&self.language, "status_server_dissolved");
                                     if self.selected_chat.as_ref() == Some(&grp_id) {
                                         self.selected_chat = None;
                                     }
@@ -283,7 +283,7 @@ impl KakolookiyamApp {
     if t_diff > 5 { return false; }
     if m.content == parsed_content { return true; }
     if m.is_media && is_media { return true; }
-    if (m.author.starts_with("Syst") || m.author == "Moi") && (parsed_author.starts_with("Syst") || parsed_author == "Moi") && m.content.contains("APPEL") { return true; }
+    if (m.author.starts_with(&crate::ui::i18n::t(&self.language, "system_author")) || m.author == crate::ui::i18n::t(&self.language, "me_author")) && (parsed_author.starts_with(&crate::ui::i18n::t(&self.language, "system_author")) || parsed_author == crate::ui::i18n::t(&self.language, "me_author")) && m.content.contains("APPEL") { return true; }
     false
 });
 if !is_dup {
@@ -419,7 +419,7 @@ if !is_dup {
                                     }
 
                                     if is_new {
-                                        self.status_message = format!("✅ Invité dans le serveur {} !", grp_name);
+                                        self.status_message = crate::ui::i18n::t(&self.language, "status_server_invited").replace("{name}", &grp_name);
                                     }
                                 }
                             }
@@ -437,7 +437,7 @@ if !is_dup {
                                 if let Some(group) = vd.groups.get_mut(&grp_id) {
                                     group.members.retain(|m| m.trim() != sender_id);
                                     self.needs_save = true;
-                                    self.status_message = "🚪 Un membre a quitté le serveur.".to_string();
+                                    self.status_message = crate::ui::i18n::t(&self.language, "status_member_left");
                                 }
                             }
                         }
@@ -528,7 +528,7 @@ if !is_dup {
                             if !vd.pending_requests.contains_key(&c_id) {
                                 vd.pending_requests.insert(c_id, c_pseudo);
                                 self.needs_save = true;
-                                self.status_message = "Nouvelle demande de contact en attente !".to_string();
+                                self.status_message = crate::ui::i18n::t(&self.language, "status_new_request");
                             } else {
                                 // Mettre   jour le pseudo de la demande en attente
                                 vd.pending_requests.insert(c_id, c_pseudo);
@@ -562,8 +562,8 @@ if !is_dup {
                                 let _ = self.tx_network.send(format!("REJECT:{}", caller_id));
                                 if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
                                     let entry = crate::crypto::MessageEntry {
-                                        author: "Système".to_string(),
-                                        content: "📞 Appel manqué (Ligne occupée)".to_string(),
+                                        author: crate::ui::i18n::t(&self.language, "system_author"),
+                                        content: crate::ui::i18n::t(&self.language, "msg_missed_call"),
                                         timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
                                         is_media: false,
                                         media_key: None,
@@ -661,7 +661,7 @@ if !is_dup {
                     }
                 }
                 
-                self.status_message = format!("📞 {} est déjà en ligne (Occupé).", pseudo);
+                self.status_message = crate::ui::i18n::t(&self.language, "status_remote_busy_named").replace("{name}", &pseudo);
                 
                 if let Some((active_id, _)) = &self.active_call {
                     if active_id == &id {
@@ -692,14 +692,14 @@ if !is_dup {
 
                     self.chat_input.clear();
                     self.chat_history.clear();
-                    self.status_message = "L'interlocuteur a raccroché.".to_string();
+                    self.status_message = crate::ui::i18n::t(&self.language, "status_remote_hangup");
                 }
 
                 if let Some((inc_id, _, _, _)) = &self.incoming_call {
                     if inc_id == &id {
                         self.incoming_call = None;
                         self.incoming_call_timer = 0;
-                        self.status_message = "L'appelant a raccroché.".to_string();
+                        self.status_message = crate::ui::i18n::t(&self.language, "status_caller_hangup");
                     }
                 }
             }
@@ -708,7 +708,7 @@ if !is_dup {
                 if self.active_call.is_none() {
                     // [MED-4 UX] Ne pas timeout si l'appel a dj chou ou raccroch
                     if self.status_message.starts_with("LOADING:") || self.status_message.contains("attente") {
-                        self.status_message = "L'interlocuteur n'est pas disponible.".to_string();
+                        self.status_message = crate::ui::i18n::t(&self.language, "status_remote_unavailable");
                         let _ = self.tx_network.send(format!("HANGUP:{}", tgt));
                     }
                 }

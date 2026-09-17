@@ -122,7 +122,7 @@ impl KakolookiyamApp {
         
         let msg = self.status_message.trim_start_matches("LOADING:");
         
-        let title = crate::ui::i18n::app_text(&self.language, "Sécurisation de la connexion")
+        let title = crate::ui::i18n::app_text(&self.language, t(&self.language, "securing_connection"))
             .size(36)
             .color(current_accent);
             

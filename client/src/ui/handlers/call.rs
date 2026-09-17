@@ -25,7 +25,7 @@ impl KakolookiyamApp {
                         }
                     }
                 }
-                self.status_message = "🔗 En attente de l'interlocuteur...".to_string();
+                        self.status_message = crate::ui::i18n::t(&self.language, "status_call_waiting");
                 let _ = self.tx_network.send(format!("CALL:{}", self.peer_id_input));
             }
             Message::CallContact(target_id) => {
@@ -34,7 +34,7 @@ impl KakolookiyamApp {
                 }
 
                 if target_id.starts_with("grp_") {
-                    self.status_message = "📞 Conférence de groupe en cours...".to_string();
+                        self.status_message = crate::ui::i18n::t(&self.language, "status_call_group");
                     if let Some(vd) = &self.vault_data {
                         if let Some(group) = vd.groups.get(&target_id) {
                             let my_id = crate::crypto::derive_public_id(&vd.private_key);
@@ -67,7 +67,7 @@ impl KakolookiyamApp {
                     }
                 } else {
                     self.peer_id_input = target_id.clone();
-                    self.status_message = "🔗 En attente de l'interlocuteur...".to_string();
+                        self.status_message = crate::ui::i18n::t(&self.language, "status_call_waiting");
                     let _ = self.tx_network.send(format!("CALL:{}", target_id));
                 }
             }
@@ -77,7 +77,7 @@ impl KakolookiyamApp {
 
                 self.incoming_call = None;
                 self.incoming_call_timer = 0;
-                self.status_message = "?? Connexion sécurisée en cours...".to_string();
+                        self.status_message = crate::ui::i18n::t(&self.language, "status_call_secure");
                 let _ = self.tx_network.send(format!("ACCEPT:{}:{}", id, sdp));
                 
                 if !grp_id.is_empty() {
@@ -127,7 +127,7 @@ impl KakolookiyamApp {
             Message::RejectCall(id) => {
                 self.incoming_call = None;
                 self.incoming_call_timer = 0;
-                self.status_message = "❌ Appel rejeté.".to_string();
+                self.status_message = crate::ui::i18n::t(&self.language, "status_call_rejected");
                 let _ = self.tx_network.send(format!("REJECT:{}", id));
             }
             Message::HangUpCall => {
@@ -149,7 +149,7 @@ impl KakolookiyamApp {
                     } else {
                         let _ = self.tx_network.send(format!("HANGUP:{}", id));
                     }
-                    self.status_message = "Appel terminé.".to_string();
+                    self.status_message = crate::ui::i18n::t(&self.language, "status_call_ended");
                 }
 
                 self.is_muted = false;

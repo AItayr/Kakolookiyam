@@ -72,7 +72,7 @@ impl KakolookiyamApp {
                         }
 
                         let entry = crypto::MessageEntry {
-                            author: "Moi".to_string(),
+                            author: crate::ui::i18n::t(&self.language, "me_author"),
                             content: text.clone(),
                             timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
                             is_media: false,
@@ -83,7 +83,7 @@ impl KakolookiyamApp {
                         vd.chat_history.entry(target_id).or_default().push(entry);
                         let _ = crypto::save_vault(pwd.expose_secret(), vd);
 
-                        self.chat_history.push(("Moi".to_string(), text));
+                        self.chat_history.push((crate::ui::i18n::t(&self.language, "me_author"), text));
                         self.chat_input.clear();
 
                         return broadcast_cmd;
@@ -100,7 +100,7 @@ impl KakolookiyamApp {
                     if let Some(pseudo) = vd.pending_requests.remove(&id) {
                         vd.contacts.insert(id.clone(), pseudo);
                         let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
-                        self.status_message = "?? Contact ajout !".to_string();
+                        self.status_message = crate::ui::i18n::t(&self.language, "status_contact_added");
                     }
                 }
             }
@@ -108,12 +108,12 @@ impl KakolookiyamApp {
                 if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
                     vd.pending_requests.remove(&id);
                     let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
-                    self.status_message = "?? Demande rejete.".to_string();
+                        self.status_message = crate::ui::i18n::t(&self.language, "status_request_rejected");
                 }
             }
             Message::BlockContact(id) => return self.handle_block_contact(id),
             Message::CopyContactId(id) => {
-                self.status_message = "✅ ID copié dans le presse-papiers !".to_string();
+                self.status_message = crate::ui::i18n::t(&self.language, "status_id_copied");
                 return clipboard::write(id);
             }
             _ => {}

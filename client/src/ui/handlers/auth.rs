@@ -43,7 +43,7 @@ impl KakolookiyamApp {
 
                 self.clear_auth_fields();
                 self.state = AppState::Login;
-                self.status_message = "Prêt à appeler...".to_owned();
+                        self.status_message = crate::ui::i18n::t(&self.language, "ready_to_call");
                 self.idle_seconds = 0;
             }
             Message::ForceDisconnect(err_msg) => {
@@ -62,7 +62,7 @@ impl KakolookiyamApp {
                     if self.incoming_call_timer >= 15 {
                         if let Some((id, _, _, _)) = self.incoming_call.take() {
                             let _ = self.tx_network.send(format!("REJECT:{}", id));
-                            self.status_message = "Appel manqué.".to_string();
+                        self.status_message = crate::ui::i18n::t(&self.language, "status_call_missed");
                         }
                         self.incoming_call_timer = 0;
                     }
@@ -86,11 +86,11 @@ impl KakolookiyamApp {
                 let potential_file = crypto::get_vault_file(trimmed);
 
                 if trimmed.is_empty() {
-                    self.auth_error = Some("Veuillez choisir un pseudo.".into());
+                    self.auth_error = Some(crate::ui::i18n::t(&self.language, "err_choose_pseudo"));
                 } else if std::path::Path::new(&potential_file).exists() {
-                    self.auth_error = Some("Ce profil existe déjà sur cet ordinateur.".into());
+                    self.auth_error = Some(crate::ui::i18n::t(&self.language, "err_profile_exists")); //  déjà sur cet ordinateur.".into());
                 } else if self.password_input.expose_secret() != self.password_confirm_input.expose_secret() {
-                    self.auth_error = Some("Mots de passe distincts.".into());
+                    self.auth_error = Some(crate::ui::i18n::t(&self.language, "err_passwords_match"));
                 } else {
                     let mut v_data = crypto::VaultData {
                         private_key: crypto::generate_secure_secret(),
@@ -135,9 +135,9 @@ impl KakolookiyamApp {
                 let trimmed = self.pseudo_input.trim();
 
                 if trimmed.is_empty() {
-                    self.auth_error = Some("Veuillez entrer votre pseudo.".to_string());
+                    self.auth_error = Some(crate::ui::i18n::t(&self.language, "err_enter_pseudo"));
                 } else if self.password_input.expose_secret().is_empty() {
-                    self.auth_error = Some("Veuillez entrer un mot de passe.".to_string());
+                    self.auth_error = Some(crate::ui::i18n::t(&self.language, "err_enter_password"));
                 } else {
                     match crypto::unlock_vault(trimmed, self.password_input.expose_secret()) {
                         Ok(v_data) => {
