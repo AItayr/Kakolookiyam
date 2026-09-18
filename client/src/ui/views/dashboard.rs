@@ -224,7 +224,55 @@ impl KakolookiyamApp {
         ].spacing(5);
 
         sidebar = sidebar.push(Space::new().height(10));
+        
         sidebar = sidebar.push(create_group_row);
+
+        // --- BLOCKED CONTACTS ---
+        if !vd.blocked_ids.is_empty() {
+            sidebar = sidebar.push(Space::new().height(20));
+            sidebar = sidebar.push(iced::widget::rule::horizontal(1));
+            
+            let header_color = if self.show_blocked { iced::Color::WHITE } else { current_muted };
+            let btn_toggle_blocked = button(
+                row![crate::ui::i18n::app_text(&self.language, crate::ui::i18n::t(&self.language, "blocked_contacts")).size(16).color(header_color)].align_y(Alignment::Center)
+            )
+            .style(crate::ui::theme::sidebar_button(self.show_blocked))
+            .on_press(Message::ToggleBlocked)
+            .width(Length::Fill);
+            
+            sidebar = sidebar.push(btn_toggle_blocked);
+
+            if self.show_blocked {
+                for blocked_id in &vd.blocked_ids {
+                    let sys_author = crate::ui::i18n::t(&self.language, "system_author");
+                    let mut pseudo = blocked_id.clone();
+                    if let Some(history) = vd.chat_history.get(blocked_id) {
+                        if let Some(m) = history.iter().find(|m| m.author != "SYS:AUTHOR" && m.author != sys_author && m.author != "Moi" && m.author != vd.pseudo && !m.author.is_empty()) {
+                            pseudo = m.author.clone();
+                        }
+                    }
+                    if pseudo == *blocked_id && pseudo.len() > 12 {
+                        pseudo = format!("{}...", &pseudo[..12]);
+                    }
+                    
+                    let btn_unblock = button(crate::ui::i18n::app_text(&self.language, "V").size(14))
+                        .style(primary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
+                        .on_press(Message::UnblockContact(blocked_id.clone()))
+                        .padding([4, 8]);
+                    
+                    let blocked_row = row![
+                        crate::ui::i18n::app_text(&self.language, pseudo).size(14).color(iced::Color::from_rgb(0.9, 0.4, 0.4)),
+                        Space::new().width(Length::Fill),
+                        btn_unblock
+                    ].align_y(Alignment::Center).spacing(5);
+                    
+                    sidebar = sidebar.push(blocked_row);
+                }
+            }
+        }
+
+        sidebar = sidebar.push(Space::new().height(10));
+
 
         let sidebar_scroll = Scrollable::new(sidebar)
             .height(Length::Fill)

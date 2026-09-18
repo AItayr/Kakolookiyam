@@ -58,6 +58,7 @@ pub struct KakolookiyamApp {
     pub(crate) current_theme: Theme,
     pub(crate) show_settings: bool,
     pub(crate) show_group_options: bool,
+    pub(crate) show_blocked: bool,
     pub(crate) needs_save: bool,
 
     // --- Variables d'interface (Paramètres) ---
@@ -105,6 +106,7 @@ impl KakolookiyamApp {
                 current_theme: Theme::Dark,
                 show_settings: false,
                 show_group_options: false,
+            show_blocked: false,
             needs_save: false,
                 selected_mic: "Défaut".to_string(),
             available_mics: crate::audio::get_available_microphones(),
@@ -145,6 +147,11 @@ impl KakolookiyamApp {
 
             Message::OpenSettings => { self.idle_seconds = 0; self.show_settings = true; return Command::none(); }
             Message::CloseSettings => { self.idle_seconds = 0; self.show_settings = false; return Command::none(); }
+            Message::ToggleBlocked => {
+                self.idle_seconds = 0;
+                self.show_blocked = !self.show_blocked;
+                return Command::none();
+            }
             Message::ToggleTheme => {
                 self.idle_seconds = 0;
                 self.current_theme = if self.current_theme == Theme::Dark { Theme::Light } else { Theme::Dark };
@@ -176,7 +183,7 @@ impl KakolookiyamApp {
 
             Message::SelectChat(_) | Message::DeselectChat | Message::ChatInputChanged(_) |
             Message::SendChatMessage | Message::CopyIdClicked | Message::CopyContactId(_) |
-            Message::AcceptRequest(_) | Message::RejectRequest(_) | Message::BlockContact(_)
+            Message::AcceptRequest(_) | Message::RejectRequest(_) | Message::BlockContact(_) | Message::UnblockContact(_)
             => self.handle_chat(message),
 
             Message::OpenFileDialog | Message::FileSelected(_) | Message::FileRead(_) |

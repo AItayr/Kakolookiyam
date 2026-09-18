@@ -5,7 +5,7 @@ use crate::ui::messages::Message;
 use crate::crypto;
 
 impl KakolookiyamApp {
-    pub(crate) fn handle_chat(&mut self, message: Message) -> Command<Message> {
+    pub(crate) fn handle_chat(&mut self, message: Message) -> iced::Task<Message> {
         self.idle_seconds = 0;
 
         match message {
@@ -38,7 +38,7 @@ impl KakolookiyamApp {
             }
             Message::SendChatMessage => {
                 let text = self.chat_input.trim().to_string();
-                if text.is_empty() { return Command::none(); }
+                if text.is_empty() { return iced::Task::none(); }
 
                 let target = self.active_call.as_ref().map(|(id, _)| id.clone())
                     .or_else(|| self.selected_chat.clone());
@@ -46,7 +46,7 @@ impl KakolookiyamApp {
                 if let Some(target_id) = target {
                     if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
                         let my_id = crypto::derive_public_id(&vd.private_key);
-                        let mut broadcast_cmd = Command::none();
+                        let mut broadcast_cmd = iced::Task::none();
 
                         if target_id.starts_with("grp_") {
                             if let Some(group) = vd.groups.get(&target_id) {
@@ -112,15 +112,16 @@ impl KakolookiyamApp {
                 }
             }
             Message::BlockContact(id) => return self.handle_block_contact(id),
+            Message::UnblockContact(id) => return self.handle_unblock_contact(id),
             Message::CopyContactId(id) => {
                 self.status_message = crate::ui::i18n::t(&self.language, "status_id_copied");
                 return clipboard::write(id);
             }
             _ => {}
         }
-        Command::none()
+        iced::Task::none()
     }
-    pub(crate) fn handle_block_contact(&mut self, id: String) -> Command<Message> {
+    pub(crate) fn handle_block_contact(&mut self, id: String) -> iced::Task<Message> {
         if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
             vd.pending_requests.remove(&id);
             vd.contacts.remove(&id);
@@ -141,4 +142,28 @@ impl KakolookiyamApp {
         iced::Task::none()
     }
 
+    pub(crate) fn handle_unblock_contact(&mut self, id: String) -> iced::Task<Message> {
+        if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
+            if vd.blocked_ids.remove(&id) {
+                let sys_author = crate::ui::i18n::t(&self.language, "system_author");
+                let mut pseudo = id.clone();
+                if let Some(history) = vd.chat_history.get(&id) {
+                    if let Some(m) = history.iter().find(|m| m.author != "SYS:AUTHOR" && m.author != sys_author && m.author != "Moi" && m.author != vd.pseudo && !m.author.is_empty()) {
+                        pseudo = m.author.clone();
+                    }
+                }
+                vd.contacts.insert(id.clone(), pseudo);
+                
+                let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
+                
+                // Sync with Router
+                let mut sync_str = String::from("BLOCKED_SYNC");
+                for b_id in vd.blocked_ids.iter() {
+                    sync_str.push_str(&format!(":{}", b_id));
+                }
+                let _ = self.tx_network.send(sync_str);
+            }
+        }
+        iced::Task::none()
+    }
 }

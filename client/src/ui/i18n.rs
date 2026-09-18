@@ -475,6 +475,9 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::Fr, "btn_block") => "BLOQUER",
         (Language::En, "btn_block") => "BLOCK",
         (Language::Ar, "btn_block") => "حظر",
+        (Language::Fr, "blocked_contacts") => "BLOQUÉS",
+        (Language::En, "blocked_contacts") => "BLOCKED",
+        (Language::Ar, "blocked_contacts") => "محظور",
         _ => key,
 
 

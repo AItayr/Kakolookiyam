@@ -34,6 +34,8 @@ pub enum Message {
     AcceptRequest(String),
     RejectRequest(String),
     BlockContact(String),
+    UnblockContact(String),
+    ToggleBlocked,
 
     // --- GESTION DES GROUPES ---
     NewGroupInputChanged(String),
