@@ -43,6 +43,7 @@ pub struct KakolookiyamApp {
     pub(crate) incoming_call_timer: u32,
     pub(crate) queued_group_offers: Vec<(String, String)>,
     pub(crate) active_call: Option<(String, String)>,
+    pub(crate) call_start_time: Option<u64>,
     pub(crate) is_muted: bool,
 
     pub(crate) selected_chat: Option<String>,
@@ -93,6 +94,7 @@ impl KakolookiyamApp {
                 incoming_call_timer: 0,
             queued_group_offers: Vec::new(),
                 active_call: None,
+            call_start_time: None,
                 is_muted: false,
                 selected_chat: None,
                 chat_input: String::new(),

@@ -120,9 +120,14 @@ impl KakolookiyamApp {
         }
         Command::none()
     }
-    pub(crate) fn handle_block_contact(&mut self, id: String) -> iced::Task<Message> {
+    pub(crate) fn handle_block_contact(&mut self, id: String) -> Command<Message> {
         if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
             vd.pending_requests.remove(&id);
+            vd.contacts.remove(&id);
+            if self.selected_chat.as_ref() == Some(&id) {
+                self.selected_chat = None;
+                self.chat_history.clear();
+            }
             vd.blocked_ids.insert(id.clone());
             let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
             

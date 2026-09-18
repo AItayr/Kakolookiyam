@@ -347,6 +347,7 @@ if !is_dup {
                     let my_id = crate::crypto::derive_public_id(&vd.private_key);
 
                     self.active_call = Some((grp_id.clone(), group.name.clone()));
+                    self.call_start_time = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
                     self.chat_history.clear();
 
                     if let Some(history) = vd.chat_history.get(&grp_id) {
@@ -354,7 +355,7 @@ if !is_dup {
                             self.chat_history.push((msg.author.clone(), msg.content.clone()));
                         }
                     }
-                    self.status_message = format!("🚀 Conférence rejointe : {}", group.name);
+                    self.status_message = crate::ui::i18n::t(&self.language, "status_group_joined").replace("{name}", &group.name);
 
                     let tx = self.tx_network.clone();
                     let members = group.members.clone();
@@ -637,6 +638,7 @@ if !is_dup {
                     };
 
                     self.active_call = Some((id.clone(), pseudo));
+                    self.call_start_time = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
                     self.chat_input.clear();
                     self.chat_history.clear();
 

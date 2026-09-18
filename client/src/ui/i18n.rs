@@ -465,7 +465,18 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::Fr, "ready_to_call") => "Prêt à appeler...",
         (Language::En, "ready_to_call") => "Ready to call...",
         (Language::Ar, "ready_to_call") => "جاهز للاتصال...",
+        
+        (Language::Fr, "msg_call_ended_duration") => "📞 Appel terminé ({duration})",
+        (Language::En, "msg_call_ended_duration") => "📞 Call ended ({duration})",
+        (Language::Ar, "msg_call_ended_duration") => "📞 انتهت المكالمة ({duration})",
+        (Language::Fr, "status_group_joined") => " Conférence rejointe : {name}",
+        (Language::En, "status_group_joined") => " Conference joined: {name}",
+        (Language::Ar, "status_group_joined") => " تم الانضمام للمؤتمر: {name}",
+        (Language::Fr, "btn_block") => "BLOQUER",
+        (Language::En, "btn_block") => "BLOCK",
+        (Language::Ar, "btn_block") => "حظر",
         _ => key,
+
 
 
 

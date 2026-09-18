@@ -288,6 +288,10 @@ impl KakolookiyamApp {
                                 .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
                                 .on_press(Message::CopyContactId(target_id.clone()))
                                 .padding(10),
+                            button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_block")))
+                                .style(hangup_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
+                                .on_press(Message::BlockContact(target_id.clone()))
+                                .padding(10),
                             button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_call_group")))
                                 .style(primary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
                                 .on_press(Message::CallContact(target_id.clone()))
@@ -342,6 +346,16 @@ impl KakolookiyamApp {
                             let mut display_content = msg.content.clone();
                             if display_content.contains("occup") || display_content.ends_with("(Line busy)") || display_content.ends_with("(الخط مشغول)") || display_content == "SYS:MSG:MISSED_CALL" {
                                 display_content = crate::ui::i18n::t(&self.language, "msg_missed_call");
+                            } else if display_content.starts_with("SYS:MSG:CALL_ENDED:") {
+                                let duration_str = display_content.split(':').last().unwrap_or("0");
+                                if let Ok(duration) = duration_str.parse::<u64>() {
+                                    let mins = duration / 60;
+                                    let secs = duration % 60;
+                                    let time_fmt = format!("{:02}:{:02}", mins, secs);
+                                    display_content = crate::ui::i18n::t(&self.language, "msg_call_ended_duration").replace("{duration}", &time_fmt);
+                                } else {
+                                    display_content = crate::ui::i18n::t(&self.language, "status_call_ended");
+                                }
                             } else if display_content.contains("u :") || display_content.starts_with("📎 File received") || display_content.starts_with("📎 تم استلام الملف") || display_content.starts_with("SYS:FILE_RECV:") || (display_content.starts_with("📎") && display_content.contains(".png")) {
                                 let mut filename = display_content.split(':').last().unwrap_or("").trim().to_string();
                                 if filename.is_empty() { filename = "241.png".to_string(); }
@@ -526,6 +540,21 @@ impl KakolookiyamApp {
                 .style(hangup_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
                 .on_press(Message::HangUpCall).padding(10);
             
+            let mut live_duration_str = String::new();
+            if let Some(start) = self.call_start_time {
+                let now_s = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                let duration = now_s.saturating_sub(start);
+                let mins = duration / 60;
+                let secs = duration % 60;
+                live_duration_str = format!("{:02}:{:02}", mins, secs);
+            }
+
+            let timer_text = if !live_duration_str.is_empty() {
+                crate::ui::i18n::app_text(&self.language, live_duration_str).size(22).color(iced::Color::from_rgb(0.9, 1.0, 0.9))
+            } else {
+                crate::ui::i18n::app_text(&self.language, "").size(22).color(iced::Color::TRANSPARENT)
+            };
+            
             let banner = container(
                 row![
                     row![
@@ -533,9 +562,13 @@ impl KakolookiyamApp {
                         crate::ui::i18n::app_text(&self.language, " : ").size(16).color(iced::Color::WHITE),
                         crate::ui::i18n::app_text(&self.language, call_pseudo).size(16).color(iced::Color::WHITE),
                     ].align_y(Alignment::Center),
+                    
                     Space::new().width(Length::Fill),
+                    container(timer_text).center_x(iced::Length::Fill),
+                    Space::new().width(Length::Fill),
+                    
                     row![btn_mute, btn_hangup].spacing(15)
-                ].align_y(Alignment::Center)
+                ].align_y(Alignment::Center).width(Length::Fill)
             )
             .width(Length::Fill)
             .padding([15, 20])

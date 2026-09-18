@@ -44,6 +44,7 @@ impl KakolookiyamApp {
                             let target_id_clone = target_id.clone();
 
                             self.active_call = Some((target_id.clone(), group.name.clone()));
+                              self.call_start_time = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
                             self.chat_history.clear();
 
                             if let Some(history) = vd.chat_history.get(&target_id) {
@@ -113,6 +114,7 @@ impl KakolookiyamApp {
                 }
 
                 self.active_call = Some((actual_id.clone(), pseudo));
+                self.call_start_time = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
                 self.chat_input.clear();
                 self.chat_history.clear();
 
@@ -149,7 +151,32 @@ impl KakolookiyamApp {
                     } else {
                         let _ = self.tx_network.send(format!("HANGUP:{}", id));
                     }
+                    
+                    if let Some(start) = self.call_start_time.take() {
+                        let now_s = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                        let duration = now_s.saturating_sub(start);
+                        if let Some(vd) = &mut self.vault_data {
+                            let entry = crate::crypto::MessageEntry {
+                                author: "SYS:AUTHOR".to_string(),
+                                content: format!("SYS:MSG:CALL_ENDED:{}", duration),
+                                is_media: false,
+                                media_key: None,
+                                media_path: None,
+                                timestamp: now_s,
+                            };
+                            vd.chat_history.entry(id.clone()).or_default().push(entry);
+                            self.needs_save = true;
+                        }
+                    }
                     self.status_message = crate::ui::i18n::t(&self.language, "status_call_ended");
+                    
+                    self.is_muted = false;
+                    self.chat_input.clear();
+                    self.chat_history.clear();
+                    let _ = self.tx_network.send("MUTE:off".to_string());
+                    
+                    let target_id = id.clone();
+                    return Command::perform(async move { target_id }, Message::SelectChat);
                 }
 
                 self.is_muted = false;
