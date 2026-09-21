@@ -44,6 +44,7 @@ impl KakolookiyamApp {
                             let target_id_clone = target_id.clone();
 
                             self.active_call = Some((target_id.clone(), group.name.clone()));
+                            self.active_call_participants.clear();
                               self.call_start_time = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
                             self.chat_history.clear();
 
@@ -81,8 +82,11 @@ impl KakolookiyamApp {
                         self.status_message = crate::ui::i18n::t(&self.language, "status_call_secure");
                 let _ = self.tx_network.send(format!("ACCEPT:{}:{}", id, sdp));
                 
+                let mut already_accepted = std::collections::HashSet::new();
+                already_accepted.insert(id.clone());
                 if !grp_id.is_empty() {
                     for (queued_id, queued_sdp) in self.queued_group_offers.drain(..) {
+                        already_accepted.insert(queued_id.clone());
                         let _ = self.tx_network.send(format!("ACCEPT:{}:{}", queued_id, queued_sdp));
                     }
                 } else {
@@ -99,11 +103,11 @@ impl KakolookiyamApp {
                             let my_pub_id = crate::crypto::derive_public_id(&vd.private_key);
                             let target_grp_clone = grp_id.clone();
                             let tx = self.tx_network.clone();
-                            let caller_id = id.clone();
+                            let _caller_id = id.clone();
                             
                             tokio::spawn(async move {
                                 for member_id in members_clone {
-                                    if member_id != my_pub_id && member_id != caller_id && my_pub_id > member_id {
+                                    if member_id != my_pub_id && !already_accepted.contains(&member_id) && my_pub_id > member_id {
                                         let _ = tx.send(format!("CALL:{}|GRP:{}", member_id, target_grp_clone));
                                         tokio::time::sleep(std::time::Duration::from_millis(400)).await;
                                     }
@@ -114,6 +118,7 @@ impl KakolookiyamApp {
                 }
 
                 self.active_call = Some((actual_id.clone(), pseudo));
+                self.active_call_participants.clear();
                 self.call_start_time = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
                 self.chat_input.clear();
                 self.chat_history.clear();
@@ -141,15 +146,27 @@ impl KakolookiyamApp {
                                 // --- CORRECTION DU RACCROCHAGE ---
                                 // On ordonne expressément au réseau de couper les ponts individuels
                                 // de chaque membre de ce groupe pour purger ton instance de WebRTC !
-                                for member_id in &group.members {
-                                    if member_id != &my_id {
-                                        let _ = self.tx_network.send(format!("HANGUP:{}", member_id));
+                                let tx = self.tx_network.clone();
+                                let members = group.members.clone();
+                                tokio::spawn(async move {
+                                    for member_id in members {
+                                        if member_id != my_id {
+                                            let _ = tx.send(format!("CHAT_SEND:{}:SYS:HANGUP", member_id));
+                                            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                                            let _ = tx.send(format!("HANGUP:{}", member_id));
+                                        }
                                     }
-                                }
+                                });
                             }
                         }
                     } else {
-                        let _ = self.tx_network.send(format!("HANGUP:{}", id));
+                        let tx = self.tx_network.clone();
+                        let target_id = id.clone();
+                        tokio::spawn(async move {
+                            let _ = tx.send(format!("CHAT_SEND:{}:SYS:HANGUP", target_id));
+                            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                            let _ = tx.send(format!("HANGUP:{}", target_id));
+                        });
                     }
                     
                     if let Some(start) = self.call_start_time.take() {
@@ -197,3 +214,9 @@ impl KakolookiyamApp {
         Command::none()
     }
 }
+
+
+
+
+
+

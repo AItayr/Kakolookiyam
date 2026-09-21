@@ -43,6 +43,7 @@ pub struct KakolookiyamApp {
     pub(crate) incoming_call_timer: u32,
     pub(crate) queued_group_offers: Vec<(String, String)>,
     pub(crate) active_call: Option<(String, String)>,
+    pub(crate) active_call_participants: std::collections::HashSet<String>,
     pub(crate) call_start_time: Option<u64>,
     pub(crate) is_muted: bool,
 
@@ -59,6 +60,7 @@ pub struct KakolookiyamApp {
     pub(crate) show_settings: bool,
     pub(crate) show_group_options: bool,
     pub(crate) show_blocked: bool,
+    pub(crate) show_volume_panel: bool,
     pub(crate) needs_save: bool,
 
     // --- Variables d'interface (Paramètres) ---
@@ -95,6 +97,7 @@ impl KakolookiyamApp {
                 incoming_call_timer: 0,
             queued_group_offers: Vec::new(),
                 active_call: None,
+            active_call_participants: std::collections::HashSet::new(),
             call_start_time: None,
                 is_muted: false,
                 selected_chat: None,
@@ -107,6 +110,7 @@ impl KakolookiyamApp {
                 show_settings: false,
                 show_group_options: false,
             show_blocked: false,
+            show_volume_panel: false,
             needs_save: false,
                 selected_mic: "Défaut".to_string(),
             available_mics: crate::audio::get_available_microphones(),
@@ -147,6 +151,10 @@ impl KakolookiyamApp {
 
             Message::OpenSettings => { self.idle_seconds = 0; self.show_settings = true; return Command::none(); }
             Message::CloseSettings => { self.idle_seconds = 0; self.show_settings = false; return Command::none(); }
+            Message::ToggleVolumePanel => {
+                self.show_volume_panel = !self.show_volume_panel;
+                return iced::Task::none();
+            }
             Message::ToggleBlocked => {
                 self.idle_seconds = 0;
                 self.show_blocked = !self.show_blocked;
@@ -183,7 +191,7 @@ impl KakolookiyamApp {
 
             Message::SelectChat(_) | Message::DeselectChat | Message::ChatInputChanged(_) |
             Message::SendChatMessage | Message::CopyIdClicked | Message::CopyContactId(_) |
-            Message::AcceptRequest(_) | Message::RejectRequest(_) | Message::BlockContact(_) | Message::UnblockContact(_)
+            Message::AcceptRequest(_) | Message::RejectRequest(_) | Message::BlockContact(_) | Message::UnblockContact(_) | Message::VolumeChanged(_, _)
             => self.handle_chat(message),
 
             Message::OpenFileDialog | Message::FileSelected(_) | Message::FileRead(_) |

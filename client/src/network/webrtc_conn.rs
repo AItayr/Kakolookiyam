@@ -30,7 +30,7 @@ pub async fn create_peer_connection(
     is_call: bool,
     turn_user: String,
     turn_pass: String,
-) -> Result<Arc<RTCPeerConnection>, Box<dyn std::error::Error>> {
+) -> Result<(Arc<RTCPeerConnection>, std::sync::Arc<std::sync::atomic::AtomicBool>), Box<dyn std::error::Error>> {
     
     // 1. STRICT RELAY ZERO-TRACE CONFIGURATION
     // Core engine will literally refuse to touch your local NAT, bypassing IP leaks entirely!
@@ -51,13 +51,20 @@ pub async fn create_peer_connection(
 
     let tx_ui_state = tx_ui.clone();
     let tgt_state = target_id.clone();
+    let is_active_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let is_active_flag_clone = std::sync::Arc::clone(&is_active_flag);
 
     pc.on_peer_connection_state_change(Box::new(move |state| {
         let tx = tx_ui_state.clone();
         let tgt = tgt_state.clone();
+        let active = std::sync::Arc::clone(&is_active_flag_clone);
         Box::pin(async move {
-            if state == RTCPeerConnectionState::Failed || state == RTCPeerConnectionState::Disconnected {
-                let _ = tx.send(format!("CALL_ENDED:{}", tgt));
+            if active.load(std::sync::atomic::Ordering::Relaxed) {
+                if state == RTCPeerConnectionState::Failed || state == RTCPeerConnectionState::Disconnected {
+                    let _ = tx.send(format!("CALL_ENDED:{}", tgt));
+                } else if state == RTCPeerConnectionState::Connected {
+                    let _ = tx.send(format!("CALL_CONNECTED:{}", tgt));
+                }
             }
         })
     }));
@@ -90,11 +97,13 @@ pub async fn create_peer_connection(
 
     if let Some(track) = audio_track {
         let tx_spk = tx_speaker.clone();
-
+        let target_id_on_track = target_id.clone();
         pc.on_track(Box::new(move |track, _, _| {
             let tx_spk = tx_spk.clone();
+            let target_id_async = target_id_on_track.clone();
             let track_id = TRACK_ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Box::pin(async move {
+                let target_id_final = target_id_async.clone();
                 tokio::spawn(async move {
                     let mut decoder = audiopus::coder::Decoder::new(
                         audiopus::SampleRate::Hz48000,
@@ -103,9 +112,16 @@ pub async fn create_peer_connection(
 
                     let track = track;
                     while let Ok((rtp_packet, _)) = track.read_rtp().await {
-                        let mut decoded_pcm = vec![0i16; 1920 * 2];
+                        let tgt_id_for_audio = target_id_final.clone();
+                    let mut decoded_pcm = vec![0i16; 1920 * 2];
                         if let Ok(len) = decoder.decode(Some(rtp_packet.payload.as_ref()), &mut decoded_pcm, false) {
                             decoded_pcm.truncate(len * 2);
+                            let vol = crate::audio::get_user_volume(&tgt_id_for_audio);
+                            if vol != 1.0 {
+                                for sample in decoded_pcm.iter_mut() {
+                                    *sample = (*sample as f32 * vol).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
+                                }
+                            }
                             let _ = tx_spk.send((track_id, decoded_pcm));
                         }
                     }
@@ -143,6 +159,14 @@ pub async fn create_peer_connection(
             let tgt_open = target_msg_clone.clone();
             let tx_open = tx_ui_msg_clone.clone();
 
+            let state = d_clone.ready_state();
+            if state == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open {
+                if is_call {
+                    let _ = tx_open.send(format!("CALL_ACTIVE:{}", tgt_open));
+                }
+                let msg = format!("{{\"type\":\"pseudo\",\"value\":\"{}\"}}", p_open);
+                let _ = d_open.send_text(msg).await;
+            } else {
             d_clone.on_open(Box::new(move || {
                 let p = p_open.clone();
                 let tgt = tgt_open.clone();
@@ -156,6 +180,7 @@ pub async fn create_peer_connection(
                     let _ = d_open.send_text(msg).await;
                 })
             }));
+            }
 
             d_clone.on_message(Box::new(move |msg: DataChannelMessage| {
                 let raw = msg.data.to_vec();
@@ -180,5 +205,5 @@ pub async fn create_peer_connection(
         })
     }));
 
-    Ok(pc)
+    Ok((pc, is_active_flag))
 }

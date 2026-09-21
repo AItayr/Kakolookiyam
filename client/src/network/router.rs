@@ -113,7 +113,8 @@ pub async fn start_p2p(
     let _ = ws_sender.send(Message::Text(serde_json::to_string(&reg).unwrap().into())).await;
 
     let (tx_signal, mut rx_signal) = tokio::sync::mpsc::channel::<Signal>(32);
-    let mut peers: HashMap<String, Arc<RTCPeerConnection>> = HashMap::new();
+    let mut peers: HashMap<String, (Arc<RTCPeerConnection>, std::sync::Arc<std::sync::atomic::AtomicBool>)> = HashMap::new();
+    let mut pending_outbound_offers: HashMap<String, std::time::Instant> = HashMap::new();
     let mut pending_ice: HashMap<String, Vec<String>> = HashMap::new();
     let mut turn_user = String::new();
     let mut turn_pass = String::new();
@@ -171,7 +172,8 @@ pub async fn start_p2p(
                     let id = cmd.trim_start_matches("LOGOUT:").to_string();
                     let _ = tx_signal.send(Signal::Unregister { id }).await;
 
-                    for (_, pc) in peers.drain() {
+                    for (_, (pc, flag)) in peers.drain() {
+ flag.store(false, std::sync::atomic::Ordering::Relaxed);
                         let _ = pc.close().await;
                     }
                     data_channels.clear();
@@ -204,13 +206,14 @@ pub async fn start_p2p(
                         let _ = tx_ui_loading.send(format!("TIMEOUT:{}", timeout_target_id));
                     });
 
-                    if let Some(old_pc) = peers.remove(&target_id) {
+                    if let Some((old_pc, flag)) = peers.remove(&target_id) {
+ flag.store(false, std::sync::atomic::Ordering::Relaxed);
                         let _ = old_pc.close().await;
                     }
                     data_channels.remove(&target_id);
                     pending_ice.remove(&target_id);
                     transfer_manager.cleanup(&target_id);
-                    let pc = match create_peer_connection(
+                    let (pc, flag) = match create_peer_connection(
                         &api,
                         target_id.clone(),
                         my_local_id.clone(),
@@ -225,7 +228,7 @@ pub async fn start_p2p(
                         turn_user.clone(),
                         turn_pass.clone()
                     ).await {
-                        Ok(p) => p,
+                        Ok((p, f)) => (p, f),
                         Err(e) => {
                             let _ = tx_ui.send(format!("CHAT_RECV:err:Failed PC: {}", e));
                             continue;
@@ -296,7 +299,8 @@ pub async fn start_p2p(
                                 let _ = tx_sig.send(Signal::Offer { sdp: final_sdp, sender_id: my_id, target_id: tgt_id, pseudo: my_pseudo_clone.clone(), timestamp: tstamp, signature: sig }).await;
                             }
                         });
-                        peers.insert(target_id.clone(), pc);
+                        peers.insert(target_id.clone(), (pc, flag));
+                        pending_outbound_offers.insert(target_id.clone(), std::time::Instant::now());
                     }
                 }
                 else if cmd.starts_with("ACCEPT:") {
@@ -305,11 +309,12 @@ pub async fn start_p2p(
                         let sender_id = parts[1].to_string();
                         let sdp = parts[2].to_string();
 
-                        if let Some(old_pc) = peers.remove(&sender_id) {
+                        if let Some((old_pc, flag)) = peers.remove(&sender_id) {
+ flag.store(false, std::sync::atomic::Ordering::Relaxed);
                             let _ = old_pc.close().await;
                         }
                         data_channels.remove(&sender_id);
-                                        if let Ok(pc) = create_peer_connection(
+                                        if let Ok((pc, flag)) = create_peer_connection(
                             &api,
                             sender_id.clone(),
                             my_local_id.clone(),
@@ -324,7 +329,7 @@ pub async fn start_p2p(
                             turn_user.clone(),
                             turn_pass.clone()
                         ).await {
-                            peers.insert(sender_id.clone(), Arc::clone(&pc));
+                            peers.insert(sender_id.clone(), (Arc::clone(&pc), std::sync::Arc::clone(&flag)));
 
                             let mut desc = RTCSessionDescription::default();
                             desc.sdp_type = RTCSdpType::Offer; desc.sdp = sdp;
@@ -357,7 +362,8 @@ pub async fn start_p2p(
                 else if cmd.starts_with("REJECT:") {
                     let sender_id = cmd.trim_start_matches("REJECT:").to_string();
                     pending_ice.remove(&sender_id);
-                    if let Some(pc) = peers.remove(&sender_id) {
+                    if let Some((pc, flag)) = peers.remove(&sender_id) {
+ flag.store(false, std::sync::atomic::Ordering::Relaxed);
                         let _ = pc.close().await;
                     }
                     transfer_manager.cleanup(&sender_id);
@@ -367,7 +373,8 @@ pub async fn start_p2p(
                 }
                 else if cmd.starts_with("HANGUP:") {
                     let target_id = cmd.trim_start_matches("HANGUP:").to_string();
-                    if let Some(pc) = peers.remove(&target_id) {
+                    if let Some((pc, flag)) = peers.remove(&target_id) {
+ flag.store(false, std::sync::atomic::Ordering::Relaxed);
                         let _ = pc.close().await;
                     }
                     data_channels.remove(&target_id);
@@ -389,11 +396,12 @@ pub async fn start_p2p(
                         if let Some(dc) = data_channels.get(&target_id) {
                             let _ = dc.send_text(text).await;
                         } else {
-                            if let Some(old_pc) = peers.remove(&target_id) {
+                            if let Some((old_pc, flag)) = peers.remove(&target_id) {
+ flag.store(false, std::sync::atomic::Ordering::Relaxed);
                                 let _ = old_pc.close().await;
                             }
 
-                            if let Ok(pc) = create_peer_connection(
+                            if let Ok((pc, flag)) = create_peer_connection(
                                 &api,
                                 target_id.clone(),
                                 my_local_id.clone(),
@@ -460,7 +468,8 @@ pub async fn start_p2p(
                                 let _ = tx_sig.send(Signal::ChatOffer { sdp: offer.sdp, sender_id: my_id, target_id: tgt_id, pseudo: my_pseudo_clone.clone(), timestamp: tstamp, signature: sig }).await;
                             }
                         });
-                        peers.insert(target_id.clone(), pc);
+                        peers.insert(target_id.clone(), (pc, flag));
+                        pending_outbound_offers.insert(target_id.clone(), std::time::Instant::now());
                     }
                                 }
                             }
@@ -491,7 +500,7 @@ pub async fn start_p2p(
                             } else {
                                 if peers.contains_key(&target_id) { continue; }
 
-                                if let Ok(pc) = create_peer_connection(
+                                if let Ok((pc, flag)) = create_peer_connection(
                                     &api,
                                     target_id.clone(),
                                     my_local_id.clone(),
@@ -558,7 +567,8 @@ pub async fn start_p2p(
                                 let _ = tx_sig.send(Signal::ChatOffer { sdp: offer.sdp, sender_id: my_id, target_id: tgt_id, pseudo: my_pseudo_clone.clone(), timestamp: tstamp, signature: sig }).await;
                             }
                         });
-                        peers.insert(target_id.clone(), pc);
+                        peers.insert(target_id.clone(), (pc, flag));
+                        pending_outbound_offers.insert(target_id.clone(), std::time::Instant::now());
                     }
                                     }
                                 }
@@ -621,7 +631,16 @@ pub async fn start_p2p(
                                         if timestamp < now - 60 || timestamp > now + 60 { continue; }
                                         if !crate::crypto::verify_announcement(&sender_id, &pseudo, timestamp, &signature) { continue; }
                                         
-                                        if let Some(old_pc) = peers.remove(&sender_id) {
+                                          if let Some(time) = pending_outbound_offers.get(&sender_id) {
+                                              if time.elapsed().as_secs() < 30 {
+                                                  if my_local_id > sender_id {
+                                                      continue;
+                                                  }
+                                              }
+                                              pending_outbound_offers.remove(&sender_id);
+                                          }
+if let Some((old_pc, flag)) = peers.remove(&sender_id) {
+ flag.store(false, std::sync::atomic::Ordering::Relaxed);
                                             let _ = old_pc.close().await;
                                         }
                                         data_channels.remove(&sender_id);
@@ -645,17 +664,26 @@ pub async fn start_p2p(
                                         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
                                         if timestamp < now - 60 || timestamp > now + 60 { continue; }
                                         if !crate::crypto::verify_announcement(&sender_id, &pseudo, timestamp, &signature) { continue; }
-                                        if let Some(old_pc) = peers.remove(&sender_id) {
+                                          if let Some(time) = pending_outbound_offers.get(&sender_id) {
+                                              if time.elapsed().as_secs() < 30 {
+                                                  if my_local_id > sender_id {
+                                                      continue;
+                                                  }
+                                              }
+                                              pending_outbound_offers.remove(&sender_id);
+                                          }
+if let Some((old_pc, flag)) = peers.remove(&sender_id) {
+ flag.store(false, std::sync::atomic::Ordering::Relaxed);
                                             let _ = old_pc.close().await;
                                         }
                                         data_channels.remove(&sender_id);
 
-                                        if let Ok(pc) = create_peer_connection(
+                                        if let Ok((pc, flag)) = create_peer_connection(
                                             &api, sender_id.clone(), my_local_id.clone(), my_pseudo.clone(),
                                             None, tx_speaker.clone(), tx_signal.clone(), tx_ui.clone(), tx_dc.clone(), tx_chunks.clone(), false,
                                             turn_user.clone(), turn_pass.clone()
                                         ).await {
-                                            peers.insert(sender_id.clone(), Arc::clone(&pc));
+                                            peers.insert(sender_id.clone(), (Arc::clone(&pc), std::sync::Arc::clone(&flag)));
                                             let mut desc = RTCSessionDescription::default();
                                             desc.sdp_type = RTCSdpType::Offer; desc.sdp = sdp;
                                             if pc.set_remote_description(desc).await.is_ok() {
@@ -674,18 +702,20 @@ pub async fn start_p2p(
                                         }
                                     }
                                     Signal::Answer { sdp, sender_id, pseudo, timestamp, signature, .. } => {
+                                        pending_outbound_offers.remove(&sender_id);
                                         if !crate::crypto::verify_announcement(&sender_id, &pseudo, timestamp, &signature) { continue; }
 
                                         if sdp == "BUSY" {
                                             let _ = tx_ui.send(format!("CALL_BUSY:{}", sender_id));
-                                            if let Some(pc) = peers.remove(&sender_id) {
+                                            if let Some((pc, flag)) = peers.remove(&sender_id) {
+ flag.store(false, std::sync::atomic::Ordering::Relaxed);
                                                 let _ = pc.close().await;
                                             }
                                             data_channels.remove(&sender_id);
                                             continue;
                                         }
 
-                                        if let Some(pc) = peers.get(&sender_id) {
+                                        if let Some((pc, _flag)) = peers.get(&sender_id) {
                                             let mut desc = RTCSessionDescription::default();
                                             desc.sdp_type = RTCSdpType::Answer; desc.sdp = sdp;
                                             if pc.set_remote_description(desc).await.is_ok() {
@@ -703,7 +733,7 @@ pub async fn start_p2p(
                                         if !crate::crypto::verify_announcement(&sender_id, &pseudo, timestamp, &signature) { continue; }
 
                                         let mut handled = false;
-                                        if let Some(pc) = peers.get(&sender_id) {
+                                        if let Some((pc, _flag)) = peers.get(&sender_id) {
                                             if pc.remote_description().await.is_some() {
                                                 let ice_init = RTCIceCandidateInit { candidate: candidate.clone(), ..Default::default() };
                                                 let _ = pc.add_ice_candidate(ice_init).await;
@@ -726,6 +756,8 @@ pub async fn start_p2p(
     }
     Ok(())
 }
+
+
 
 
 

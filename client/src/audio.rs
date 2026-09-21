@@ -3,16 +3,46 @@ use std::sync::{Arc, Mutex};
 use std::collections::VecDeque;
 pub static REQUESTED_MIC: Mutex<Option<String>> = Mutex::new(None);
 pub static REQUESTED_SPEAKER: Mutex<Option<String>> = Mutex::new(None);
+pub static AUDIO_THREAD: Mutex<Option<std::thread::Thread>> = Mutex::new(None);
+
+pub static USER_VOLUMES: Mutex<Option<std::collections::HashMap<String, f32>>> = Mutex::new(None);
+
+pub fn get_user_volume(id: &str) -> f32 {
+    if let Ok(m) = USER_VOLUMES.lock() {
+        if let Some(map) = &*m {
+            return *map.get(id).unwrap_or(&1.0);
+        }
+    }
+    1.0
+}
+
+pub fn set_user_volume(id: String, volume: f32) {
+    if let Ok(mut m) = USER_VOLUMES.lock() {
+        if m.is_none() {
+            *m = Some(std::collections::HashMap::new());
+        }
+        if let Some(map) = m.as_mut() {
+            map.insert(id, volume);
+        }
+    }
+}
+
 
 pub fn set_microphone(name: String) {
     if let Ok(mut m) = REQUESTED_MIC.lock() {
         *m = Some(name);
+    }
+    if let Ok(t) = AUDIO_THREAD.lock() {
+        if let Some(thread) = &*t { thread.unpark(); }
     }
 }
 
 pub fn set_speaker(name: String) {
     if let Ok(mut m) = REQUESTED_SPEAKER.lock() {
         *m = Some(name);
+    }
+    if let Ok(t) = AUDIO_THREAD.lock() {
+        if let Some(thread) = &*t { thread.unpark(); }
     }
 }
 
@@ -54,10 +84,28 @@ pub fn start_hardware_audio(
     tx_mic: tokio::sync::mpsc::Sender<Vec<u8>>,
     rx_speaker: std::sync::mpsc::Receiver<(usize, Vec<i16>)>
 ) {
-    std::thread::spawn(move || {
-        let host = cpal::default_host();
+    let handle = std::thread::spawn(move || {
+        let rx_speaker_arc = std::sync::Arc::new(std::sync::Mutex::new(rx_speaker));
+        loop {
+            let tx_mic = tx_mic.clone();
+            let host = cpal::default_host();
         
-        let mic_device = match host.default_input_device() {
+                let mut mic_device = host.default_input_device();
+        if let Ok(m) = crate::audio::REQUESTED_MIC.lock() {
+            if let Some(name) = &*m {
+                if name != "Défaut" && name != "Dfaut" {
+                    if let Ok(devices) = host.input_devices() {
+                        for d in devices {
+                            if d.to_string() == *name {
+                                mic_device = Some(d);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let mic_device = match mic_device {
             Some(d) => d,
             None => return,
         };
@@ -137,7 +185,22 @@ pub fn start_hardware_audio(
             Err(_) => return,
         };
 
-        let spk_device = match host.default_output_device() {
+                let mut spk_device = host.default_output_device();
+        if let Ok(m) = crate::audio::REQUESTED_SPEAKER.lock() {
+            if let Some(name) = &*m {
+                if name != "Défaut" && name != "Dfaut" {
+                    if let Ok(devices) = host.output_devices() {
+                        for d in devices {
+                            if d.to_string() == *name {
+                                spk_device = Some(d);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let spk_device = match spk_device {
             Some(d) => d,
             None => return,
         };
@@ -149,7 +212,6 @@ pub fn start_hardware_audio(
         let spk_config: cpal::StreamConfig = spk_supported_config.into();
         let spk_channels = spk_config.channels as usize;
 
-        let rx_speaker_arc = Arc::new(Mutex::new(rx_speaker));
         let rx_spk_f32 = Arc::clone(&rx_speaker_arc);
         let rx_spk_i16 = Arc::clone(&rx_speaker_arc);
 
@@ -234,6 +296,10 @@ pub fn start_hardware_audio(
         let _ = spk_stream.play();
 
         std::thread::park();
+        }
     });
+    if let Ok(mut t) = AUDIO_THREAD.lock() {
+        *t = Some(handle.thread().clone());
+    }
 }
 

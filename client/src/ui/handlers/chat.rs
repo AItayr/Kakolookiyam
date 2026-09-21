@@ -113,6 +113,10 @@ impl KakolookiyamApp {
             }
             Message::BlockContact(id) => return self.handle_block_contact(id),
             Message::UnblockContact(id) => return self.handle_unblock_contact(id),
+            Message::VolumeChanged(id, vol) => {
+                crate::audio::set_user_volume(id, vol);
+                return iced::Task::none();
+            }
             Message::CopyContactId(id) => {
                 self.status_message = crate::ui::i18n::t(&self.language, "status_id_copied");
                 return clipboard::write(id);

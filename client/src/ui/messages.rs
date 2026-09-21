@@ -36,6 +36,8 @@ pub enum Message {
     BlockContact(String),
     UnblockContact(String),
     ToggleBlocked,
+    ToggleVolumePanel,
+    VolumeChanged(String, f32),
 
     // --- GESTION DES GROUPES ---
     NewGroupInputChanged(String),

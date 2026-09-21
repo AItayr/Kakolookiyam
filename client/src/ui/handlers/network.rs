@@ -159,6 +159,27 @@ impl KakolookiyamApp {
                         return Command::none();
                     }
 
+                    if text == "SYS:HANGUP" {
+                        self.active_call_participants.remove(&sender_id);
+                        let _ = self.tx_network.send(format!("HANGUP:{}", sender_id));
+                        let mut should_end = false;
+                        if let Some((active_id, _)) = &self.active_call {
+                            if active_id == &sender_id {
+                                should_end = true;
+                            }
+                        }
+                        if should_end {
+                            self.active_call = None;
+                            self.active_call_participants.clear();
+                            self.is_muted = false;
+                            let _ = self.tx_network.send("MUTE:off".to_string());
+                            self.chat_input.clear();
+                            self.chat_history.clear();
+                            self.status_message = crate::ui::i18n::t(&self.language, "status_remote_hangup");
+                        }
+                        return Command::none();
+                    }
+
                     if text == "SYS:CALL_BUSY" {
                         self.status_message = crate::ui::i18n::t(&self.language, "status_remote_busy");
                         let _ = self.tx_network.send(format!("HANGUP:{}", sender_id));
@@ -347,6 +368,7 @@ if !is_dup {
                     let my_id = crate::crypto::derive_public_id(&vd.private_key);
 
                     self.active_call = Some((grp_id.clone(), group.name.clone()));
+                    self.active_call_participants.clear();
                     self.call_start_time = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
                     self.chat_history.clear();
 
@@ -559,8 +581,13 @@ if !is_dup {
                             // If `caller_grp_id` is empty, AND `caller_id` != `active_id`, we MUST REJECT!
                             if caller_grp_id.is_empty() || caller_grp_id != *active_id {
                                 // [MED-4] Auto-Signal au correspondant pour qu'il ne poireaute pas 25s
-                                let _ = self.tx_network.send(format!("CHAT_SEND:{}:SYS:CALL_BUSY", caller_id));
-                                let _ = self.tx_network.send(format!("REJECT:{}", caller_id));
+                                let tx = self.tx_network.clone();
+                                let cid = caller_id.clone();
+                                tokio::spawn(async move {
+                                    let _ = tx.send(format!("CHAT_SEND:{}:SYS:CALL_BUSY", cid));
+                                    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                                    let _ = tx.send(format!("REJECT:{}", cid));
+                                });
                                 if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
                                     let entry = crate::crypto::MessageEntry {
                                         author: crate::ui::i18n::t(&self.language, "system_author"),
@@ -620,17 +647,12 @@ if !is_dup {
             else if msg.starts_with("CALL_ACTIVE:") {
                 let id = msg.trim_start_matches("CALL_ACTIVE:").trim().to_string();
 
-                // Dbloquer l'ui d'appel de l'appelant
                 if self.status_message.starts_with("LOADING:") {
                     self.status_message.clear();
                 }
 
-                if let Some((active_id, _)) = &self.active_call {
-                                        if active_id.starts_with("grp_") {
-                        let _ = self.tx_network.send(format!("CHAT_SEND:{}:SYS:CALL_CONTEXT:{}", id, active_id));
-                        return Command::none(); // STOP THE SYNC STORM !
-                    }
-                } else {
+                // Si on a pas d'appel actif, c'est nous qui avons initié l'appel P2P !
+                if self.active_call.is_none() {
                     let pseudo = if let Some(vd) = &self.vault_data {
                         vd.contacts.get(&id).cloned().unwrap_or_else(|| "Ami".to_string())
                     } else {
@@ -638,6 +660,9 @@ if !is_dup {
                     };
 
                     self.active_call = Some((id.clone(), pseudo));
+                    self.active_call_participants.clear(); // Vider les fantomes !
+                    self.active_call_participants.insert(id.clone()); // Ajouter notre correspondant
+
                     self.call_start_time = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
                     self.chat_input.clear();
                     self.chat_history.clear();
@@ -650,6 +675,18 @@ if !is_dup {
                         }
                     }
                     return self.trigger_history_sync(&id);
+                } else {
+                    // Un appel est déjà actif (Groupe ou P2P)
+                    if let Some((active_id, _)) = &self.active_call {
+                        if active_id.starts_with("grp_") || active_id == &id {
+                            self.active_call_participants.insert(id.clone());
+                        }
+                        
+                        if active_id.starts_with("grp_") {
+                            let _ = self.tx_network.send(format!("CHAT_SEND:{}:SYS:CALL_CONTEXT:{}", id, active_id));
+                            return Command::none();
+                        }
+                    }
                 }
             }
             else if msg.starts_with("CALL_BUSY:") {
@@ -675,8 +712,22 @@ if !is_dup {
                     }
                 }
             }
+            else if msg.starts_with("CALL_CONNECTED:") {
+                let id = msg.trim_start_matches("CALL_CONNECTED:").trim().to_string();
+                let mut allow = false;
+                if let Some((act_id, _)) = &self.active_call {
+                    if act_id.starts_with("grp_") || act_id == &id {
+                        allow = true;
+                    }
+                }
+                if allow {
+                    self.active_call_participants.insert(id);
+                }
+                return iced::Task::none();
+            }
             else if msg.starts_with("CALL_ENDED:") {
                 let id = msg.trim_start_matches("CALL_ENDED:").trim().to_string();
+                self.active_call_participants.remove(&id);
                 let _ = self.tx_network.send(format!("HANGUP:{}", id));
 
                 let mut should_end = false;
@@ -701,7 +752,9 @@ if !is_dup {
                     if inc_id == &id {
                         self.incoming_call = None;
                         self.incoming_call_timer = 0;
-                        self.status_message = crate::ui::i18n::t(&self.language, "status_caller_hangup");
+                        if !should_end {
+                            self.status_message = crate::ui::i18n::t(&self.language, "status_caller_hangup");
+                        }
                     }
                 }
             }
@@ -730,3 +783,8 @@ if !is_dup {
         Command::none()
     }
 }
+
+
+
+
+

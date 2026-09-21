@@ -332,6 +332,10 @@ impl KakolookiyamApp {
                 } else {
                     header = header.push(
                         row![
+                            button(crate::ui::i18n::app_text(&self.language, "🔊").size(20))
+                                .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
+                                .on_press(Message::ToggleVolumePanel)
+                                .padding([5, 10]),
                             button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_copy_id")))
                                 .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
                                 .on_press(Message::CopyContactId(target_id.clone()))
@@ -514,7 +518,18 @@ impl KakolookiyamApp {
                             .padding(10)
                     ].spacing(10);
 
-                    let mut chat_column = column![header, iced::widget::rule::horizontal(1), chat_scroll]
+                    let mut chat_column = column![header, iced::widget::rule::horizontal(1)];
+                    if self.show_volume_panel {
+                        chat_column = chat_column.push(
+                            row![
+                                crate::ui::i18n::app_text(&self.language, "MIXAGE EXT. ").size(14).color(current_muted),
+                                iced::widget::slider(0.0..=3.0, crate::audio::get_user_volume(&target_id), { let tid = target_id.clone(); move |v| Message::VolumeChanged(tid.clone(), v) }).width(Length::Fixed(150.0)),
+                                crate::ui::i18n::app_text(&self.language, format!("{} %", (crate::audio::get_user_volume(&target_id) * 100.0) as i32)).size(14)
+                            ].align_y(Alignment::Center).spacing(10).padding([10, 20])
+                        );
+                        chat_column = chat_column.push(iced::widget::rule::horizontal(1));
+                    }
+                    chat_column = chat_column.push(chat_scroll)
                         .spacing(15)
                         .width(Length::Fill)
                         .height(Length::Fill);
@@ -603,14 +618,55 @@ impl KakolookiyamApp {
                 crate::ui::i18n::app_text(&self.language, "").size(22).color(iced::Color::TRANSPARENT)
             };
             
+
+            let mut pseudo_row = row![
+                crate::ui::i18n::app_text(&self.language, t(&self.language, "banner_call_active")).size(16).color(iced::Color::WHITE),
+                crate::ui::i18n::app_text(&self.language, " : ").size(16).color(iced::Color::WHITE),
+                crate::ui::i18n::app_text(&self.language, call_pseudo).size(16).color(iced::Color::WHITE),
+            ].align_y(Alignment::Center).spacing(10);
+
+            if let Some(vd) = &self.vault_data {
+                let initial_self = vd.pseudo.chars().next().unwrap_or('?').to_string().to_uppercase();
+                pseudo_row = pseudo_row.push(
+                    container(crate::ui::i18n::app_text(&self.language, initial_self).size(12).color(iced::Color::WHITE))
+                        .padding([4, 8])
+                        .style(move |_| iced::widget::container::Style {
+                            background: Some(iced::Background::Color(iced::Color::from_rgb(0.2, 0.4, 0.8))),
+                            border: iced::Border { radius: 10.0.into(), width: 0.0, color: iced::Color::TRANSPARENT },
+                            text_color: Some(iced::Color::WHITE),
+                            shadow: iced::Shadow::default(), ..Default::default()
+                        })
+                );
+
+                for p_id in &self.active_call_participants {
+                    let mut pseudo_opt = None;
+                    if let Some(saved) = vd.contacts.get(p_id) {
+                        pseudo_opt = Some(saved.clone());
+                    } else if let Some(history) = vd.chat_history.get(p_id) {
+                        let sys_author = crate::ui::i18n::t(&self.language, "system_author");
+                        if let Some(m) = history.iter().find(|m| m.author != "SYS:AUTHOR" && m.author != sys_author && m.author != "Moi" && m.author != vd.pseudo && !m.author.is_empty()) {
+                            pseudo_opt = Some(m.author.clone());
+                        }
+                    }
+                    let pseudo_m = pseudo_opt.unwrap_or(p_id.clone());
+                    let initial = pseudo_m.chars().next().unwrap_or('?').to_string().to_uppercase();
+                    
+                    pseudo_row = pseudo_row.push(
+                        container(crate::ui::i18n::app_text(&self.language, initial).size(12).color(iced::Color::WHITE))
+                            .padding([4, 8])
+                            .style(move |_| iced::widget::container::Style {
+                                background: Some(iced::Background::Color(iced::Color::from_rgb(0.1, 0.7, 0.4))),
+                                border: iced::Border { radius: 10.0.into(), width: 0.0, color: iced::Color::TRANSPARENT },
+                                text_color: Some(iced::Color::WHITE),
+                                shadow: iced::Shadow::default(), ..Default::default()
+                            })
+                    );
+                }
+            }
+
             let banner = container(
                 row![
-                    row![
-                        crate::ui::i18n::app_text(&self.language, t(&self.language, "banner_call_active")).size(16).color(iced::Color::WHITE),
-                        crate::ui::i18n::app_text(&self.language, " : ").size(16).color(iced::Color::WHITE),
-                        crate::ui::i18n::app_text(&self.language, call_pseudo).size(16).color(iced::Color::WHITE),
-                    ].align_y(Alignment::Center),
-                    
+                    pseudo_row,
                     Space::new().width(Length::Fill),
                     container(timer_text).center_x(iced::Length::Fill),
                     Space::new().width(Length::Fill),
