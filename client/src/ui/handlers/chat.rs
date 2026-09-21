@@ -25,6 +25,18 @@ impl KakolookiyamApp {
                             self.chat_history.push((msg.author.clone(), msg.content.clone()));
                         }
                     }
+                    
+                    if id.starts_with("grp_") {
+                        if let Some(group) = vd.groups.get(&id) {
+                            let tx = self.tx_network.clone();
+                            let my_id = crate::crypto::derive_public_id(&vd.private_key);
+                            for member_id in &group.members {
+                                if member_id != &my_id {
+                                    let _ = tx.send(format!("CHAT_SEND:{}:SYS:SYNC_WAKEUP:{}", member_id, id));
+                                }
+                            }
+                        }
+                    }
                 }
 
                 return self.trigger_history_sync(&id);

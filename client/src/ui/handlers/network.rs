@@ -156,7 +156,20 @@ impl KakolookiyamApp {
 
                     // --- NOUVEAU : On étouffe le signal de réveil réseau ---
                     if text.starts_with("SYS:SYNC_WAKEUP") {
+                        // Si le récepteur est lui-même dans un appel, il renvoie un Heartbeat immédiatement
+                        if let Some((active_id, _)) = &self.active_call {
+                            if active_id.starts_with("grp_") {
+                                let _ = self.tx_network.send(format!("CHAT_SEND_IF_OPEN:{}:SYS:GRP_HEARTBEAT:{}", sender_id, active_id));
+                            }
+                        }
                         return Command::none();
+                    }
+                    
+                    if text.starts_with("SYS:GRP_HEARTBEAT:") {
+                        let grp_id = text.trim_start_matches("SYS:GRP_HEARTBEAT:").trim().to_string();
+                        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                        self.group_call_presences.entry(grp_id).or_default().insert(sender_id.clone(), now);
+                        return Command::none(); // Important silently
                     }
 
                     if text == "SYS:HANGUP" {

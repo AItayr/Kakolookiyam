@@ -148,12 +148,25 @@ impl KakolookiyamApp {
                                 // de chaque membre de ce groupe pour purger ton instance de WebRTC !
                                 let tx = self.tx_network.clone();
                                 let members = group.members.clone();
+                                 let grp_id = id.clone();
                                 tokio::spawn(async move {
-                                    for member_id in members {
-                                        if member_id != my_id {
+                                    for member_id in &members {
+                                        if member_id != &my_id {
                                             let _ = tx.send(format!("CHAT_SEND:{}:SYS:HANGUP", member_id));
-                                            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                                        }
+                                    }
+                                    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                                    for member_id in &members {
+                                        if member_id != &my_id {
                                             let _ = tx.send(format!("HANGUP:{}", member_id));
+                                        }
+                                    }
+                                    // Attend que Kakolookiyam détruise les vrais canaux P2P
+                                    tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+                                    // Refabrique instantanément les canaux de "Chat" fantômes pour écouter si le groupe parle ou est en appel !
+                                    for member_id in &members {
+                                        if member_id != &my_id {
+                                            let _ = tx.send(format!("CHAT_SEND:{}:SYS:SYNC_WAKEUP:{}", member_id, grp_id));
                                         }
                                     }
                                 });

@@ -39,6 +39,8 @@ pub struct KakolookiyamApp {
     pub(crate) tx_secrets: tokio::sync::mpsc::UnboundedSender<[u8; 32]>,
 
     pub(crate) idle_seconds: u32,
+    pub(crate) heartbeat_counter: u32,
+    pub(crate) group_call_presences: std::collections::HashMap<String, std::collections::HashMap<String, u64>>,
     pub(crate) incoming_call: Option<(String, String, String, String)>,
     pub(crate) incoming_call_timer: u32,
     pub(crate) queued_group_offers: Vec<(String, String)>,
@@ -93,6 +95,8 @@ impl KakolookiyamApp {
                 tx_identity: Some(flags.tx_identity),
                 tx_secrets: flags.tx_secrets,
                 idle_seconds: 0,
+            heartbeat_counter: 0,
+            group_call_presences: std::collections::HashMap::new(),
                 incoming_call: None,
                 incoming_call_timer: 0,
             queued_group_offers: Vec::new(),

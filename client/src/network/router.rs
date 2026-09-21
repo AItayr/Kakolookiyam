@@ -387,6 +387,16 @@ pub async fn start_p2p(
                 else if cmd == "MUTE:off" {
                     is_muted.store(false, Ordering::Relaxed);
                 }
+                else if cmd.starts_with("CHAT_SEND_IF_OPEN:") {
+                    let parts: Vec<&str> = cmd.splitn(3, ':').collect();
+                    if parts.len() == 3 {
+                        let target_id = parts[1].to_string();
+                        let text = parts[2].to_string();
+                        if let Some(dc) = data_channels.get(&target_id) {
+                            let _ = dc.send_text(text).await;
+                        }
+                    }
+                }
                 else if cmd.starts_with("CHAT_SEND:") {
                     let parts: Vec<&str> = cmd.splitn(3, ':').collect();
                     if parts.len() == 3 {

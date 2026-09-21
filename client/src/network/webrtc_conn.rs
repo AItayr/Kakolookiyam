@@ -54,16 +54,20 @@ pub async fn create_peer_connection(
     let is_active_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
     let is_active_flag_clone = std::sync::Arc::clone(&is_active_flag);
 
+    let ic_state = is_call;
     pc.on_peer_connection_state_change(Box::new(move |state| {
         let tx = tx_ui_state.clone();
         let tgt = tgt_state.clone();
         let active = std::sync::Arc::clone(&is_active_flag_clone);
+        let is_actual_call = ic_state;
         Box::pin(async move {
             if active.load(std::sync::atomic::Ordering::Relaxed) {
                 if state == RTCPeerConnectionState::Failed || state == RTCPeerConnectionState::Disconnected {
                     let _ = tx.send(format!("CALL_ENDED:{}", tgt));
                 } else if state == RTCPeerConnectionState::Connected {
-                    let _ = tx.send(format!("CALL_CONNECTED:{}", tgt));
+                    if is_actual_call {
+                        let _ = tx.send(format!("CALL_CONNECTED:{}", tgt));
+                    }
                 }
             }
         })

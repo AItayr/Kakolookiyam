@@ -51,6 +51,35 @@ impl KakolookiyamApp {
                 self.auth_error = Some(err_msg);
             }
             Message::TickInactivity => {
+                self.heartbeat_counter = self.heartbeat_counter.wrapping_add(1);
+                
+                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+
+                // 1) Cleanup old presences (15 secs window)
+                for (_, presences) in self.group_call_presences.iter_mut() {
+                    presences.retain(|_, last_seen| now.saturating_sub(*last_seen) < 15);
+                }
+                self.group_call_presences.retain(|_, presences| !presences.is_empty());
+
+                // 2) Send our heartbeat if we are in a group call (every 5 seconds)
+                if self.heartbeat_counter % 5 == 0 {
+                    if let Some((active_id, _)) = &self.active_call {
+                        if active_id.starts_with("grp_") {
+                            if let Some(vd) = &self.vault_data {
+                                if let Some(group) = vd.groups.get(active_id) {
+                                    let my_id = crate::crypto::derive_public_id(&vd.private_key);
+                                    let tx = self.tx_network.clone();
+                                    for member_id in &group.members {
+                                        if member_id != &my_id {
+                                            let _ = tx.send(format!("CHAT_SEND_IF_OPEN:{}:SYS:GRP_HEARTBEAT:{}", member_id, active_id));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if self.needs_save {
                     self.needs_save = false;
                     if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {

@@ -316,7 +316,28 @@ impl KakolookiyamApp {
                 .width(Length::Fill);
 
                 if is_group {
-                    let btn_call_group = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_call_group")))
+                    let mut active_presences = None;
+                    if let Some(presences) = self.group_call_presences.get(target_id) {
+                        if !presences.is_empty() {
+                            let mut already_in = false;
+                            if let Some((act_id, _)) = &self.active_call {
+                                if act_id == target_id {
+                                    already_in = true;
+                                }
+                            }
+                            if !already_in {
+                                active_presences = Some(presences);
+                            }
+                        }
+                    }
+
+                    let call_btn_text = if active_presences.is_some() {
+                        t(&self.language, "btn_join_group")
+                    } else {
+                        t(&self.language, "btn_call_group")
+                    };
+
+                    let btn_call_group = button(crate::ui::i18n::app_text(&self.language, call_btn_text))
                         .style(primary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
                         .on_press(Message::CallContact(target_id.clone()))
                         .padding(10);
@@ -326,9 +347,38 @@ impl KakolookiyamApp {
                         .on_press(Message::OpenGroupOptions)
                         .padding(10);
 
-                    header = header.push(
-                        row![btn_call_group, btn_options].spacing(15).align_y(Alignment::Center)
-                    );
+                    let mut right_pane_buttons = row![].spacing(15).align_y(Alignment::Center);
+
+                    if let Some(presences) = active_presences {
+                        let mut bubbles_row = row![].spacing(5).align_y(Alignment::Center);
+                        for p_id in presences.keys() {
+                            let mut pseudo = p_id.clone();
+                            if let Some(c) = vd.contacts.get(p_id) {
+                                pseudo = c.clone();
+                            }
+                            let initial = pseudo.chars().next().unwrap_or('?').to_string().to_uppercase();
+                            
+                            bubbles_row = bubbles_row.push(
+                                container(crate::ui::i18n::app_text(&self.language, initial).size(12).color(iced::Color::WHITE))
+                                    .padding([4, 8])
+                                    .style(move |_| iced::widget::container::Style {
+                                        background: Some(iced::Background::Color(iced::Color::from_rgb(0.1, 0.7, 0.4))),
+                                        border: iced::Border { radius: 10.0.into(), width: 0.0, color: iced::Color::TRANSPARENT },
+                                        text_color: Some(iced::Color::WHITE),
+                                        shadow: iced::Shadow::default(), ..Default::default()
+                                    })
+                            );
+                        }
+                        
+                        let context_txt = if presences.len() == 1 { "est en appel" } else { "sont en appel" };
+                        let label = crate::ui::i18n::app_text(&self.language, context_txt).size(14).color(current_text);
+                        right_pane_buttons = right_pane_buttons.push(row![bubbles_row, label].spacing(8).align_y(Alignment::Center));
+                    }
+                    
+                    right_pane_buttons = right_pane_buttons.push(btn_call_group);
+                    right_pane_buttons = right_pane_buttons.push(btn_options);
+
+                    header = header.push(right_pane_buttons);
                 } else {
                     header = header.push(
                         row![
