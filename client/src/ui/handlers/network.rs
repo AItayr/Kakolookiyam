@@ -76,6 +76,7 @@ impl KakolookiyamApp {
                                                         is_media: true,
                                                         media_key: Some(key_bytes),
                                                         media_path: Some(path.clone()),
+signature: None,
                                                     };
                                                     history.push(entry);
                                                     history.sort_by_key(|m| m.timestamp);
@@ -132,6 +133,7 @@ impl KakolookiyamApp {
                             is_media: true,
                             media_key: Some(key_bytes),
                             media_path: Some(path.clone()),
+signature: None,
                         };
 
                         vd.chat_history.entry(target_chat_id.clone()).or_default().push(entry);
@@ -308,6 +310,7 @@ impl KakolookiyamApp {
                                             is_media,
                                             media_key: parsed_key,
                                             media_path: parsed_path,
+signature: None,
                                         };
 
                                         let is_new = {
@@ -433,7 +436,9 @@ if !is_dup {
                                 if !is_new {
                                     if let Some(existing) = vd.groups.get(&grp_id) {
                                         if existing.members.contains(&sender_id) {
-                                            authorized = true;
+                                            if existing.members.first() == members.first() {
+                                                authorized = true;
+                                            }
                                         }
                                     }
                                 }
@@ -520,6 +525,7 @@ if !is_dup {
                             is_media: false,
                             media_key: None,
                             media_path: None,
+                            signature: None,
                         };
 
                         // EVENT SOURCING: Auto-cicatrisation des dparts en STR (Temps Rel)
@@ -609,6 +615,7 @@ if !is_dup {
                                         is_media: false,
                                         media_key: None,
                                         media_path: None,
+                            signature: None,
                                     };
                                     vd.chat_history.entry(caller_id.clone()).or_default().push(entry);
                                     self.needs_save = true;

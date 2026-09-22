@@ -24,6 +24,8 @@ pub struct MessageEntry {
     pub is_media: bool,
     pub media_key: Option<[u8; 32]>,
     pub media_path: Option<String>,
+    #[serde(default)]
+    pub signature: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -343,6 +345,48 @@ pub fn derive_public_id(secret: &[u8]) -> String {
     } else {
         String::new()
     }
+}
+
+#[allow(dead_code)]
+pub fn sign_message(secret: &[u8], timestamp: u64, content: &str) -> String {
+    if let Ok(key_pair) = ring::signature::Ed25519KeyPair::from_seed_unchecked(secret) {
+        let pub_id = derive_public_id(secret);
+        let message = format!("{}:{}:{}", pub_id, timestamp, content);
+        let signature = key_pair.sign(message.as_bytes());
+        let mut hex = String::new();
+        for byte in signature.as_ref() {
+            std::fmt::Write::write_fmt(&mut hex, format_args!("{:02x}", byte)).unwrap();
+        }
+        hex
+    } else {
+        String::new()
+    }
+}
+
+#[allow(dead_code)]
+pub fn verify_message(pub_id_hex: &str, timestamp: u64, content: &str, signature_hex: &str) -> bool {
+    use ring::signature::UnparsedPublicKey;
+    let mut pub_key_bytes = [0u8; 32];
+    if pub_id_hex.len() != 64 { return false; }
+    for i in 0..32 {
+        if let Ok(b) = u8::from_str_radix(&pub_id_hex[i*2..i*2+2], 16) {
+            pub_key_bytes[i] = b;
+        } else {
+            return false;
+        }
+    }
+    let mut sig_bytes = [0u8; 64];
+    if signature_hex.len() != 128 { return false; }
+    for i in 0..64 {
+        if let Ok(b) = u8::from_str_radix(&signature_hex[i*2..i*2+2], 16) {
+            sig_bytes[i] = b;
+        } else {
+            return false;
+        }
+    }
+    let message = format!("{}:{}:{}", pub_id_hex, timestamp, content);
+    let public_key = UnparsedPublicKey::new(&ring::signature::ED25519, pub_key_bytes);
+    public_key.verify(message.as_bytes(), &sig_bytes).is_ok()
 }
 
 pub fn sign_announcement(secret: &[u8], pseudo: &str, timestamp: u64) -> String {

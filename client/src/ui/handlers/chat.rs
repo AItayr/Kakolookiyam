@@ -90,6 +90,7 @@ impl KakolookiyamApp {
                             is_media: false,
                             media_key: None,
                             media_path: None,
+                            signature: None,
                         };
 
                         vd.chat_history.entry(target_id).or_default().push(entry);

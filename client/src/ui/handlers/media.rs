@@ -101,6 +101,7 @@ impl KakolookiyamApp {
                                     is_media: true,
                                     media_key: Some(key_bytes),
                                     media_path: Some(enc_path),
+signature: None,
                                 };
 
                                 vd.chat_history.entry(target_id.clone()).or_default().push(entry);

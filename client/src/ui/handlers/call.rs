@@ -192,6 +192,7 @@ impl KakolookiyamApp {
                                 is_media: false,
                                 media_key: None,
                                 media_path: None,
+                            signature: None,
                                 timestamp: now_s,
                             };
                             vd.chat_history.entry(id.clone()).or_default().push(entry);
