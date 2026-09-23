@@ -44,18 +44,35 @@ impl KakolookiyamApp {
                     }
 
                     if filename.starts_with("SYNC|") {
-                        let sync_parts: Vec<&str> = filename.splitn(5, '|').collect();
-                        if sync_parts.len() == 5 {
+                        let sync_parts: Vec<&str> = filename.splitn(6, '|').collect();
+                        if sync_parts.len() >= 5 {
                             let target_id = sync_parts[1].to_string();
                             let ts_str = sync_parts[2];
                             let author = sync_parts[3].to_string();
                             let b64_content = sync_parts[4];
+                            let parsed_sig = if sync_parts.len() == 6 { sync_parts[5].to_string() } else { String::new() };
 
                             if let Ok(timestamp) = ts_str.parse::<u64>() {
                                 if let Ok(decoded_bytes) = BASE64_STANDARD.decode(b64_content) {
                                     if let Ok(content_str) = String::from_utf8(decoded_bytes) {
                                         if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
 
+                                            
+                                            let mut is_valid = true;
+                                            if !parsed_sig.is_empty() {
+                                                is_valid = false;
+                                                if author == vd.pseudo {
+                                                    is_valid = true;
+                                                } else {
+                                                    let author_id = vd.contacts.iter()
+                                                        .find_map(|(id, pseudo)| if pseudo == &author { Some(id.clone()) } else { None })
+                                                        .unwrap_or_else(|| sender_id.clone()); 
+                                                    if crate::crypto::verify_message(&author_id, timestamp, &content_str, &parsed_sig) {
+                                                        is_valid = true;
+                                                    }
+                                                }
+                                            }
+                                            if !is_valid { return Command::none(); }
                                             let mut modified = false;
                                             let mut newly_added = false;
 
@@ -73,10 +90,7 @@ impl KakolookiyamApp {
                                                         author: author.clone(),
                                                         content: content_str.clone(),
                                                         timestamp,
-                                                        is_media: true,
-                                                        media_key: Some(key_bytes),
-                                                        media_path: Some(path.clone()),
-signature: None,
+                                                        is_media: true, media_key: Some(key_bytes), media_path: Some(path.clone()), signature: if parsed_sig.is_empty() { None } else { Some(parsed_sig.clone()) },
                                                     };
                                                     history.push(entry);
                                                     history.sort_by_key(|m| m.timestamp);
@@ -271,18 +285,23 @@ signature: None,
                                 let mut parsed_path = None;
                                 let mut is_media = false;
 
+                                let mut parsed_sig = String::new();
                                 if msg_type == "TXT" {
-                                    if let Some((author, b64_content)) = payload.split_once('|') {
-                                        parsed_author = author.trim().to_string();
-                                        if let Ok(decoded_bytes) = BASE64_STANDARD.decode(b64_content.trim()) {
+                                    let parts: Vec<&str> = payload.split('|').collect();
+                                    if parts.len() >= 2 {
+                                        parsed_author = parts[0].trim().to_string();
+                                        if let Ok(decoded_bytes) = BASE64_STANDARD.decode(parts[1].trim()) {
                                             if let Ok(content_str) = String::from_utf8(decoded_bytes) {
                                                 parsed_content = content_str;
                                             }
                                         }
                                     }
+                                    if parts.len() >= 3 {
+                                        parsed_sig = parts[2].trim().to_string();
+                                    }
                                 } else if msg_type == "MED" {
                                     let p: Vec<&str> = payload.split('|').collect();
-                                    if p.len() == 4 {
+                                    if p.len() >= 4 {
                                         parsed_author = p[0].trim().to_string();
                                         if let Ok(decoded_bytes) = BASE64_STANDARD.decode(p[1].trim()) {
                                             if let Ok(content_str) = String::from_utf8(decoded_bytes) {
@@ -299,10 +318,32 @@ signature: None,
                                         parsed_path = Some(p[3].trim().to_string());
                                         is_media = true;
                                     }
+                                    if p.len() >= 5 {
+                                        parsed_sig = p[4].trim().to_string();
+                                    }
                                 }
 
                                 if !parsed_author.is_empty() && !parsed_content.is_empty() {
                                     if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
+                                        let mut is_valid = true; // default true si un utilisateur utilise pas la signature (v4-) on tolère (optionnel pr gérer NOUV-4 fermement on peut forcer, mais on l'active s'il la fournit)
+                                        if !parsed_sig.is_empty() {
+                                            is_valid = false;
+                                            if parsed_author == vd.pseudo {
+                                                is_valid = true;
+                                            } else {
+                                                let author_id = vd.contacts.iter()
+                                                    .find_map(|(id, pseudo)| if pseudo == &parsed_author { Some(id.clone()) } else { None })
+                                                    .unwrap_or_else(|| sender_id.clone()); 
+                                                if crate::crypto::verify_message(&author_id, timestamp, &parsed_content, &parsed_sig) {
+                                                    is_valid = true;
+                                                }
+                                            }
+                                        }
+
+                                        if !is_valid {
+                                            return Command::none(); // Falsifi !
+                                        }
+
                                         let entry = crypto::MessageEntry {
                                             author: parsed_author.clone(),
                                             content: parsed_content.clone(),
@@ -310,7 +351,7 @@ signature: None,
                                             is_media,
                                             media_key: parsed_key,
                                             media_path: parsed_path,
-signature: None,
+                                            signature: if parsed_sig.is_empty() { None } else { Some(parsed_sig) },
                                         };
 
                                         let is_new = {

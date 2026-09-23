@@ -13,8 +13,12 @@ impl KakolookiyamApp {
             for contact_id in vd.contacts.keys() {
                 let mut last_ts = 0;
                 if let Some(history) = vd.chat_history.get(contact_id) {
-                    if let Some(last_msg) = history.last() {
-                        last_ts = last_msg.timestamp;
+                    let sys_author = crate::ui::i18n::t(&self.language, "system_author");
+                    for msg in history.iter().rev() {
+                        if !msg.author.starts_with(&sys_author) {
+                            last_ts = msg.timestamp;
+                            break;
+                        }
                     }
                 }
                 sync_tasks.push((contact_id.clone(), vec![contact_id.clone()], last_ts));
@@ -23,8 +27,12 @@ impl KakolookiyamApp {
             for (group_id, group_data) in &vd.groups {
                 let mut last_ts = 0;
                 if let Some(history) = vd.chat_history.get(group_id) {
-                    if let Some(last_msg) = history.last() {
-                        last_ts = last_msg.timestamp;
+                    let sys_author = crate::ui::i18n::t(&self.language, "system_author");
+                    for msg in history.iter().rev() {
+                        if !msg.author.starts_with(&sys_author) {
+                            last_ts = msg.timestamp;
+                            break;
+                        }
                     }
                 }
 
@@ -63,8 +71,12 @@ impl KakolookiyamApp {
 
         if let Some(vd) = &self.vault_data {
             if let Some(history) = vd.chat_history.get(target_id) {
-                if let Some(last_msg) = history.last() {
-                    last_timestamp = last_msg.timestamp;
+                let sys_author = crate::ui::i18n::t(&self.language, "system_author");
+                for msg in history.iter().rev() {
+                    if !msg.author.starts_with(&sys_author) {
+                        last_timestamp = msg.timestamp;
+                        break;
+                    }
                 }
             }
 
@@ -164,16 +176,18 @@ impl KakolookiyamApp {
                         let safe_content = BASE64_STANDARD.encode(msg.content.as_bytes());
                         let actual_author = if msg.author == "Moi" || msg.author == "Me" || msg.author == "أنا" { my_pseudo.clone() } else { msg.author.clone() };
 
+                        let sig_str = msg.signature.clone().unwrap_or_default();
+                        
                         if msg.is_media {
                             if let (Some(key), Some(path)) = (msg.media_key, &msg.media_path) {
                                 let key_b64 = BASE64_STANDARD.encode(key);
-                                let sync_filename = format!("SYNC|{}|{}|{}|{}", target_id_for_requester, msg.timestamp, actual_author, safe_content);
+                                let sync_filename = format!("SYNC|{}|{}|{}|{}|{}", target_id_for_requester, msg.timestamp, actual_author, safe_content, sig_str);
 
                                 let _ = tx.send(format!("FILE_SEND_INIT:{}:{}:{}:{}", requester_id, sync_filename, key_b64, path));
                                 tokio::time::sleep(std::time::Duration::from_millis(300)).await;
                             }
                         } else {
-                            let sync_payload = format!("SYS:SYNC_RES:{}:{}:TXT:{}|{}", target_id_for_requester, msg.timestamp, actual_author, safe_content);
+                            let sync_payload = format!("SYS:SYNC_RES:{}:{}:TXT:{}|{}|{}", target_id_for_requester, msg.timestamp, actual_author, safe_content, sig_str);
                             let _ = tx.send(format!("CHAT_SEND:{}:{}", requester_id, sync_payload));
                             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                         }
