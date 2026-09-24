@@ -11,6 +11,8 @@ impl KakolookiyamApp {
         match message {
             Message::SelectChat(id) => {
                 self.selected_chat = Some(id.clone());
+                self.show_volume_panel = false;
+                self.show_group_options = false;
 
                 // --- PURGE DE LA BULLE DE NOTIFICATION ---
                 self.unread_counts.remove(&id);
@@ -69,12 +71,14 @@ impl KakolookiyamApp {
 
                                 broadcast_cmd = Command::perform(
                                     async move {
-                                        for member_id in members {
-                                            if member_id != my_id {
-                                                let _ = tx.send(format!("CHAT_SEND:{}:SYS:GRP_MSG:{}:{}", member_id, t_id, msg_text));
-                                                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                                            }
-                                        }
+                                        let sends = members.into_iter()
+                                            .filter(|m| m != &my_id)
+                                            .map(|member_id| {
+                                                let tx = tx.clone();
+                                                let msg = format!("CHAT_SEND:{}:SYS:GRP_MSG:{}:{}", member_id, t_id, msg_text);
+                                                async move { let _ = tx.send(msg); }
+                                            });
+                                        futures_util::future::join_all(sends).await;
                                     },
                                     |_| Message::ResetInactivity
                                 );
@@ -83,14 +87,15 @@ impl KakolookiyamApp {
                             let _ = self.tx_network.send(format!("CHAT_SEND:{}:{}", target_id, text));
                         }
 
+                        let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
                         let entry = crypto::MessageEntry {
                             author: crate::ui::i18n::t(&self.language, "me_author"),
                             content: text.clone(),
-                            timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+                            timestamp,
                             is_media: false,
                             media_key: None,
                             media_path: None,
-                            signature: None,
+                            signature: Some(crypto::sign_message(&vd.private_key, timestamp, &text)),
                         };
 
                         vd.chat_history.entry(target_id).or_default().push(entry);

@@ -439,7 +439,7 @@ pub async fn start_p2p(
                                         let d = Arc::clone(&d_open);
                                         Box::pin(async move {
                                             let _ = d.send_text(format!("{{\"type\":\"pseudo\",\"value\":\"{}\"}}", p2)).await;
-                                            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await; let _ = d.send_text(txt).await;
+                                            let _ = d.send_text(txt).await;
                                         })
                                     }));
 
@@ -538,7 +538,7 @@ pub async fn start_p2p(
                                             let d = Arc::clone(&d_open);
                                             Box::pin(async move {
                                                 let _ = d.send_text(format!("{{\"type\":\"pseudo\",\"value\":\"{}\"}}", p2)).await;
-                                                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await; let _ = d.send_text(m).await;
+                                                let _ = d.send_text(m).await;
                                             })
                                         }));
 

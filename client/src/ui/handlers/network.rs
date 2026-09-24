@@ -58,20 +58,18 @@ impl KakolookiyamApp {
                                         if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
 
                                             
-                                            let mut is_valid = true;
-                                            if !parsed_sig.is_empty() {
-                                                is_valid = false;
-                                                if author == vd.pseudo {
-                                                    is_valid = true;
-                                                } else {
-                                                    let author_id = vd.contacts.iter()
-                                                        .find_map(|(id, pseudo)| if pseudo == &author { Some(id.clone()) } else { None })
-                                                        .unwrap_or_else(|| sender_id.clone()); 
-                                                    if crate::crypto::verify_message(&author_id, timestamp, &content_str, &parsed_sig) {
-                                                        is_valid = true;
-                                                    }
+                                            let author_id = vd.contacts.iter()
+                                                .find_map(|(id, pseudo)| if pseudo == &author { Some(id.clone()) } else { None });
+                                            
+                                            let is_valid = if author == vd.pseudo {
+                                                true
+                                            } else {
+                                                match author_id {
+                                                    Some(id) => !parsed_sig.is_empty()
+                                                        && crate::crypto::verify_message(&id, timestamp, &content_str, &parsed_sig),
+                                                    None => false,
                                                 }
-                                            }
+                                            };
                                             if !is_valid { return Command::none(); }
                                             let mut modified = false;
                                             let mut newly_added = false;
@@ -325,20 +323,18 @@ signature: None,
 
                                 if !parsed_author.is_empty() && !parsed_content.is_empty() {
                                     if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
-                                        let mut is_valid = true; // default true si un utilisateur utilise pas la signature (v4-) on tolère (optionnel pr gérer NOUV-4 fermement on peut forcer, mais on l'active s'il la fournit)
-                                        if !parsed_sig.is_empty() {
-                                            is_valid = false;
-                                            if parsed_author == vd.pseudo {
-                                                is_valid = true;
-                                            } else {
-                                                let author_id = vd.contacts.iter()
-                                                    .find_map(|(id, pseudo)| if pseudo == &parsed_author { Some(id.clone()) } else { None })
-                                                    .unwrap_or_else(|| sender_id.clone()); 
-                                                if crate::crypto::verify_message(&author_id, timestamp, &parsed_content, &parsed_sig) {
-                                                    is_valid = true;
-                                                }
+                                        let author_id = vd.contacts.iter()
+                                            .find_map(|(id, pseudo)| if pseudo == &parsed_author { Some(id.clone()) } else { None });
+                                        
+                                        let is_valid = if parsed_author == vd.pseudo {
+                                            true
+                                        } else {
+                                            match author_id {
+                                                Some(id) => !parsed_sig.is_empty()
+                                                    && crate::crypto::verify_message(&id, timestamp, &parsed_content, &parsed_sig),
+                                                None => false,
                                             }
-                                        }
+                                        };
 
                                         if !is_valid {
                                             return Command::none(); // Falsifi !

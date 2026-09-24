@@ -74,15 +74,20 @@ impl KakolookiyamApp {
 
                                         broadcast_cmd = Command::perform(
                                             async move {
-                                                for member_id in members {
-                                                    if member_id != my_id {
-                                                        let _ = tx.send(format!(
+                                                let sends = members.into_iter()
+                                                    .filter(|m| m != &my_id)
+                                                    .map(|member_id| {
+                                                        let tx = tx.clone();
+                                                        let net_filename = net_filename.clone();
+                                                        let key_b64 = key_b64.clone();
+                                                        let enc_path_net = enc_path_net.clone();
+                                                        let msg = format!(
                                                             "FILE_SEND_INIT:{}:{}:{}:{}",
                                                             member_id, net_filename, key_b64, enc_path_net
-                                                        ));
-                                                        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-                                                    }
-                                                }
+                                                        );
+                                                        async move { let _ = tx.send(msg); }
+                                                    });
+                                                futures_util::future::join_all(sends).await;
                                             },
                                             |_| Message::ResetInactivity
                                         );
@@ -94,14 +99,16 @@ impl KakolookiyamApp {
                                     ));
                                 }
 
+                                let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                                let content = format!("{} {}", crate::ui::i18n::t(&self.language, "msg_file_shared"), file_name);
                                 let entry = crate::crypto::MessageEntry {
                                     author: crate::ui::i18n::t(&self.language, "me_author"),
-                                    content: format!("{} {}", crate::ui::i18n::t(&self.language, "msg_file_shared"), file_name),
-                                    timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+                                    content: content.clone(),
+                                    timestamp,
                                     is_media: true,
                                     media_key: Some(key_bytes),
                                     media_path: Some(enc_path),
-signature: None,
+                                    signature: Some(crate::crypto::sign_message(&vd.private_key, timestamp, &content)),
                                 };
 
                                 vd.chat_history.entry(target_id.clone()).or_default().push(entry);

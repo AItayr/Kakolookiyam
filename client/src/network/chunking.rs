@@ -70,7 +70,7 @@ impl TransferManager {
             }
 
             let key_b64 = std::str::from_utf8(parts[4]).unwrap_or("").to_string();
-            let file_id = format!("{}_{}", sender_id, filename);
+            let file_id = format!("{}_{}_{}", my_pseudo, sender_id, filename);
             let temp_path = format!("{}/kako_tmp_{}", std::env::temp_dir().display(), file_id.replace(|c: char| !c.is_alphanumeric(), "_"));
 
             // Initialize empty file for streaming
@@ -108,7 +108,9 @@ impl TransferManager {
                              if let Err(_) = dc.send(&bytes::Bytes::from(payload)).await {
                                  break;
                              }
-                             tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                             while dc.buffered_amount().await > 1024 * 1024 {
+                                 tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                             }
                          }
                          transfer.file_data.zeroize();
                      });
@@ -120,7 +122,7 @@ impl TransferManager {
              let index: usize = std::str::from_utf8(parts[3]).unwrap_or("0").parse().unwrap_or(0);
              let chunk_data = parts[4]; 
 
-             let file_id = format!("{}_{}", sender_id, filename);
+             let file_id = format!("{}_{}_{}", my_pseudo, sender_id, filename);
              let mut transfer_done = false;
              
              if let Some(transfer) = self.incoming.get_mut(&file_id) {
