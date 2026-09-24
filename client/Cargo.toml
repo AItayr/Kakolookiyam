@@ -26,3 +26,16 @@ dirs = "7.0.0"
 region = "3.0"
 secrecy = "0.8"
 chrono = "0.4.45"
+[[bin]]
+name = "Kakolookiyam"
+path = "src/main.rs"
+
+[build-dependencies]
+winres = "0.1.12"
+
+[package.metadata.bundle]
+name = "Kakolookiyam"
+identifier = "com.kakolookiyam.client"
+icon = ["assets/images/Kakolookiyam.icns", "assets/images/Kakolookiyam_logo.png"]
+version = "0.1.0"
+copyright = "Copyright (c) Kakolookiyam. All rights reserved."

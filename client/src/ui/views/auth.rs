@@ -1,4 +1,13 @@
-﻿use secrecy::ExposeSecret;
+﻿use std::sync::OnceLock;
+
+pub fn get_logo_handle() -> iced::widget::image::Handle {
+    static LOGO: OnceLock<iced::widget::image::Handle> = OnceLock::new();
+    LOGO.get_or_init(|| {
+        iced::widget::image::Handle::from_bytes(include_bytes!("../../../assets/images/Kakolookiyam_logo.png").as_slice())
+    }).clone()
+}
+
+use secrecy::ExposeSecret;
 use iced::widget::{button, column, container, row, text_input, Container, image};
 use iced::{alignment, Alignment, Color, Element, Length};
 use crate::ui::app::KakolookiyamApp;
@@ -21,7 +30,7 @@ impl KakolookiyamApp {
             .padding(10);
         let top_bar = container(lang_btn).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
 
-        let logo = image(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/images/Kakolookiyam_logo.png"))
+        let logo = image(crate::ui::views::auth::get_logo_handle())
             .width(Length::Fixed(150.0))
             .height(Length::Fixed(150.0));
 
@@ -66,7 +75,7 @@ impl KakolookiyamApp {
             .padding(10);
         let top_bar = container(lang_btn).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
 
-        let logo = image(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/images/Kakolookiyam_logo.png"))
+        let logo = image(crate::ui::views::auth::get_logo_handle())
             .width(Length::Fixed(100.0))
             .height(Length::Fixed(100.0));
 
@@ -148,7 +157,7 @@ impl KakolookiyamApp {
             .padding(10);
         let top_bar = container(lang_btn).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
 
-        let logo = image(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/images/Kakolookiyam_logo.png"))
+        let logo = image(crate::ui::views::auth::get_logo_handle())
             .width(Length::Fixed(100.0))
             .height(Length::Fixed(100.0));
 

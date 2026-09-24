@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Kakolookiyam
+Comment=Deverrouiller le coffre-fort
+Exec=Kakolookiyam
+Icon=Kakolookiyam_logo
+Terminal=false
+Categories=Utility;Security;
