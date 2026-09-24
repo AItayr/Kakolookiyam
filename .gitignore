@@ -19,3 +19,5 @@ client/media_*/
 media_*/
 
 .DS_STORE
+*.app
+*.dmg
