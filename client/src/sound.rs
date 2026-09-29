@@ -1,21 +1,30 @@
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
+use std::io::Cursor;
 use kira::{AudioManager, AudioManagerSettings};
 use kira::sound::static_sound::{StaticSoundData, StaticSoundSettings, StaticSoundHandle};
 use kira::Tween;
 use rand::Rng;
 
 fn amp_to_db(amp: f32) -> f32 {
-    if amp <= 0.01 {
-        -60.0 // silence
-    } else {
-        20.0 * amp.log10()
-    }
+    if amp <= 0.01 { -60.0 } else { 20.0 * amp.log10() }
 }
 
 lazy_static::lazy_static! {
     pub static ref SOUND_MANAGER: Arc<Mutex<SoundManager>> = Arc::new(Mutex::new(SoundManager::new()));
 }
+
+const W_MAIN_THEME: &[u8] = include_bytes!("../assets/audio/Main_Theme/AmIDreaming.wav");
+const W_MSG_RX: &[u8] = include_bytes!("../assets/audio/messages/message_received.wav");
+const W_MSG_TX: &[u8] = include_bytes!("../assets/audio/messages/message_sent.wav");
+const W_MIC_OFF: &[u8] = include_bytes!("../assets/audio/microphone/MIC_OFF.wav");
+const W_MIC_ON: &[u8] = include_bytes!("../assets/audio/microphone/MIC_ON.wav");
+const W_ERR_1: &[u8] = include_bytes!("../assets/audio/errors/Error_1.wav");
+const W_ERR_2: &[u8] = include_bytes!("../assets/audio/errors/Error_2.wav");
+const W_BTN_1: &[u8] = include_bytes!("../assets/audio/red_buttons/button_1.wav");
+const W_BTN_2: &[u8] = include_bytes!("../assets/audio/red_buttons/button_2.wav");
+const W_CALL_IN: &[u8] = include_bytes!("../assets/audio/call/CALL_INGOING.wav");
+const W_CALL_OUT: &[u8] = include_bytes!("../assets/audio/call/CALL_OUTGOING.wav");
 
 pub struct SoundManager {
     manager: Option<AudioManager>,
@@ -23,7 +32,7 @@ pub struct SoundManager {
     main_theme_volume: f32,
     main_theme_handle: Option<StaticSoundHandle>,
     looping_handles: HashMap<String, StaticSoundHandle>,
-    cached_sounds: HashMap<String, StaticSoundData>,
+    cached_sounds: HashMap<&'static str, StaticSoundData>,
 }
 
 impl SoundManager {
@@ -48,17 +57,17 @@ impl SoundManager {
     }
 
     pub fn get_app_volume(&self) -> f32 {
-        self.app_volume as f32
+        self.app_volume
     }
 
     pub fn set_main_theme_volume(&mut self, volume: f32) {
         self.main_theme_volume = volume.clamp(0.0, 1.0);
-        let dest_db = amp_to_db(self.main_theme_volume);
         if let Some(handle) = &mut self.main_theme_handle {
+            let dest_db = amp_to_db(self.main_theme_volume);
             let _ = handle.set_volume(dest_db, Tween::default());
         }
     }
-
+    
     pub fn get_main_theme_volume(&self) -> f32 {
         self.main_theme_volume
     }
@@ -67,16 +76,10 @@ impl SoundManager {
         if self.main_theme_handle.is_none() {
             if let Some(manager) = &mut self.manager {
                 let settings = StaticSoundSettings::new().volume(amp_to_db(self.main_theme_volume)).loop_region(..);
-                match StaticSoundData::from_file(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/audio/Main_Theme/AmIDreaming.wav")) {
-                    Ok(sound_data) => {
-                        match manager.play(sound_data.with_settings(settings)) {
-                            Ok(handle) => {
-                                self.main_theme_handle = Some(handle);
-                            }
-                            Err(e) => println!("Play Main Theme error: {:?}", e),
-                        }
+                if let Ok(sound_data) = StaticSoundData::from_cursor(Cursor::new(W_MAIN_THEME)) {
+                    if let Ok(handle) = manager.play(sound_data.with_settings(settings)) {
+                        self.main_theme_handle = Some(handle);
                     }
-                    Err(e) => println!("Load Main Theme error: {:?}", e),
                 }
             }
         }
@@ -88,76 +91,58 @@ impl SoundManager {
         }
     }
 
-    fn play_sound_once(&mut self, path: impl AsRef<std::path::Path>, use_app_volume: bool) {
+    fn play_sound_once(&mut self, key: &'static str, bytes: &[u8], use_app_volume: bool) {
         if let Some(manager) = &mut self.manager {
             let vol = if use_app_volume { self.app_volume } else { 1.0 };
             let settings = StaticSoundSettings::new().volume(amp_to_db(vol));
             
-            let path_str = path.as_ref().to_string_lossy().to_string();
-            if !self.cached_sounds.contains_key(&path_str) {
-                if let Ok(sd) = StaticSoundData::from_file(&path) {
-                    self.cached_sounds.insert(path_str.clone(), sd);
+            if !self.cached_sounds.contains_key(key) {
+                if let Ok(sd) = StaticSoundData::from_cursor(Cursor::new(bytes)) {
+                    self.cached_sounds.insert(key, sd);
                 }
             }
             
-            if let Some(sound_data) = self.cached_sounds.get(&path_str) {
+            if let Some(sound_data) = self.cached_sounds.get(key) {
                 let _ = manager.play(sound_data.clone().with_settings(settings));
             }
         }
     }
 
     pub fn play_message_received(&mut self) {
-        self.play_sound_once(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/audio/messages/message_received.wav"), true);
+        self.play_sound_once("msg_rx", W_MSG_RX, true);
     }
-
     pub fn play_message_sent(&mut self) {
-        self.play_sound_once(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/audio/messages/message_sent.wav"), true);
+        self.play_sound_once("msg_tx", W_MSG_TX, true);
     }
-
     pub fn play_mic_muted(&mut self) {
-        self.play_sound_once(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/audio/microphone/MIC_OFF.wav"), true);
+        self.play_sound_once("mic_off", W_MIC_OFF, true);
     }
-
     pub fn play_mic_unmuted(&mut self) {
-        self.play_sound_once(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/audio/microphone/MIC_ON.wav"), true);
+        self.play_sound_once("mic_on", W_MIC_ON, true);
     }
-
     pub fn play_error(&mut self) {
         let mut rng = rand::thread_rng();
-        let paths = [std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/audio/errors/Error_1.wav"), std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/audio/errors/Error_2.wav")];
-        let choice = paths[rng.gen_range(0..paths.len())].clone();
-        self.play_sound_once(choice, true);
+        if rng.gen_bool(0.5) { self.play_sound_once("err1", W_ERR_1, true); } else { self.play_sound_once("err2", W_ERR_2, true); }
     }
-
     pub fn play_red_button(&mut self) {
         let mut rng = rand::thread_rng();
-        let paths = [std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/audio/red_buttons/button_1.wav"), std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/audio/red_buttons/button_2.wav")];
-        let choice = paths[rng.gen_range(0..paths.len())].clone();
-        self.play_sound_once(choice, true);
+        if rng.gen_bool(0.5) { self.play_sound_once("btn1", W_BTN_1, true); } else { self.play_sound_once("btn2", W_BTN_2, true); }
     }
-
-    pub fn play_call_connected(&mut self) {
-    }
-
-    pub fn play_call_disconnected(&mut self) {
-    }
+    pub fn play_call_connected(&mut self) {}
+    pub fn play_call_disconnected(&mut self) {}
 
     pub fn start_incoming_call(&mut self) {
         if self.looping_handles.contains_key("incoming_call") {
             return;
         }
-        if let Some(manager) = &mut self.manager {
-            let settings = StaticSoundSettings::new().volume(amp_to_db(self.app_volume)).loop_region(..);
-            
-            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/audio/call/CALL_INGOING.wav");
-            let path_str = path.to_string_lossy().to_string();
-            
-            if !self.cached_sounds.contains_key(&path_str) {
-                if let Ok(sd) = StaticSoundData::from_file(&path) {
-                    self.cached_sounds.insert(path_str.clone(), sd);
-                }
+        if !self.cached_sounds.contains_key("call_in") {
+            if let Ok(sd) = StaticSoundData::from_cursor(Cursor::new(W_CALL_IN)) {
+                self.cached_sounds.insert("call_in", sd);
             }
-            if let Some(sound_data) = self.cached_sounds.get(&path_str) {
+        }
+        if let Some(sound_data) = self.cached_sounds.get("call_in") {
+            if let Some(manager) = &mut self.manager {
+                let settings = StaticSoundSettings::new().volume(amp_to_db(self.app_volume)).loop_region(..);
                 if let Ok(handle) = manager.play(sound_data.clone().with_settings(settings)) {
                     self.looping_handles.insert("incoming_call".to_string(), handle);
                 }
@@ -175,18 +160,14 @@ impl SoundManager {
         if self.looping_handles.contains_key("outgoing_call") {
             return;
         }
-        if let Some(manager) = &mut self.manager {
-            let settings = StaticSoundSettings::new().volume(amp_to_db(self.app_volume)).loop_region(..);
-            
-            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/audio/call/CALL_OUTGOING.wav");
-            let path_str = path.to_string_lossy().to_string();
-            
-            if !self.cached_sounds.contains_key(&path_str) {
-                if let Ok(sd) = StaticSoundData::from_file(&path) {
-                    self.cached_sounds.insert(path_str.clone(), sd);
-                }
+        if !self.cached_sounds.contains_key("call_out") {
+            if let Ok(sd) = StaticSoundData::from_cursor(Cursor::new(W_CALL_OUT)) {
+                self.cached_sounds.insert("call_out", sd);
             }
-            if let Some(sound_data) = self.cached_sounds.get(&path_str) {
+        }
+        if let Some(sound_data) = self.cached_sounds.get("call_out") {
+            if let Some(manager) = &mut self.manager {
+                let settings = StaticSoundSettings::new().volume(amp_to_db(self.app_volume)).loop_region(..);
                 if let Ok(handle) = manager.play(sound_data.clone().with_settings(settings)) {
                     self.looping_handles.insert("outgoing_call".to_string(), handle);
                 }
