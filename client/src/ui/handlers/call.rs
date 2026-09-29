@@ -2,6 +2,7 @@ use secrecy::ExposeSecret;
 use iced::Task as Command;
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
+use crate::sound::SOUND_MANAGER;
 
 impl KakolookiyamApp {
     pub(crate) fn handle_call(&mut self, message: Message) -> Command<Message> {
@@ -26,6 +27,7 @@ impl KakolookiyamApp {
                     }
                 }
                         self.status_message = crate::ui::i18n::t(&self.language, "status_call_waiting");
+                SOUND_MANAGER.lock().unwrap().start_outgoing_call();
                 let _ = self.tx_network.send(format!("CALL:{}", self.peer_id_input));
             }
             Message::CallContact(target_id) => {
@@ -43,6 +45,7 @@ impl KakolookiyamApp {
                             let members = group.members.clone();
                             let target_id_clone = target_id.clone();
 
+                            SOUND_MANAGER.lock().unwrap().start_outgoing_call();
                             self.active_call = Some((target_id.clone(), group.name.clone()));
                             self.active_call_participants.clear();
                               self.call_start_time = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
@@ -70,6 +73,7 @@ impl KakolookiyamApp {
                 } else {
                     self.peer_id_input = target_id.clone();
                         self.status_message = crate::ui::i18n::t(&self.language, "status_call_waiting");
+                    SOUND_MANAGER.lock().unwrap().start_outgoing_call();
                     let _ = self.tx_network.send(format!("CALL:{}", target_id));
                 }
             }
@@ -77,6 +81,9 @@ impl KakolookiyamApp {
                 let mut pseudo = self.incoming_call.as_ref().unwrap().1.clone();
                 let mut actual_id = id.clone();
 
+                SOUND_MANAGER.lock().unwrap().stop_incoming_call();
+                SOUND_MANAGER.lock().unwrap().stop_incoming_call();
+                SOUND_MANAGER.lock().unwrap().play_red_button();
                 self.incoming_call = None;
                 self.incoming_call_timer = 0;
                         self.status_message = crate::ui::i18n::t(&self.language, "status_call_secure");
@@ -132,12 +139,17 @@ impl KakolookiyamApp {
                 }
             }
             Message::RejectCall(id) => {
+                SOUND_MANAGER.lock().unwrap().stop_incoming_call();
+                SOUND_MANAGER.lock().unwrap().stop_incoming_call();
+                SOUND_MANAGER.lock().unwrap().play_red_button();
                 self.incoming_call = None;
                 self.incoming_call_timer = 0;
                 self.status_message = crate::ui::i18n::t(&self.language, "status_call_rejected");
                 let _ = self.tx_network.send(format!("REJECT:{}", id));
             }
             Message::HangUpCall => {
+                SOUND_MANAGER.lock().unwrap().stop_outgoing_call();
+                SOUND_MANAGER.lock().unwrap().play_red_button();
                 if let Some((id, _)) = self.active_call.take() {
                     if id.starts_with("grp_") {
                         if let Some(vd) = &self.vault_data {
@@ -218,8 +230,10 @@ impl KakolookiyamApp {
             Message::ToggleMute => {
                 self.is_muted = !self.is_muted;
                 if self.is_muted {
+                    SOUND_MANAGER.lock().unwrap().play_mic_muted();
                     let _ = self.tx_network.send("MUTE:on".to_string());
                 } else {
+                    SOUND_MANAGER.lock().unwrap().play_mic_unmuted();
                     let _ = self.tx_network.send("MUTE:off".to_string());
                 }
             }

@@ -1,4 +1,4 @@
-use iced::widget::{button, column, row, Container, Space, pick_list, Scrollable};
+use iced::widget::{button, column, row, Container, Space, pick_list, Scrollable, slider};
 use iced::widget::scrollable::{Direction, Scrollbar};
 use iced::{Alignment, Element, Length};
 use crate::ui::app::KakolookiyamApp;
@@ -97,6 +97,9 @@ impl KakolookiyamApp {
             Space::new().height(20),
 
             crate::ui::i18n::app_text(&self.language, t(&self.language, "settings_audio")).size(20).color(current_accent),
+            crate::ui::i18n::app_text(&self.language, "Volume des notifications (0 à 100%)").color(current_muted),
+            slider(0.0..=1.0, crate::sound::SOUND_MANAGER.lock().unwrap().get_app_volume(), Message::AppVolumeChanged).step(0.01_f32).width(Length::Fill),
+            Space::new().height(15),
             crate::ui::i18n::app_text(&self.language, t(&self.language, "settings_mic")).color(current_muted),
             mic_picker,
             Space::new().height(5),

@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 pub mod reduction;
+pub mod sound;
 mod audio;
 mod network;
 mod ui;
@@ -27,7 +28,10 @@ pub fn main() -> iced::Result {
 
         audio::start_hardware_audio(tx_mic, rx_speaker);
 
-        let (my_id_b64, my_pseudo, my_secret) = rx_identity.recv().expect("L'interface s'est fermee avant le deverrouillage.");
+        let (my_id_b64, my_pseudo, my_secret) = match rx_identity.recv() {
+            Ok(data) => data,
+            Err(_) => return, // Fermeture propre si l'utilisateur quitte la fenêtre d'accueil
+        };
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {

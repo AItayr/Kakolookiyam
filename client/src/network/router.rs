@@ -125,6 +125,7 @@ pub async fn start_p2p(
     let mut transfer_manager = TransferManager::new();
     let mut trusted_contacts: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut blocked_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut pending_chat: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
     let mut offer_limiter = RateLimiter::new();
     let mut global_limiter = RateLimiter::new();
 
@@ -137,7 +138,12 @@ pub async fn start_p2p(
             }
 
             Some((tgt, dc)) = rx_dc.recv() => {
-                data_channels.insert(tgt, dc);
+                data_channels.insert(tgt.clone(), std::sync::Arc::clone(&dc));
+                if let Some(mut msgs) = pending_chat.remove(&tgt) {
+                    for msg in msgs {
+                        let _ = dc.send_text(msg).await;
+                    }
+                }
             }
             Some(cmd) = rx_ui.recv() => {
                 if cmd.starts_with("CONTACTS_SYNC") {
@@ -641,14 +647,11 @@ pub async fn start_p2p(
                                         if timestamp < now - 60 || timestamp > now + 60 { continue; }
                                         if !crate::crypto::verify_announcement(&sender_id, &pseudo, timestamp, &signature) { continue; }
                                         
-                                          if let Some(time) = pending_outbound_offers.get(&sender_id) {
-                                              if time.elapsed().as_secs() < 30 {
-                                                  if my_local_id > sender_id {
-                                                      continue;
-                                                  }
-                                              }
-                                              pending_outbound_offers.remove(&sender_id);
-                                          }
+                                          if let Some(_time) = pending_outbound_offers.get(&sender_id) {
+                                                // [REMOVED GLARE REJECTION] 
+                                                // Dropping incoming offers caused a 30s deadlock if the remote was offline when our initial offer was sent!
+                                                pending_outbound_offers.remove(&sender_id);
+                                            }
 if let Some((old_pc, flag)) = peers.remove(&sender_id) {
  flag.store(false, std::sync::atomic::Ordering::Relaxed);
                                             let _ = old_pc.close().await;
@@ -674,14 +677,11 @@ if let Some((old_pc, flag)) = peers.remove(&sender_id) {
                                         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
                                         if timestamp < now - 60 || timestamp > now + 60 { continue; }
                                         if !crate::crypto::verify_announcement(&sender_id, &pseudo, timestamp, &signature) { continue; }
-                                          if let Some(time) = pending_outbound_offers.get(&sender_id) {
-                                              if time.elapsed().as_secs() < 30 {
-                                                  if my_local_id > sender_id {
-                                                      continue;
-                                                  }
-                                              }
-                                              pending_outbound_offers.remove(&sender_id);
-                                          }
+                                          if let Some(_time) = pending_outbound_offers.get(&sender_id) {
+                                                // [REMOVED GLARE REJECTION] 
+                                                // Dropping incoming offers caused a 30s deadlock if the remote was offline when our initial offer was sent!
+                                                pending_outbound_offers.remove(&sender_id);
+                                            }
 if let Some((old_pc, flag)) = peers.remove(&sender_id) {
  flag.store(false, std::sync::atomic::Ordering::Relaxed);
                                             let _ = old_pc.close().await;

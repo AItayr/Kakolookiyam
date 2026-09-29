@@ -63,6 +63,7 @@ pub struct KakolookiyamApp {
     pub(crate) show_group_options: bool,
     pub(crate) show_blocked: bool,
     pub(crate) show_volume_panel: bool,
+    pub(crate) show_main_music_panel: bool,
     pub(crate) needs_save: bool,
 
     // --- Variables d'interface (Paramètres) ---
@@ -77,6 +78,7 @@ pub struct KakolookiyamApp {
 impl KakolookiyamApp {
                 
     pub fn new(flags: Flags) -> (Self, Command<Message>) {
+        crate::sound::SOUND_MANAGER.lock().unwrap().play_main_theme();
         let initial_state = if crypto::any_vault_exists() { AppState::Login } else { AppState::Welcome };
         (
             Self {
@@ -115,6 +117,7 @@ impl KakolookiyamApp {
                 show_group_options: false,
             show_blocked: false,
             show_volume_panel: false,
+            show_main_music_panel: false,
             needs_save: false,
                 selected_mic: "Défaut".to_string(),
             available_mics: crate::audio::get_available_microphones(),
@@ -162,6 +165,18 @@ impl KakolookiyamApp {
             Message::ToggleBlocked => {
                 self.idle_seconds = 0;
                 self.show_blocked = !self.show_blocked;
+                return Command::none();
+            }
+            Message::ToggleMainMusicPanel => {
+                self.show_main_music_panel = !self.show_main_music_panel;
+                return iced::Task::none();
+            }
+            Message::MainThemeVolumeChanged(vol) => {
+                crate::sound::SOUND_MANAGER.lock().unwrap().set_main_theme_volume(vol);
+                return iced::Task::none();
+            }
+            Message::AppVolumeChanged(vol) => {
+                crate::sound::SOUND_MANAGER.lock().unwrap().set_app_volume(vol);
                 return Command::none();
             }
             Message::ToggleTheme => {

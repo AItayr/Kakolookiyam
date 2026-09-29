@@ -120,6 +120,8 @@ impl KakolookiyamApp {
 
                                 self.chat_history.push((crate::ui::i18n::t(&self.language, "me_author"), format!("{} {}", crate::ui::i18n::t(&self.language, "msg_file_shared"), file_name)));
 
+                                crate::sound::SOUND_MANAGER.lock().unwrap().play_message_sent();
+
                                 return broadcast_cmd;
                             }
                         }

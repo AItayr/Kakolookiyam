@@ -2,6 +2,7 @@
 use iced::{clipboard, Task as Command};
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
+use crate::sound::SOUND_MANAGER;
 use crate::crypto;
 
 impl KakolookiyamApp {
@@ -124,6 +125,7 @@ impl KakolookiyamApp {
             }
             Message::RejectRequest(id) => {
                 if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
+                    SOUND_MANAGER.lock().unwrap().play_red_button();
                     vd.pending_requests.remove(&id);
                     let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
                         self.status_message = crate::ui::i18n::t(&self.language, "status_request_rejected");
@@ -145,7 +147,8 @@ impl KakolookiyamApp {
     }
     pub(crate) fn handle_block_contact(&mut self, id: String) -> iced::Task<Message> {
         if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
-            vd.pending_requests.remove(&id);
+            SOUND_MANAGER.lock().unwrap().play_red_button();
+                    vd.pending_requests.remove(&id);
             vd.contacts.remove(&id);
             if self.selected_chat.as_ref() == Some(&id) {
                 self.selected_chat = None;

@@ -2,6 +2,7 @@
 use iced::Task as Command;
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
+use crate::sound::SOUND_MANAGER;
 
 impl KakolookiyamApp {
     pub(crate) fn handle_group(&mut self, message: Message) -> Command<Message> {
@@ -123,6 +124,7 @@ impl KakolookiyamApp {
             }
 
             Message::DeleteGroup => {
+                SOUND_MANAGER.lock().unwrap().play_red_button();
                 self.idle_seconds = 0;
                 let target_id = self.selected_chat.clone();
 

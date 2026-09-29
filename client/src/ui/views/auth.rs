@@ -8,7 +8,7 @@ pub fn get_logo_handle() -> iced::widget::image::Handle {
 }
 
 use secrecy::ExposeSecret;
-use iced::widget::{button, column, container, row, text_input, Container, image};
+use iced::widget::{button, column, container, row, text_input, Container, image, slider};
 use iced::{alignment, Alignment, Color, Element, Length};
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
@@ -28,7 +28,23 @@ impl KakolookiyamApp {
             .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
             .on_press(Message::ToggleLanguage)
             .padding(10);
-        let top_bar = container(lang_btn).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
+            
+        let vol = crate::sound::SOUND_MANAGER.lock().unwrap().get_main_theme_volume();
+        let icon_str = if vol == 0.0 { "🔇" } else { "🔊" };
+        let music_btn = button(crate::ui::i18n::app_text(&self.language, icon_str))
+            .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
+            .on_press(Message::ToggleMainMusicPanel)
+            .padding(10);
+            
+        let music_section = if self.show_main_music_panel {
+            let sld = slider(0.0..=1.0, vol, Message::MainThemeVolumeChanged).step(0.01_f32).width(Length::Fixed(100.0));
+            row![container(sld).padding(10).align_y(iced::alignment::Vertical::Center), music_btn].spacing(5).align_y(Alignment::Center)
+        } else {
+            row![music_btn].align_y(Alignment::Center)
+        };
+
+        let top_bar_content = row![music_section, lang_btn].spacing(10).align_y(Alignment::Start);
+        let top_bar = container(top_bar_content).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
 
         let logo = image(crate::ui::views::auth::get_logo_handle())
             .width(Length::Fixed(150.0))
@@ -73,7 +89,23 @@ impl KakolookiyamApp {
             .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
             .on_press(Message::ToggleLanguage)
             .padding(10);
-        let top_bar = container(lang_btn).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
+            
+        let vol = crate::sound::SOUND_MANAGER.lock().unwrap().get_main_theme_volume();
+        let icon_str = if vol == 0.0 { "🔇" } else { "🔊" };
+        let music_btn = button(crate::ui::i18n::app_text(&self.language, icon_str))
+            .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
+            .on_press(Message::ToggleMainMusicPanel)
+            .padding(10);
+            
+        let music_section = if self.show_main_music_panel {
+            let sld = slider(0.0..=1.0, vol, Message::MainThemeVolumeChanged).step(0.01_f32).width(Length::Fixed(100.0));
+            row![container(sld).padding(10).align_y(iced::alignment::Vertical::Center), music_btn].spacing(5).align_y(Alignment::Center)
+        } else {
+            row![music_btn].align_y(Alignment::Center)
+        };
+
+        let top_bar_content = row![music_section, lang_btn].spacing(10).align_y(Alignment::Start);
+        let top_bar = container(top_bar_content).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
 
         let logo = image(crate::ui::views::auth::get_logo_handle())
             .width(Length::Fixed(100.0))
@@ -155,7 +187,23 @@ impl KakolookiyamApp {
             .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
             .on_press(Message::ToggleLanguage)
             .padding(10);
-        let top_bar = container(lang_btn).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
+            
+        let vol = crate::sound::SOUND_MANAGER.lock().unwrap().get_main_theme_volume();
+        let icon_str = if vol == 0.0 { "🔇" } else { "🔊" };
+        let music_btn = button(crate::ui::i18n::app_text(&self.language, icon_str))
+            .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
+            .on_press(Message::ToggleMainMusicPanel)
+            .padding(10);
+            
+        let music_section = if self.show_main_music_panel {
+            let sld = slider(0.0..=1.0, vol, Message::MainThemeVolumeChanged).step(0.01_f32).width(Length::Fixed(100.0));
+            row![container(sld).padding(10).align_y(iced::alignment::Vertical::Center), music_btn].spacing(5).align_y(Alignment::Center)
+        } else {
+            row![music_btn].align_y(Alignment::Center)
+        };
+
+        let top_bar_content = row![music_section, lang_btn].spacing(10).align_y(Alignment::Start);
+        let top_bar = container(top_bar_content).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
 
         let logo = image(crate::ui::views::auth::get_logo_handle())
             .width(Length::Fixed(100.0))

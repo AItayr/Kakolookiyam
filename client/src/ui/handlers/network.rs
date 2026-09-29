@@ -1,6 +1,7 @@
 use iced::Task as Command;
 use crate::ui::app::{KakolookiyamApp, AppState};
 use crate::ui::messages::Message;
+use crate::sound::SOUND_MANAGER;
 use crate::crypto;
 
 impl KakolookiyamApp {
@@ -9,18 +10,21 @@ impl KakolookiyamApp {
             self.idle_seconds = 0;
 
             if msg == "SUCCESS:REGISTERED" {
+                SOUND_MANAGER.lock().unwrap().stop_main_theme();
                 self.state = AppState::Unlocked;
                 self.clear_auth_fields();
                 return self.trigger_global_sync();
             }
 
             if msg == "ERROR:ALREADY_CONNECTED" {
+                SOUND_MANAGER.lock().unwrap().play_error();
                 return Command::perform(async {}, |_| {
                     Message::ForceDisconnect("❌ Session déjà en cours.".to_string())
                 });
             }
 
             if msg == "ERROR:SERVER_OFFLINE" {
+                SOUND_MANAGER.lock().unwrap().play_error();
                 return Command::perform(async {}, |_| {
                     Message::ForceDisconnect("❌ Serveur injoignable.".to_string())
                 });
@@ -154,6 +158,7 @@ signature: None,
 
                     let is_currently_viewed = self.selected_chat.as_ref() == Some(&target_chat_id);
 
+                    SOUND_MANAGER.lock().unwrap().play_message_received();
                     if is_currently_viewed {
                         self.chat_history.push((sender_pseudo, format!("{} {}", crate::ui::i18n::t(&self.language, "msg_file_received"), display_filename)));
                     } else {
@@ -386,6 +391,7 @@ if !is_dup {
                                             }
 
                                             self.needs_save = true;
+                                            SOUND_MANAGER.lock().unwrap().play_message_received();
                                             let is_currently_viewed = self.selected_chat.as_ref() == Some(&t_id);
 
                                             if is_currently_viewed {
@@ -588,6 +594,7 @@ if !is_dup {
 
                     let is_currently_viewed = self.selected_chat.as_ref() == Some(&target_chat_id);
 
+                    SOUND_MANAGER.lock().unwrap().play_message_received();
                     if is_currently_viewed {
                         self.chat_history.push((sender_pseudo, display_text));
                     } else {
@@ -699,11 +706,15 @@ if !is_dup {
                     
                     self.incoming_call_timer = 0;
                     self.incoming_call = Some((caller_id, caller_pseudo, sdp, caller_grp_id));
+                    SOUND_MANAGER.lock().unwrap().start_incoming_call();
                 }
             }
             else if msg.starts_with("CALL_ACTIVE:") {
                 let id = msg.trim_start_matches("CALL_ACTIVE:").trim().to_string();
 
+                SOUND_MANAGER.lock().unwrap().stop_outgoing_call();
+                SOUND_MANAGER.lock().unwrap().stop_incoming_call();
+                SOUND_MANAGER.lock().unwrap().play_call_connected();
                 if self.status_message.starts_with("LOADING:") {
                     self.status_message.clear();
                 }
@@ -748,6 +759,7 @@ if !is_dup {
             }
             else if msg.starts_with("CALL_BUSY:") {
                 let id = msg.trim_start_matches("CALL_BUSY:").trim().to_string();
+                SOUND_MANAGER.lock().unwrap().stop_outgoing_call();
                 let _ = self.tx_network.send(format!("HANGUP:{}", id));
                 
                 let mut pseudo = "L'interlocuteur".to_string();
@@ -797,6 +809,7 @@ if !is_dup {
 
                 if should_end {
                     self.active_call = None;
+                    SOUND_MANAGER.lock().unwrap().play_call_disconnected();
                     self.is_muted = false;
                     let _ = self.tx_network.send("MUTE:off".to_string());
 
@@ -807,6 +820,7 @@ if !is_dup {
 
                 if let Some((inc_id, _, _, _)) = &self.incoming_call {
                     if inc_id == &id {
+                        SOUND_MANAGER.lock().unwrap().stop_incoming_call();
                         self.incoming_call = None;
                         self.incoming_call_timer = 0;
                         if !should_end {
@@ -820,6 +834,7 @@ if !is_dup {
                 if self.active_call.is_none() {
                     // [MED-4 UX] Ne pas timeout si l'appel a dj chou ou raccroch
                     if self.status_message.starts_with("LOADING:") || self.status_message.contains("attente") {
+                        SOUND_MANAGER.lock().unwrap().stop_outgoing_call();
                         self.status_message = crate::ui::i18n::t(&self.language, "status_remote_unavailable");
                         let _ = self.tx_network.send(format!("HANGUP:{}", tgt));
                     }

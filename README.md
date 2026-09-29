@@ -39,6 +39,9 @@ This project adopts a strict **zero-trust, zero-trace** design:
 ## Credits
 Special thanks to **Constance Persad** for the design of the Kakolookiyam logo.
 
+A huge thank you to **Toxare** (https://open.spotify.com/intl-fr/artist/5AFESJ1lGjK6hkCJLY8iwn?si=4kiT3AwnTw6OwlfoRpUU3A | teumaaa.pro@gmail.com) for his sound design and music composition.
+All audio works in the application are protected for life on the Tezos blockchain via the **MusicStart** service (URights / Sacem).
+
 ## License & Independence
 
 Kakolookiyam is proudly open-source and distributed under the **GNU Affero General Public License v3.0 (AGPLv3)**. This guarantees that the network architecture remains transparent, auditable, and fiercely protected against proprietary corporate appropriation.
@@ -91,6 +94,9 @@ Ce projet adopte une architecture stricte **zéro-confiance, zéro-trace** :
 ## Crédits
 Un remerciement tout particulier à **Constance Persad** pour la création et le design du logo Kakolookiyam.
 
+Un énorme merci à **Toxare** (https://open.spotify.com/intl-fr/artist/5AFESJ1lGjK6hkCJLY8iwn?si=4kiT3AwnTw6OwlfoRpUU3A | teumaaa.pro@gmail.com) pour sa conception sonore et la composition des musiques.
+Toutes les œuvres sonores de l'application sont protégées à vie sur la blockchain Tezos via le service **MusicStart** (URights / Sacem).
+
 ## Licence & Indépendance
 
 Kakolookiyam est open-source et distribué sous la **GNU Affero General Public License v3.0 (AGPLv3)**. Cela garantit que l'architecture réseau reste transparente, auditable et fermement protégée contre toute appropriation commerciale propriétaire.
@@ -142,6 +148,9 @@ Si cet outil garantit votre liberté numérique, soutenez son développement ind
 
 ## شكر وتقدير
 شكر خاص لـ **Constance Persad** على تصميم شعار Kakolookiyam.
+
+شكر كبير لـ **Toxare** (https://open.spotify.com/intl-fr/artist/5AFESJ1lGjK6hkCJLY8iwn?si=4kiT3AwnTw6OwlfoRpUU3A | teumaaa.pro@gmail.com) على تصميمه الصوتي الرائع وتأليفاته الموسيقية المذهلة.
+جميع الأعمال الصوتية في التطبيق محمية مدى الحياة على بلوكشين Tezos عبر خدمة **MusicStart** (URights / Sacem).
 
 ## الترخيص والاستقلالية
 
