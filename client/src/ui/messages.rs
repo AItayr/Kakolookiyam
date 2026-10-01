@@ -58,6 +58,8 @@ pub enum Message {
     PreviewMedia(String, [u8; 32]),
     PreviewMediaLoaded(Option<Vec<u8>>),
     ClosePreview,
+    AcceptFileTransfer(String, String, usize, String),
+    RejectFileTransfer(String, String),
 
     // --- PARAMÈTRES & INTERFACE ---
     OpenSettings,

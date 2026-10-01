@@ -107,13 +107,14 @@ pub fn start_hardware_audio(
         }
         let mic_device = match mic_device {
             Some(d) => d,
-            None => return,
+            None => { std::thread::sleep(std::time::Duration::from_millis(1000)); continue; }
         };
         let mic_config_supported = match mic_device.default_input_config() {
             Ok(c) => c,
-            Err(_) => return,
+            Err(_) => { std::thread::sleep(std::time::Duration::from_millis(1000)); continue; }
         };
-        let mic_config: cpal::StreamConfig = mic_config_supported.clone().into();
+        let mut mic_config: cpal::StreamConfig = mic_config_supported.clone().into();
+        mic_config.sample_rate = 48000;
         let mic_channels = mic_config.channels as usize;
 
         let opus_channels = audiopus::Channels::Mono;
@@ -126,7 +127,7 @@ pub fn start_hardware_audio(
             cpal::SampleFormat::F32 => {
                 let mut encoder = match audiopus::coder::Encoder::new(audiopus::SampleRate::Hz48000, opus_channels, audiopus::Application::Voip) {
                     Ok(e) => e,
-                    Err(_) => return,
+                    Err(_) => { std::thread::sleep(std::time::Duration::from_millis(1000)); continue; }
                 };
                 let mut mic_buffer = Vec::new();
                 mic_device.build_input_stream(
@@ -153,7 +154,7 @@ pub fn start_hardware_audio(
             cpal::SampleFormat::I16 => {
                 let mut encoder = match audiopus::coder::Encoder::new(audiopus::SampleRate::Hz48000, opus_channels, audiopus::Application::Voip) {
                     Ok(e) => e,
-                    Err(_) => return,
+                    Err(_) => { std::thread::sleep(std::time::Duration::from_millis(1000)); continue; }
                 };
                 let mut mic_buffer = Vec::new();
                 mic_device.build_input_stream(
@@ -177,12 +178,12 @@ pub fn start_hardware_audio(
                     None,
                 )
             },
-            _ => return,
+            _ => { std::thread::sleep(std::time::Duration::from_millis(1000)); continue; }
         };
 
         let mic_stream = match mic_stream_res {
             Ok(s) => s,
-            Err(_) => return,
+            Err(_) => { std::thread::sleep(std::time::Duration::from_millis(1000)); continue; }
         };
 
                 let mut spk_device = host.default_output_device();
@@ -202,14 +203,15 @@ pub fn start_hardware_audio(
         }
         let spk_device = match spk_device {
             Some(d) => d,
-            None => return,
+            None => { std::thread::sleep(std::time::Duration::from_millis(1000)); continue; }
         };
         let spk_supported_config = match spk_device.default_output_config() {
             Ok(c) => c,
-            Err(_) => return,
+            Err(_) => { std::thread::sleep(std::time::Duration::from_millis(1000)); continue; }
         };
         let spk_format = spk_supported_config.sample_format();
-        let spk_config: cpal::StreamConfig = spk_supported_config.into();
+        let mut spk_config: cpal::StreamConfig = spk_supported_config.into();
+        spk_config.sample_rate = 48000;
         let spk_channels = spk_config.channels as usize;
 
         let rx_spk_f32 = Arc::clone(&rx_speaker_arc);
@@ -284,12 +286,12 @@ pub fn start_hardware_audio(
                     None,
                 )
             },
-            _ => return,
+            _ => { std::thread::sleep(std::time::Duration::from_millis(1000)); continue; }
         };
 
         let spk_stream = match spk_stream_res {
             Ok(s) => s,
-            Err(_) => return,
+            Err(_) => { std::thread::sleep(std::time::Duration::from_millis(1000)); continue; }
         };
 
         let _ = mic_stream.play();

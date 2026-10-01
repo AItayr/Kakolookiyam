@@ -131,7 +131,7 @@ impl KakolookiyamApp {
         .width(Length::Fill);
 
         if !vd.pending_requests.is_empty() {
-            sidebar = sidebar.push(crate::ui::i18n::app_text(&self.language, t(&self.language, "pending_requests_title")).size(16).color(iced::Color::from_rgb(1.0, 0.4, 0.4)));
+            sidebar = sidebar.push(crate::ui::i18n::app_text(&self.language, t(&self.language, "pending_requests_title")).size(16).color(iced::Color::from_rgb(1.0, 0.9, 0.5)));
             for (id, pseudo) in &vd.pending_requests {
                 let req_row = row![
                     crate::ui::i18n::app_text(&self.language, pseudo).size(16),
@@ -585,8 +585,8 @@ impl KakolookiyamApp {
                         .height(Length::Fill);
 
                     if !self.status_message.is_empty() {
-                        let alert_color = if self.status_message.starts_with("ERROR:") {
-                            iced::Color::from_rgb(0.9, 0.1, 0.1)
+                        let alert_color = if self.status_message.starts_with("ERROR:") || self.status_message.contains("pas vous appeler") {
+                            iced::Color::from_rgb(1.0, 0.3, 0.3)
                         } else {
                             dynamic_accent(&self.current_theme)
                         };
@@ -616,7 +616,7 @@ impl KakolookiyamApp {
                     .on_press(Message::ConnectClicked)
                     .padding(10),
                 crate::ui::i18n::app_text(&self.language, &self.status_message)
-                    .color(current_text)
+                    .color(if self.status_message.contains("pas vous appeler") { iced::Color::from_rgb(1.0, 0.3, 0.3) } else { current_text })
             ]
             .spacing(20)
             .align_x(Alignment::Center)
@@ -643,7 +643,90 @@ impl KakolookiyamApp {
 
         let mut content_col = column![];
 
-        // --- BANDEAU D'APPEL (MED-4 UX) ---
+        // --- BANDEAU D'OFFRE DE FICHIER ---
+        if let Some((sender_id, filename, total, key_b64)) = self.incoming_file_offers.first() {
+            let size_mb = (total * 16384) / 1_048_576;
+            let title = crate::ui::i18n::app_text(&self.language, format!("{} : {} (~{} MB)", t(&self.language, "file_received_prefix"), filename, size_mb)).size(16).color(iced::Color::WHITE);
+            let btn_accept = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_accept_file")))
+                .style(primary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
+                .on_press(Message::AcceptFileTransfer(sender_id.clone(), filename.clone(), *total, key_b64.clone()))
+                .padding(10);
+            let btn_reject = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_reject_file")))
+                .style(hangup_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
+                .on_press(Message::RejectFileTransfer(sender_id.clone(), filename.clone()))
+                .padding(10);
+
+            let banner = container(
+                row![
+                    title,
+                    Space::new().width(Length::Fill),
+                    row![btn_reject, btn_accept].spacing(15)
+                ].align_y(Alignment::Center).width(Length::Fill)
+            ).width(Length::Fill).padding([15, 20])
+            .style(move |_theme| iced::widget::container::Style {
+                text_color: Some(iced::Color::WHITE), background: Some(iced::Background::Color(iced::Color::from_rgb(0.8, 0.4, 0.1))), border: iced::Border { radius: 0.0.into(), width: 0.0, color: iced::Color::TRANSPARENT }, shadow: iced::Shadow::default(), ..Default::default()
+            });
+            content_col = content_col.push(banner);
+        }
+
+        // --- BANDEAU D'APPEL ENTRANT ---
+        if let Some((caller_id, caller_pseudo, sdp, grp_id)) = &self.incoming_call {
+            let title = crate::ui::i18n::app_text(&self.language, format!("{} {}", caller_pseudo, t(&self.language, "wants_to_talk"))).size(16).color(iced::Color::WHITE);
+            let timer_text = crate::ui::i18n::app_text(&self.language, format!("({} {}s)", t(&self.language, "auto_reject"), 15 - self.incoming_call_timer)).size(16).color(iced::Color::from_rgb(1.0, 0.9, 0.5));
+            
+            let btn_accept = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_accept")))
+                .style(crate::ui::theme::accept_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
+                .on_press(Message::AcceptCall(caller_id.to_string(), sdp.to_string(), grp_id.to_string()))
+                .padding(10);
+            
+            let btn_reject = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_reject")))
+                .style(hangup_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
+                .on_press(Message::RejectCall(caller_id.clone()))
+                .padding(10);
+
+            let banner = container(
+                row![
+                    title,
+                    Space::new().width(Length::Fixed(10.0)),
+                    timer_text,
+                    Space::new().width(Length::Fill),
+                    row![btn_reject, btn_accept].spacing(15)
+                ].align_y(Alignment::Center).width(Length::Fill)
+            )
+            .width(Length::Fill)
+            .padding([15, 20])
+            .style(move |_theme| iced::widget::container::Style {
+                text_color: Some(iced::Color::WHITE),
+                background: Some(iced::Background::Color(crate::ui::theme::dynamic_accent(_theme))),
+                border: iced::Border { radius: 0.0.into(), width: 0.0, color: iced::Color::TRANSPARENT },
+                shadow: iced::Shadow::default(), ..Default::default()
+            });
+            content_col = content_col.push(banner);
+        } else if self.status_message.starts_with("LOADING:") {
+            let msg = self.status_message.trim_start_matches("LOADING:");
+            let title = crate::ui::i18n::app_text(&self.language, t(&self.language, "securing_connection")).size(16).color(iced::Color::WHITE);
+            let subtitle = crate::ui::i18n::app_text(&self.language, msg).size(16).color(iced::Color::WHITE);
+            
+            let banner = container(
+                row![
+                    title,
+                    Space::new().width(Length::Fixed(10.0)),
+                    subtitle,
+                    Space::new().width(Length::Fill),
+                ].align_y(Alignment::Center).width(Length::Fill)
+            )
+            .width(Length::Fill)
+            .padding([15, 20])
+            .style(move |_theme| iced::widget::container::Style {
+                text_color: Some(iced::Color::WHITE),
+                background: Some(iced::Background::Color(crate::ui::theme::dynamic_accent(_theme))),
+                border: iced::Border { radius: 0.0.into(), width: 0.0, color: iced::Color::TRANSPARENT },
+                shadow: iced::Shadow::default(), ..Default::default()
+            });
+            content_col = content_col.push(banner);
+        }
+
+        // --- BANDEAU D'APPEL ACTIF ---
         if let Some((_call_id, call_pseudo)) = &self.active_call {
             let mute_text = if self.is_muted { t(&self.language, "mic_enable") } else { t(&self.language, "mic_disable") };
             let btn_mute = button(crate::ui::i18n::app_text(&self.language, mute_text))
@@ -735,8 +818,7 @@ impl KakolookiyamApp {
             content_col = content_col.push(banner);
         }
 
-        content_col = content_col.push(layout).push(bottom_bar).width(Length::Fill).height(Length::Fill);
-
+        content_col = content_col.push(layout).push(bottom_bar);
         Container::new(content_col).width(Length::Fill).height(Length::Fill).into()
     }
 }

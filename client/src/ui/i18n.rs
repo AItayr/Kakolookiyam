@@ -387,6 +387,22 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::En, "status_media_error") => "❌ Unable to generate preview.",
         (Language::Ar, "status_media_error") => "❌ تعذر إنشاء معاينة.",
 
+        (Language::Fr, "error_self_call") => "Vous ne pouvez pas vous appeler vous-même.",
+        (Language::En, "error_self_call") => "You cannot call yourself.",
+        (Language::Ar, "error_self_call") => "لا يمكنك الاتصال بنفسك.",
+
+        (Language::Fr, "file_received_prefix") => "Fichier reçu",
+        (Language::En, "file_received_prefix") => "File received",
+        (Language::Ar, "file_received_prefix") => "ملف مستلم",
+
+        (Language::Fr, "btn_accept_file") => "Accepter",
+        (Language::En, "btn_accept_file") => "Accept",
+        (Language::Ar, "btn_accept_file") => "قبول",
+
+        (Language::Fr, "btn_reject_file") => "Refuser",
+        (Language::En, "btn_reject_file") => "Decline",
+        (Language::Ar, "btn_reject_file") => "رفض",
+
         (Language::Fr, "status_media_purged") => " Aperçu fermé (Données purgées de la RAM).",
         (Language::En, "status_media_purged") => " Preview closed (Data purged from RAM).",
         (Language::Ar, "status_media_purged") => " تم إغلاق المعاينة (تم مسح البيانات من ذاكرة الوصول العشوائي).",

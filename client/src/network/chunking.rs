@@ -70,25 +70,8 @@ impl TransferManager {
             }
 
             let key_b64 = std::str::from_utf8(parts[4]).unwrap_or("").to_string();
-            let file_id = format!("{}_{}_{}", my_pseudo, sender_id, filename);
-            let temp_path = format!("{}/kako_tmp_{}", std::env::temp_dir().display(), file_id.replace(|c: char| !c.is_alphanumeric(), "_"));
+            let _ = tx_ui.send(format!("FILE_OFFER:{}:{}:{}:{}", sender_id, filename, total, key_b64));
 
-            // Initialize empty file for streaming
-            let _ = tokio::fs::write(&temp_path, b"").await;
-
-            let handle = std::fs::OpenOptions::new().write(true).create(true).truncate(true).open(&temp_path).ok();
-            
-            self.incoming.insert(file_id, IncomingTransfer {
-                key_b64,
-                total_chunks: total,
-                received_chunks: 0,
-                temp_path,
-                file_handle: handle,
-            });
-
-            if let Some(dc) = data_channels.get(sender_id) {
-                let _ = dc.send_text(format!("SYS:ACK_META:{}", filename)).await;
-            }
         }
         else if sys_cmd == "ACK_META" && parts.len() >= 3 {
              let filename = std::str::from_utf8(parts[2]).unwrap_or("");

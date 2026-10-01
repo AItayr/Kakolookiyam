@@ -78,70 +78,9 @@ impl KakolookiyamApp {
         Container::new(content).width(Length::Fill).height(Length::Fill).center_x(iced::Length::Fill).center_y(iced::Length::Fill).into()
     }
 
-    pub(crate) fn view_incoming_call(&self) -> Element<'_, Message> {
-        let current_text = text_main(&self.current_theme);
-        let current_muted = text_muted(&self.current_theme);
-
-        let (caller_id, caller_pseudo, sdp, grp_id) = self.incoming_call.as_ref().unwrap();
-
-        let title = crate::ui::i18n::app_text(&self.language, t(&self.language, "call_incoming"))
-            .size(40)
-            .color(current_text);
-
-        let subtitle = crate::ui::i18n::app_text(&self.language, format!("{} {}", caller_pseudo, t(&self.language, "wants_to_talk")))
-            .size(25)
-            .color(current_muted);
-
-        let timer_text = crate::ui::i18n::app_text(&self.language, format!("({} {}s)", t(&self.language, "auto_reject"), 15 - self.incoming_call_timer))
-            .size(16)
-            .color(crate::ui::theme::ACCENT_RED_DARK);
-
-        let btn_accept = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_accept")))
-            .style(primary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
-            .on_press(Message::AcceptCall(caller_id.to_string(), sdp.to_string(), grp_id.to_string()))
-            .padding(15);
-
-        let btn_reject = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_reject")))
-            .style(hangup_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
-            .on_press(Message::RejectCall(caller_id.clone()))
-            .padding(15);
-
-        let buttons = row![btn_reject, btn_accept].spacing(30);
-
-        let content = column![title, subtitle, timer_text, buttons]
-            .spacing(25)
-            .padding(60)
-            .align_x(Alignment::Center);
-
-        Container::new(content).width(Length::Fill).height(Length::Fill).center_x(iced::Length::Fill).center_y(iced::Length::Fill).into()
-    }
-
-    pub(crate) fn view_loading_screen(&self) -> Element<'_, Message> {
-        let current_text = crate::ui::theme::text_main(&self.current_theme);
-        let current_accent = crate::ui::theme::dynamic_accent(&self.current_theme);
-        
-        let msg = self.status_message.trim_start_matches("LOADING:");
-        
-        let title = crate::ui::i18n::app_text(&self.language, t(&self.language, "securing_connection"))
-            .size(36)
-            .color(current_accent);
-            
-        let subtitle = crate::ui::i18n::app_text(&self.language, msg)
-            .size(24)
-            .color(current_text);
-
-        let content = iced::widget::column![title, subtitle]
-            .spacing(30)
-            .align_x(iced::Alignment::Center);
-
-        iced::widget::Container::new(content).width(iced::Length::Fill).height(iced::Length::Fill).center_x(iced::Length::Fill).center_y(iced::Length::Fill).into()
-    }
-
     pub(crate) fn view_unlocked(&self) -> Element<'_, Message> {
         // [MED-4 UX] On ne bloque plus la vue complte lorsqu'un appel est actif. Le bandeau d'appel 
         // est directement affich tout en haut du dashboard ! (cf view_dashboard)
-        if self.incoming_call.is_some() { return self.view_incoming_call(); }
-        if self.status_message.starts_with("LOADING:") { return self.view_loading_screen(); }
         self.view_dashboard()
     }
 }

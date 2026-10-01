@@ -179,3 +179,14 @@ pub fn overlay_container_style(theme: &Theme) -> container::Style {
         ..Default::default()
     }
 }
+
+
+pub fn accept_button(_theme: &Theme, _status: button::Status) -> button::Style {
+    button::Style {
+        background: Some(Background::Color(Color::from_rgb(0.1, 0.7, 0.3))), // Green!
+        text_color: Color::WHITE,
+        border: Border { radius: 4.0.into(), width: 0.0, color: Color::TRANSPARENT, ..Default::default() },
+        shadow: Shadow::default(),
+        ..Default::default()
+    }
+}

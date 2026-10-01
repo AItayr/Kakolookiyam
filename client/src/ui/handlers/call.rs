@@ -12,7 +12,15 @@ impl KakolookiyamApp {
             Message::PeerIdChanged(val) => {
                 self.peer_id_input = val;
             }
-            Message::ConnectClicked => {
+Message::ConnectClicked => {
+                if let Some(vd) = &self.vault_data {
+                    let my_id = crate::crypto::derive_public_id(&vd.private_key);
+                    if self.peer_id_input.trim().to_lowercase() == my_id.to_lowercase() {
+                        self.status_message = crate::ui::i18n::t(&self.language, "error_self_call");
+                        return Command::none(); // Blocage auto-appel via ajout manuel
+                    }
+                }
+
                 if self.active_call.is_some() {
                     let _ = self.handle_call(Message::HangUpCall);
                 }
@@ -31,6 +39,15 @@ impl KakolookiyamApp {
                 let _ = self.tx_network.send(format!("CALL:{}", self.peer_id_input));
             }
             Message::CallContact(target_id) => {
+
+                if let Some(vd) = &self.vault_data {
+                    let my_id = crate::crypto::derive_public_id(&vd.private_key);
+                    if target_id.to_lowercase() == my_id.to_lowercase() {
+                        self.status_message = crate::ui::i18n::t(&self.language, "error_self_call");
+                        return Command::none(); // Blocage auto-appel
+                    }
+                }
+
                 if self.active_call.is_some() {
                     let _ = self.handle_call(Message::HangUpCall);
                 }

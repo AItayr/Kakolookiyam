@@ -42,6 +42,7 @@ pub struct KakolookiyamApp {
     pub(crate) heartbeat_counter: u32,
     pub(crate) group_call_presences: std::collections::HashMap<String, std::collections::HashMap<String, u64>>,
     pub(crate) incoming_call: Option<(String, String, String, String)>,
+    pub(crate) incoming_file_offers: Vec<(String, String, usize, String)>,
     pub(crate) incoming_call_timer: u32,
     pub(crate) queued_group_offers: Vec<(String, String)>,
     pub(crate) active_call: Option<(String, String)>,
@@ -100,6 +101,7 @@ impl KakolookiyamApp {
             heartbeat_counter: 0,
             group_call_presences: std::collections::HashMap::new(),
                 incoming_call: None,
+                incoming_file_offers: Vec::new(),
                 incoming_call_timer: 0,
             queued_group_offers: Vec::new(),
                 active_call: None,
@@ -124,7 +126,8 @@ impl KakolookiyamApp {
             available_speakers: crate::audio::get_available_speakers(),
                 selected_speaker: "Défaut".to_string(),
                 active_legal_tab: None,
-                language: crate::ui::i18n::Language::Fr, // <-- INITIALISATION
+                language: crate::ui::i18n::Language::Fr,
+            // language field defined here // <-- INITIALISATION
             },
             Command::none(),
         )
@@ -215,7 +218,7 @@ impl KakolookiyamApp {
 
             Message::OpenFileDialog | Message::FileSelected(_) | Message::FileRead(_) |
             Message::OpenMedia(_, _, _) | Message::MediaSaved(_) |
-            Message::PreviewMedia(_, _) | Message::PreviewMediaLoaded(_) | Message::ClosePreview
+            Message::PreviewMedia(_, _) | Message::PreviewMediaLoaded(_) | Message::ClosePreview | Message::AcceptFileTransfer(_, _, _, _) | Message::RejectFileTransfer(_, _) 
             => self.handle_media(message),
 
             Message::NewGroupInputChanged(_) | Message::CreateGroup | Message::NewMemberInputChanged(_) |

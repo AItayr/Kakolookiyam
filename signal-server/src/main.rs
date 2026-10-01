@@ -130,9 +130,13 @@ async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::
                         if client_id.is_empty() || client_id != sender_id {
                             continue;
                         }
-                        let clients_guard = clients.lock().await;
+let clients_guard = clients.lock().await;
                         if let Some(target_tx) = clients_guard.get(&target_id) {
                             let _ = target_tx.send(text.to_string());
+                        } else {
+                            if let Some(sender_tx) = clients_guard.get(&sender_id) {
+                                let _ = sender_tx.send(format!("ERROR:NOT_FOUND:{}", target_id));
+                            }
                         }
                     },
                     _ => {}

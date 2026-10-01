@@ -186,6 +186,33 @@ pub async fn start_p2p(
                     transfer_manager.outgoing.clear();
                     transfer_manager.incoming.clear();
                 }
+                                else if cmd.starts_with("ACCEPT_FILE:") {
+                    let parts: Vec<&str> = cmd.splitn(5, ':').collect();
+                    if parts.len() == 5 {
+                        let sender_id = parts[1].to_string();
+                        let filename = parts[2].to_string();
+                        let total: usize = parts[3].parse().unwrap_or(0);
+                        let key_b64 = parts[4].to_string();
+                        
+                        let file_id = format!("{}_{}_{}", my_pseudo, sender_id, filename);
+                        let temp_path = format!("{}/kako_tmp_{}", std::env::temp_dir().display(), file_id.replace(|c: char| !c.is_alphanumeric(), "_"));
+
+                        let _ = tokio::fs::write(&temp_path, b"").await;
+                        let handle = std::fs::OpenOptions::new().write(true).create(true).truncate(true).open(&temp_path).ok();
+                        
+                        transfer_manager.incoming.insert(file_id, super::chunking::IncomingTransfer {
+                            key_b64,
+                            total_chunks: total,
+                            received_chunks: 0,
+                            temp_path,
+                            file_handle: handle,
+                        });
+
+                        if let Some(dc) = data_channels.get(&sender_id) {
+                            let _ = dc.send_text(format!("SYS:ACK_META:{}", filename)).await;
+                        }
+                    }
+                }
                 else if cmd.starts_with("CALL:") {
                     let full_target = cmd.trim_start_matches("CALL:").to_string();
                     let mut target_id = full_target.clone();
@@ -208,7 +235,7 @@ pub async fn start_p2p(
                         tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
                         let _ = tx_ui_loading.send("LOADING:Canal P2P Zéro-Trace sécurisé...".to_string());
                         
-                        tokio::time::sleep(tokio::time::Duration::from_secs(25)).await;
+                        tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
                         let _ = tx_ui_loading.send(format!("TIMEOUT:{}", timeout_target_id));
                     });
 
@@ -621,7 +648,7 @@ pub async fn start_p2p(
                     Ok(response) => {
                         if let Ok(text) = response.into_text() {
 
-                            if text == "ERROR:ALREADY_CONNECTED" || text == "SUCCESS:REGISTERED" {
+                            if text == "ERROR:ALREADY_CONNECTED" || text == "SUCCESS:REGISTERED" || text.starts_with("ERROR:NOT_FOUND:") {
                                 let _ = tx_ui.send(text.to_string());
                                 continue;
                             }

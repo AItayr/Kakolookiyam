@@ -103,18 +103,7 @@ impl KakolookiyamApp {
                         return Command::perform(async {}, |_| Message::LockSession);
                     }
                     
-                    if let Some((active_id, _)) = &self.active_call {
-                        if !active_id.starts_with("grp_") && self.active_call_participants.is_empty() {
-                            if let Some(start) = self.call_start_time {
-                                if now > start && now.saturating_sub(start) > 40 {
-                                    crate::sound::SOUND_MANAGER.lock().unwrap().stop_outgoing_call();
-                                    let _ = self.tx_network.send(format!("HANGUP:{}", active_id));
-                                    self.active_call = None;
-                                    self.status_message = crate::ui::i18n::t(&self.language, "status_call_missed");
-                                }
-                            }
-                        }
-                    }
+                    
                 } else {
                     self.idle_seconds = 0;
                 }

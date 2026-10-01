@@ -627,6 +627,17 @@ if !is_dup {
                     }
                 }
             }
+                        else if msg.starts_with("FILE_OFFER:") {
+                let parts: Vec<&str> = msg.splitn(5, ':').collect();
+                if parts.len() == 5 {
+                    let sender_id = parts[1].to_string();
+                    let filename = parts[2].to_string();
+                    let total: usize = parts[3].parse().unwrap_or(0);
+                    let key_b64 = parts[4].to_string();
+                    self.incoming_file_offers.push((sender_id, filename, total, key_b64));
+                    SOUND_MANAGER.lock().unwrap().play_message_received();
+                }
+            }
             else if msg.starts_with("INCOMING_CALL:") {
                 let parts: Vec<&str> = msg.splitn(4, ':').collect();
 
@@ -756,6 +767,31 @@ if !is_dup {
                         }
                     }
                 }
+            }
+            else if msg.starts_with("ERROR:NOT_FOUND:") {
+                let tgt = msg.trim_start_matches("ERROR:NOT_FOUND:");
+                SOUND_MANAGER.lock().unwrap().stop_outgoing_call();
+                self.status_message = crate::ui::i18n::t(&self.language, "status_remote_unavailable");
+                let _ = self.tx_network.send(format!("HANGUP:{}", tgt));
+                
+                if let Some(start) = self.call_start_time.take() {
+                    let now_s = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                    let duration = now_s.saturating_sub(start);
+                    if let Some(vd) = &mut self.vault_data {
+                        let entry = crate::crypto::MessageEntry {
+                            author: "SYS:AUTHOR".to_string(),
+                            content: format!("SYS:MSG:CALL_ENDED:{}", duration),
+                            is_media: false,
+                            media_key: None,
+                            media_path: None,
+                            signature: None,
+                            timestamp: now_s,
+                        };
+                        vd.chat_history.entry(tgt.to_string()).or_default().push(entry);
+                        self.needs_save = true;
+                    }
+                }
+                self.active_call = None;
             }
             else if msg.starts_with("CALL_BUSY:") {
                 let id = msg.trim_start_matches("CALL_BUSY:").trim().to_string();

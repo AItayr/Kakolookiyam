@@ -200,6 +200,13 @@ impl KakolookiyamApp {
                 }
             }
 
+                        Message::AcceptFileTransfer(sender_id, filename, total, key_b64) => {
+                self.incoming_file_offers.retain(|(s, f, _, _)| s != &sender_id || f != &filename);
+                let _ = self.tx_network.send(format!("ACCEPT_FILE:{}:{}:{}:{}", sender_id, filename, total, key_b64));
+            }
+            Message::RejectFileTransfer(sender_id, filename) => {
+                self.incoming_file_offers.retain(|(s, f, _, _)| s != &sender_id || f != &filename);
+            }
             Message::ClosePreview => {
                 self.idle_seconds = 0;
                 self.media_preview = None;
