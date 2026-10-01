@@ -41,7 +41,7 @@ impl SoundManager {
         Self {
             manager,
             app_volume: 0.5,
-            main_theme_volume: 1.0,
+            main_theme_volume: 0.1,
             main_theme_handle: None,
             looping_handles: HashMap::new(),
             cached_sounds: HashMap::new(),
