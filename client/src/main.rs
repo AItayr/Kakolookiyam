@@ -1,18 +1,18 @@
 #![allow(unused_mut)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod audio;
+mod crypto;
+mod network;
 pub mod reduction;
 pub mod sound;
-mod audio;
-mod network;
 mod ui;
-mod crypto;
 
-use iced::{Font, Size};
-use ui::{KakolookiyamApp, Flags};
-use tokio::sync::mpsc;
-use std::sync::{Arc, Mutex};
 use iced::window::icon;
+use iced::{Font, Size};
+use std::sync::{Arc, Mutex};
+use tokio::sync::mpsc;
+use ui::{Flags, KakolookiyamApp};
 
 pub fn main() -> iced::Result {
     audio::detect_microphone();
@@ -44,8 +44,9 @@ pub fn main() -> iced::Result {
                 my_id_b64,
                 my_pseudo,
                 my_secret,
-                rx_secrets
-            ).await;
+                rx_secrets,
+            )
+            .await;
         });
     });
 
@@ -63,19 +64,23 @@ pub fn main() -> iced::Result {
         style: iced::font::Style::Normal,
     };
 
-    let icon = icon::from_file_data(include_bytes!("../assets/images/Kakolookiyam_logo.png"), None).unwrap();
+    let icon = icon::from_file_data(
+        include_bytes!("../assets/images/Kakolookiyam_logo.png"),
+        None,
+    )
+    .unwrap();
 
     // Make the boot function compatible with `BootFn` which returns `(State, Task<Message>)` or just `State`.
     // KakolookiyamApp::new returns `(KakolookiyamApp, iced::Task<Message>)`!
-    
+
     // We pass `title` as a builder method on the returned Application!
     iced::application(
         {
-        let flags_arc = Arc::new(Mutex::new(Some(flags)));
-        move || KakolookiyamApp::new(flags_arc.lock().unwrap().take().unwrap())
-    },
+            let flags_arc = Arc::new(Mutex::new(Some(flags)));
+            move || KakolookiyamApp::new(flags_arc.lock().unwrap().take().unwrap())
+        },
         KakolookiyamApp::update,
-        KakolookiyamApp::view
+        KakolookiyamApp::view,
     )
     .subscription(KakolookiyamApp::subscription)
     .theme(KakolookiyamApp::theme)
@@ -102,4 +107,3 @@ pub fn main() -> iced::Result {
 }
 
 // touch
-

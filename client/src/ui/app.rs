@@ -1,7 +1,7 @@
-use iced::{time, Task as Command, Element, Event, Subscription, Theme};
+use iced::{Element, Event, Subscription, Task as Command, Theme, time};
 use std::sync::Arc;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::Mutex;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::crypto;
 use crate::ui::messages::Message;
@@ -40,7 +40,8 @@ pub struct KakolookiyamApp {
 
     pub(crate) idle_seconds: u32,
     pub(crate) heartbeat_counter: u32,
-    pub(crate) group_call_presences: std::collections::HashMap<String, std::collections::HashMap<String, u64>>,
+    pub(crate) group_call_presences:
+        std::collections::HashMap<String, std::collections::HashMap<String, u64>>,
     pub(crate) incoming_call: Option<(String, String, String, String)>,
     pub(crate) incoming_file_offers: Vec<(String, String, usize, String)>,
     pub(crate) incoming_call_timer: u32,
@@ -77,10 +78,16 @@ pub struct KakolookiyamApp {
 }
 
 impl KakolookiyamApp {
-                
     pub fn new(flags: Flags) -> (Self, Command<Message>) {
-        crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_main_theme();
-        let initial_state = if crypto::any_vault_exists() { AppState::Login } else { AppState::Welcome };
+        crate::sound::SOUND_MANAGER
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .play_main_theme();
+        let initial_state = if crypto::any_vault_exists() {
+            AppState::Login
+        } else {
+            AppState::Welcome
+        };
         (
             Self {
                 unread_counts: std::collections::HashMap::new(),
@@ -98,15 +105,15 @@ impl KakolookiyamApp {
                 tx_identity: Some(flags.tx_identity),
                 tx_secrets: flags.tx_secrets,
                 idle_seconds: 0,
-            heartbeat_counter: 0,
-            group_call_presences: std::collections::HashMap::new(),
+                heartbeat_counter: 0,
+                group_call_presences: std::collections::HashMap::new(),
                 incoming_call: None,
                 incoming_file_offers: Vec::new(),
                 incoming_call_timer: 0,
-            queued_group_offers: Vec::new(),
+                queued_group_offers: Vec::new(),
                 active_call: None,
-            active_call_participants: std::collections::HashSet::new(),
-            call_start_time: None,
+                active_call_participants: std::collections::HashSet::new(),
+                call_start_time: None,
                 is_muted: false,
                 selected_chat: None,
                 chat_input: String::new(),
@@ -117,23 +124,25 @@ impl KakolookiyamApp {
                 current_theme: Theme::Dark,
                 show_settings: false,
                 show_group_options: false,
-            show_blocked: false,
-            show_volume_panel: false,
-            show_main_music_panel: false,
-            needs_save: false,
+                show_blocked: false,
+                show_volume_panel: false,
+                show_main_music_panel: false,
+                needs_save: false,
                 selected_mic: "Défaut".to_string(),
-            available_mics: crate::audio::get_available_microphones(),
-            available_speakers: crate::audio::get_available_speakers(),
+                available_mics: crate::audio::get_available_microphones(),
+                available_speakers: crate::audio::get_available_speakers(),
                 selected_speaker: "Défaut".to_string(),
                 active_legal_tab: None,
                 language: crate::ui::i18n::Language::Fr,
-            // language field defined here // <-- INITIALISATION
+                // language field defined here // <-- INITIALISATION
             },
             Command::none(),
         )
     }
 
-    pub fn title(&self) -> String { String::from("Kakolookiyam") }
+    pub fn title(&self) -> String {
+        String::from("Kakolookiyam")
+    }
 
     pub fn theme(&self) -> Theme {
         self.current_theme.clone()
@@ -147,20 +156,43 @@ impl KakolookiyamApp {
             self.active_legal_tab = None;
         }
 
-        if matches!(message, Message::DeselectChat | Message::SelectChat(_) | Message::DeleteGroup) {
+        if matches!(
+            message,
+            Message::DeselectChat | Message::SelectChat(_) | Message::DeleteGroup
+        ) {
             self.show_group_options = false;
         }
 
         match message {
-            Message::MicSelected(mic) => { self.selected_mic = mic.clone(); crate::audio::set_microphone(mic); return Command::none(); }
-            Message::SpeakerSelected(spk) => { self.selected_speaker = spk.clone(); crate::audio::set_speaker(spk); return Command::none(); }
+            Message::MicSelected(mic) => {
+                self.selected_mic = mic.clone();
+                crate::audio::set_microphone(mic);
+                return Command::none();
+            }
+            Message::SpeakerSelected(spk) => {
+                self.selected_speaker = spk.clone();
+                crate::audio::set_speaker(spk);
+                return Command::none();
+            }
             Message::ToggleLegal(tab) => {
-                self.active_legal_tab = if self.active_legal_tab.as_deref() == Some(&tab) { None } else { Some(tab) };
+                self.active_legal_tab = if self.active_legal_tab.as_deref() == Some(&tab) {
+                    None
+                } else {
+                    Some(tab)
+                };
                 return Command::none();
             }
 
-            Message::OpenSettings => { self.idle_seconds = 0; self.show_settings = true; return Command::none(); }
-            Message::CloseSettings => { self.idle_seconds = 0; self.show_settings = false; return Command::none(); }
+            Message::OpenSettings => {
+                self.idle_seconds = 0;
+                self.show_settings = true;
+                return Command::none();
+            }
+            Message::CloseSettings => {
+                self.idle_seconds = 0;
+                self.show_settings = false;
+                return Command::none();
+            }
             Message::ToggleVolumePanel => {
                 self.show_volume_panel = !self.show_volume_panel;
                 return iced::Task::none();
@@ -175,19 +207,30 @@ impl KakolookiyamApp {
                 return iced::Task::none();
             }
             Message::MainThemeVolumeChanged(vol) => {
-                crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).set_main_theme_volume(vol);
+                crate::sound::SOUND_MANAGER
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .set_main_theme_volume(vol);
                 return iced::Task::none();
             }
             Message::AppVolumeChanged(vol) => {
-                crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).set_app_volume(vol);
+                crate::sound::SOUND_MANAGER
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .set_app_volume(vol);
                 return Command::none();
             }
             Message::ToggleTheme => {
                 self.idle_seconds = 0;
-                self.current_theme = if self.current_theme == Theme::Dark { Theme::Light } else { Theme::Dark };
+                self.current_theme = if self.current_theme == Theme::Dark {
+                    Theme::Light
+                } else {
+                    Theme::Dark
+                };
                 return Command::none();
             }
-            Message::ToggleLanguage => { // <-- INTERCEPTION DU BOUTON
+            Message::ToggleLanguage => {
+                // <-- INTERCEPTION DU BOUTON
                 self.idle_seconds = 0;
                 self.language = match self.language {
                     crate::ui::i18n::Language::Fr => crate::ui::i18n::Language::En,
@@ -197,36 +240,69 @@ impl KakolookiyamApp {
                 return Command::none();
             }
 
-            Message::OpenGroupOptions => { self.idle_seconds = 0; self.show_group_options = true; return Command::none(); }
-            Message::CloseGroupOptions => { self.idle_seconds = 0; self.show_group_options = false; return Command::none(); }
+            Message::OpenGroupOptions => {
+                self.idle_seconds = 0;
+                self.show_group_options = true;
+                return Command::none();
+            }
+            Message::CloseGroupOptions => {
+                self.idle_seconds = 0;
+                self.show_group_options = false;
+                return Command::none();
+            }
 
-            Message::GoToCreateAccount | Message::GoToLogin | Message::BackToWelcome |
-            Message::LockSession | Message::ForceDisconnect(_) | Message::TickInactivity |
-            Message::ResetInactivity | Message::PseudoChanged(_) | Message::PasswordChanged(_) |
-            Message::PasswordConfirmChanged(_) | Message::SubmitCreateAccount | Message::SubmitLogin
-            => self.handle_auth(message),
+            Message::GoToCreateAccount
+            | Message::GoToLogin
+            | Message::BackToWelcome
+            | Message::LockSession
+            | Message::ForceDisconnect(_)
+            | Message::TickInactivity
+            | Message::ResetInactivity
+            | Message::PseudoChanged(_)
+            | Message::PasswordChanged(_)
+            | Message::PasswordConfirmChanged(_)
+            | Message::SubmitCreateAccount
+            | Message::SubmitLogin => self.handle_auth(message),
 
-            Message::PeerIdChanged(_) | Message::ConnectClicked | Message::CallContact(_) |
-            Message::AcceptCall(_, _, _) | Message::RejectCall(_) | Message::HangUpCall |
-            Message::ToggleMute
-            => self.handle_call(message),
+            Message::PeerIdChanged(_)
+            | Message::ConnectClicked
+            | Message::CallContact(_)
+            | Message::AcceptCall(_, _, _)
+            | Message::RejectCall(_)
+            | Message::HangUpCall
+            | Message::ToggleMute => self.handle_call(message),
 
-            Message::SelectChat(_) | Message::DeselectChat | Message::ChatInputChanged(_) |
-            Message::SendChatMessage | Message::CopyIdClicked | Message::CopyContactId(_) |
-            Message::AcceptRequest(_) | Message::RejectRequest(_) | Message::BlockContact(_) | Message::UnblockContact(_) | Message::VolumeChanged(_, _)
-            => self.handle_chat(message),
+            Message::SelectChat(_)
+            | Message::DeselectChat
+            | Message::ChatInputChanged(_)
+            | Message::SendChatMessage
+            | Message::CopyIdClicked
+            | Message::CopyContactId(_)
+            | Message::AcceptRequest(_)
+            | Message::RejectRequest(_)
+            | Message::BlockContact(_)
+            | Message::UnblockContact(_)
+            | Message::VolumeChanged(_, _) => self.handle_chat(message),
 
-            Message::OpenFileDialog | Message::FileSelected(_) | Message::FileRead(_) |
-            Message::OpenMedia(_, _, _) | Message::MediaSaved(_) |
-            Message::PreviewMedia(_, _) | Message::PreviewMediaLoaded(_) | Message::ClosePreview | Message::AcceptFileTransfer(_, _, _, _) | Message::RejectFileTransfer(_, _) 
-            => self.handle_media(message),
+            Message::OpenFileDialog
+            | Message::FileSelected(_)
+            | Message::FileRead(_)
+            | Message::OpenMedia(_, _, _)
+            | Message::MediaSaved(_)
+            | Message::PreviewMedia(_, _)
+            | Message::PreviewMediaLoaded(_)
+            | Message::ClosePreview
+            | Message::AcceptFileTransfer(_, _, _, _)
+            | Message::RejectFileTransfer(_, _) => self.handle_media(message),
 
-            Message::NewGroupInputChanged(_) | Message::CreateGroup | Message::NewMemberInputChanged(_) |
-            Message::AddMemberToGroup | Message::AddSpecificMemberToGroup(_) | Message::DeleteGroup
-            => self.handle_group(message),
+            Message::NewGroupInputChanged(_)
+            | Message::CreateGroup
+            | Message::NewMemberInputChanged(_)
+            | Message::AddMemberToGroup
+            | Message::AddSpecificMemberToGroup(_)
+            | Message::DeleteGroup => self.handle_group(message),
 
-            Message::NetworkEvent(_)
-            => self.handle_network(message),
+            Message::NetworkEvent(_) => self.handle_network(message),
         }
     }
 
@@ -240,32 +316,34 @@ impl KakolookiyamApp {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-
         let rx_network = self.rx_network.clone();
 
-
         #[derive(Clone)]
-        struct RxData(std::sync::Arc<tokio::sync::Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<String>>>>);
+        struct RxData(
+            std::sync::Arc<
+                tokio::sync::Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<String>>>,
+            >,
+        );
         impl std::hash::Hash for RxData {
             fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
                 std::sync::Arc::as_ptr(&self.0).hash(state);
             }
         }
 
-        let network_subscription = iced::Subscription::run_with(
-            RxData(rx_network),
-            |rx_wrapper| {
-                let rx_mutex = rx_wrapper.0.clone();
-                
-                iced::stream::channel::<Message>(100, |mut output: iced::futures::channel::mpsc::Sender<Message>| async move {
+        let network_subscription = iced::Subscription::run_with(RxData(rx_network), |rx_wrapper| {
+            let rx_mutex = rx_wrapper.0.clone();
+
+            iced::stream::channel::<Message>(
+                100,
+                |mut output: iced::futures::channel::mpsc::Sender<Message>| async move {
                     use futures_util::sink::SinkExt;
                     loop {
                         let msg = {
                             let mut guard = rx_mutex.lock().await;
-                            if let Some(rx) = guard.as_mut() { 
-                                rx.recv().await 
-                            } else { 
-                                None 
+                            if let Some(rx) = guard.as_mut() {
+                                rx.recv().await
+                            } else {
+                                None
                             }
                         };
                         match msg {
@@ -277,15 +355,22 @@ impl KakolookiyamApp {
                             }
                         }
                     }
-                })
-            }
-        );
-
-        let timer_subscription = time::every(std::time::Duration::from_secs(1)).map(|_| Message::TickInactivity);
-        let event_subscription = iced::event::listen_with(|event, _status, _window_id| {
-            match event { Event::Keyboard(_) | Event::Mouse(_) => Some(Message::ResetInactivity), _ => None }
+                },
+            )
         });
 
-        Subscription::batch(vec![network_subscription, timer_subscription, event_subscription])
+        let timer_subscription =
+            time::every(std::time::Duration::from_secs(1)).map(|_| Message::TickInactivity);
+        let event_subscription =
+            iced::event::listen_with(|event, _status, _window_id| match event {
+                Event::Keyboard(_) | Event::Mouse(_) => Some(Message::ResetInactivity),
+                _ => None,
+            });
+
+        Subscription::batch(vec![
+            network_subscription,
+            timer_subscription,
+            event_subscription,
+        ])
     }
 }

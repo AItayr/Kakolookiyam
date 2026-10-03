@@ -1,8 +1,8 @@
-use iced::Task as Command;
-use crate::ui::app::{KakolookiyamApp, AppState};
-use crate::ui::messages::Message;
-use crate::sound::SOUND_MANAGER;
 use crate::crypto;
+use crate::sound::SOUND_MANAGER;
+use crate::ui::app::{AppState, KakolookiyamApp};
+use crate::ui::messages::Message;
+use iced::Task as Command;
 
 impl KakolookiyamApp {
     pub(crate) fn handle_network(&mut self, message: Message) -> Command<Message> {
@@ -10,21 +10,30 @@ impl KakolookiyamApp {
             self.idle_seconds = 0;
 
             if msg == "SUCCESS:REGISTERED" {
-                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).stop_main_theme();
+                SOUND_MANAGER
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .stop_main_theme();
                 self.state = AppState::Unlocked;
                 self.clear_auth_fields();
                 return self.trigger_global_sync();
             }
 
             if msg == "ERROR:ALREADY_CONNECTED" {
-                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_error();
+                SOUND_MANAGER
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .play_error();
                 return Command::perform(async {}, |_| {
                     Message::ForceDisconnect("❌ Session déjà en cours.".to_string())
                 });
             }
 
             if msg == "ERROR:SERVER_OFFLINE" {
-                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_error();
+                SOUND_MANAGER
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .play_error();
                 return Command::perform(async {}, |_| {
                     Message::ForceDisconnect("❌ Serveur injoignable.".to_string())
                 });
@@ -54,35 +63,65 @@ impl KakolookiyamApp {
                             let ts_str = sync_parts[2];
                             let author = sync_parts[3].to_string();
                             let b64_content = sync_parts[4];
-                            let parsed_sig = if sync_parts.len() == 6 { sync_parts[5].to_string() } else { String::new() };
+                            let parsed_sig = if sync_parts.len() == 6 {
+                                sync_parts[5].to_string()
+                            } else {
+                                String::new()
+                            };
 
                             if let Ok(timestamp) = ts_str.parse::<u64>() {
                                 if let Ok(decoded_bytes) = BASE64_STANDARD.decode(b64_content) {
                                     if let Ok(content_str) = String::from_utf8(decoded_bytes) {
-                                        if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
+                                        if let (Some(vd), Some(_pwd)) =
+                                            (&mut self.vault_data, &self.master_password)
+                                        {
+                                            let author_id =
+                                                vd.contacts.iter().find_map(|(id, pseudo)| {
+                                                    if pseudo == &author {
+                                                        Some(id.clone())
+                                                    } else {
+                                                        None
+                                                    }
+                                                });
 
-                                            
-                                            let author_id = vd.contacts.iter()
-                                                .find_map(|(id, pseudo)| if pseudo == &author { Some(id.clone()) } else { None });
-                                            
                                             let is_valid = if author == vd.pseudo {
                                                 true
                                             } else {
                                                 match author_id {
-                                                    Some(id) => !parsed_sig.is_empty()
-                                                        && crate::crypto::verify_message(&id, timestamp, &content_str, &parsed_sig),
+                                                    Some(id) => {
+                                                        !parsed_sig.is_empty()
+                                                            && crate::crypto::verify_message(
+                                                                &id,
+                                                                timestamp,
+                                                                &content_str,
+                                                                &parsed_sig,
+                                                            )
+                                                    }
                                                     None => false,
                                                 }
                                             };
-                                            if !is_valid { return Command::none(); }
+                                            if !is_valid {
+                                                return Command::none();
+                                            }
                                             let mut modified = false;
                                             let mut newly_added = false;
 
                                             {
-                                                let history = vd.chat_history.entry(target_id.clone()).or_default();
+                                                let history = vd
+                                                    .chat_history
+                                                    .entry(target_id.clone())
+                                                    .or_default();
 
-                                                if let Some(existing) = history.iter_mut().find(|m| m.is_media && (m.timestamp.max(timestamp) - m.timestamp.min(timestamp) <= 5)) {
-                                                    if existing.media_path.as_deref() != Some(&path) {
+                                                if let Some(existing) =
+                                                    history.iter_mut().find(|m| {
+                                                        m.is_media
+                                                            && (m.timestamp.max(timestamp)
+                                                                - m.timestamp.min(timestamp)
+                                                                <= 5)
+                                                    })
+                                                {
+                                                    if existing.media_path.as_deref() != Some(&path)
+                                                    {
                                                         existing.media_path = Some(path.clone());
                                                         existing.media_key = Some(key_bytes);
                                                         modified = true;
@@ -92,7 +131,14 @@ impl KakolookiyamApp {
                                                         author: author.clone(),
                                                         content: content_str.clone(),
                                                         timestamp,
-                                                        is_media: true, media_key: Some(key_bytes), media_path: Some(path.clone()), signature: if parsed_sig.is_empty() { None } else { Some(parsed_sig.clone()) },
+                                                        is_media: true,
+                                                        media_key: Some(key_bytes),
+                                                        media_path: Some(path.clone()),
+                                                        signature: if parsed_sig.is_empty() {
+                                                            None
+                                                        } else {
+                                                            Some(parsed_sig.clone())
+                                                        },
                                                     };
                                                     history.push(entry);
                                                     history.sort_by_key(|m| m.timestamp);
@@ -103,17 +149,26 @@ impl KakolookiyamApp {
 
                                             if modified {
                                                 self.needs_save = true;
-                                                let is_currently_viewed = self.selected_chat.as_ref() == Some(&target_id);
+                                                let is_currently_viewed =
+                                                    self.selected_chat.as_ref() == Some(&target_id);
 
                                                 if is_currently_viewed {
                                                     self.chat_history.clear();
-                                                    if let Some(history) = vd.chat_history.get(&target_id) {
+                                                    if let Some(history) =
+                                                        vd.chat_history.get(&target_id)
+                                                    {
                                                         for msg in history {
-                                                            self.chat_history.push((msg.author.clone(), msg.content.clone()));
+                                                            self.chat_history.push((
+                                                                msg.author.clone(),
+                                                                msg.content.clone(),
+                                                            ));
                                                         }
                                                     }
                                                 } else if newly_added {
-                                                    *self.unread_counts.entry(target_id.clone()).or_insert(0) += 1;
+                                                    *self
+                                                        .unread_counts
+                                                        .entry(target_id.clone())
+                                                        .or_insert(0) += 1;
                                                 }
                                             }
                                         }
@@ -136,7 +191,10 @@ impl KakolookiyamApp {
                     }
 
                     let sender_pseudo = if let Some(vd) = &self.vault_data {
-                        vd.contacts.get(&sender_id).cloned().unwrap_or_else(|| "Inconnu".to_string())
+                        vd.contacts
+                            .get(&sender_id)
+                            .cloned()
+                            .unwrap_or_else(|| "Inconnu".to_string())
                     } else {
                         "Inconnu".to_string()
                     };
@@ -144,36 +202,60 @@ impl KakolookiyamApp {
                     if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
                         let entry = crypto::MessageEntry {
                             author: sender_pseudo.clone(),
-                            content: format!("{} {}", crate::ui::i18n::t(&self.language, "msg_file_received"), display_filename),
-                            timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+                            content: format!(
+                                "{} {}",
+                                crate::ui::i18n::t(&self.language, "msg_file_received"),
+                                display_filename
+                            ),
+                            timestamp: std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap()
+                                .as_secs(),
                             is_media: true,
                             media_key: Some(key_bytes),
                             media_path: Some(path.clone()),
-signature: None,
+                            signature: None,
                         };
 
-                        vd.chat_history.entry(target_chat_id.clone()).or_default().push(entry);
+                        vd.chat_history
+                            .entry(target_chat_id.clone())
+                            .or_default()
+                            .push(entry);
                         self.needs_save = true;
                     }
 
                     let is_currently_viewed = self.selected_chat.as_ref() == Some(&target_chat_id);
 
-                    SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_message_received();
+                    SOUND_MANAGER
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .play_message_received();
                     if is_currently_viewed {
-                        self.chat_history.push((sender_pseudo, format!("{} {}", crate::ui::i18n::t(&self.language, "msg_file_received"), display_filename)));
+                        self.chat_history.push((
+                            sender_pseudo,
+                            format!(
+                                "{} {}",
+                                crate::ui::i18n::t(&self.language, "msg_file_received"),
+                                display_filename
+                            ),
+                        ));
                     } else {
-                        *self.unread_counts.entry(target_chat_id.clone()).or_insert(0) += 1;
+                        *self
+                            .unread_counts
+                            .entry(target_chat_id.clone())
+                            .or_insert(0) += 1;
                     }
                 }
-            }
-                                    else if msg.starts_with("CHAT_RECV:") {
+            } else if msg.starts_with("CHAT_RECV:") {
                 let parts: Vec<&str> = msg.splitn(3, ':').collect();
 
                 if parts.len() == 3 {
                     let sender_id = parts[1].trim().to_string();
-                    
+
                     if let Some(vd) = &self.vault_data {
-                        if vd.blocked_ids.contains(&sender_id) { return Command::none(); }
+                        if vd.blocked_ids.contains(&sender_id) {
+                            return Command::none();
+                        }
                     }
                     let text = parts[2].to_string();
 
@@ -182,16 +264,28 @@ signature: None,
                         // Si le récepteur est lui-même dans un appel, il renvoie un Heartbeat immédiatement
                         if let Some((active_id, _)) = &self.active_call {
                             if active_id.starts_with("grp_") {
-                                let _ = self.tx_network.send(format!("CHAT_SEND_IF_OPEN:{}:SYS:GRP_HEARTBEAT:{}", sender_id, active_id));
+                                let _ = self.tx_network.send(format!(
+                                    "CHAT_SEND_IF_OPEN:{}:SYS:GRP_HEARTBEAT:{}",
+                                    sender_id, active_id
+                                ));
                             }
                         }
                         return Command::none();
                     }
-                    
+
                     if text.starts_with("SYS:GRP_HEARTBEAT:") {
-                        let grp_id = text.trim_start_matches("SYS:GRP_HEARTBEAT:").trim().to_string();
-                        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
-                        self.group_call_presences.entry(grp_id).or_default().insert(sender_id.clone(), now);
+                        let grp_id = text
+                            .trim_start_matches("SYS:GRP_HEARTBEAT:")
+                            .trim()
+                            .to_string();
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs();
+                        self.group_call_presences
+                            .entry(grp_id)
+                            .or_default()
+                            .insert(sender_id.clone(), now);
                         return Command::none(); // Important silently
                     }
 
@@ -211,13 +305,15 @@ signature: None,
                             let _ = self.tx_network.send("MUTE:off".to_string());
                             self.chat_input.clear();
                             self.chat_history.clear();
-                            self.status_message = crate::ui::i18n::t(&self.language, "status_remote_hangup");
+                            self.status_message =
+                                crate::ui::i18n::t(&self.language, "status_remote_hangup");
                         }
                         return Command::none();
                     }
 
                     if text == "SYS:CALL_BUSY" {
-                        self.status_message = crate::ui::i18n::t(&self.language, "status_remote_busy");
+                        self.status_message =
+                            crate::ui::i18n::t(&self.language, "status_remote_busy");
                         let _ = self.tx_network.send(format!("HANGUP:{}", sender_id));
                         self.active_call = None;
                         return Command::none();
@@ -227,7 +323,9 @@ signature: None,
                         let sys_parts: Vec<&str> = text.splitn(3, ':').collect();
                         if sys_parts.len() == 3 {
                             let grp_id = sys_parts[2].trim().to_string();
-                            if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
+                            if let (Some(vd), Some(_pwd)) =
+                                (&mut self.vault_data, &self.master_password)
+                            {
                                 let mut is_creator = false;
                                 if let Some(group) = vd.groups.get(&grp_id) {
                                     if group.members.first() == Some(&sender_id) {
@@ -237,7 +335,10 @@ signature: None,
                                 if is_creator {
                                     vd.groups.remove(&grp_id);
                                     self.needs_save = true;
-                                    self.status_message = crate::ui::i18n::t(&self.language, "status_server_dissolved");
+                                    self.status_message = crate::ui::i18n::t(
+                                        &self.language,
+                                        "status_server_dissolved",
+                                    );
                                     if self.selected_chat.as_ref() == Some(&grp_id) {
                                         self.selected_chat = None;
                                     }
@@ -246,7 +347,7 @@ signature: None,
                         }
                         return Command::none();
                     }
-                    
+
                     if text.starts_with("SYS:SYNC_REQ:") {
                         let sys_parts: Vec<&str> = text.splitn(4, ':').collect();
                         if sys_parts.len() == 4 {
@@ -262,24 +363,30 @@ signature: None,
                         let sys_parts: Vec<&str> = text.splitn(6, ':').collect();
                         if sys_parts.len() == 6 {
                             let t_id = sys_parts[2].trim().to_string();
-                            
+
                             // [MITIGATION] HIGH-1d: Vrification d'autorisation SYNC_RES
                             let mut authorized = false;
                             if let Some(vd) = &self.vault_data {
                                 if t_id.starts_with("grp_") {
                                     if let Some(group) = vd.groups.get(&t_id) {
-                                        if group.members.contains(&sender_id) { authorized = true; }
+                                        if group.members.contains(&sender_id) {
+                                            authorized = true;
+                                        }
                                     }
                                 } else if t_id == sender_id {
                                     authorized = true;
                                 }
                             }
-                            if !authorized { return Command::none(); }
-                            
+                            if !authorized {
+                                return Command::none();
+                            }
+
                             if let Some(vd) = &self.vault_data {
-                                  if vd.tombstones.contains(&t_id) { return Command::none(); }
-                              }
-                              let ts_str = sys_parts[3].trim();
+                                if vd.tombstones.contains(&t_id) {
+                                    return Command::none();
+                                }
+                            }
+                            let ts_str = sys_parts[3].trim();
                             let msg_type = sys_parts[4].trim();
                             let payload = sys_parts[5];
 
@@ -297,8 +404,12 @@ signature: None,
                                     let parts: Vec<&str> = payload.split('|').collect();
                                     if parts.len() >= 2 {
                                         parsed_author = parts[0].trim().to_string();
-                                        if let Ok(decoded_bytes) = BASE64_STANDARD.decode(parts[1].trim()) {
-                                            if let Ok(content_str) = String::from_utf8(decoded_bytes) {
+                                        if let Ok(decoded_bytes) =
+                                            BASE64_STANDARD.decode(parts[1].trim())
+                                        {
+                                            if let Ok(content_str) =
+                                                String::from_utf8(decoded_bytes)
+                                            {
                                                 parsed_content = content_str;
                                             }
                                         }
@@ -310,13 +421,18 @@ signature: None,
                                     let p: Vec<&str> = payload.split('|').collect();
                                     if p.len() >= 4 {
                                         parsed_author = p[0].trim().to_string();
-                                        if let Ok(decoded_bytes) = BASE64_STANDARD.decode(p[1].trim()) {
-                                            if let Ok(content_str) = String::from_utf8(decoded_bytes) {
+                                        if let Ok(decoded_bytes) =
+                                            BASE64_STANDARD.decode(p[1].trim())
+                                        {
+                                            if let Ok(content_str) =
+                                                String::from_utf8(decoded_bytes)
+                                            {
                                                 parsed_content = content_str;
                                             }
                                         }
                                         let mut key_bytes = [0u8; 32];
-                                        if let Ok(decoded_key) = BASE64_STANDARD.decode(p[2].trim()) {
+                                        if let Ok(decoded_key) = BASE64_STANDARD.decode(p[2].trim())
+                                        {
                                             if decoded_key.len() == 32 {
                                                 key_bytes.copy_from_slice(&decoded_key);
                                                 parsed_key = Some(key_bytes);
@@ -331,16 +447,31 @@ signature: None,
                                 }
 
                                 if !parsed_author.is_empty() && !parsed_content.is_empty() {
-                                    if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
-                                        let author_id = vd.contacts.iter()
-                                            .find_map(|(id, pseudo)| if pseudo == &parsed_author { Some(id.clone()) } else { None });
-                                        
+                                    if let (Some(vd), Some(_pwd)) =
+                                        (&mut self.vault_data, &self.master_password)
+                                    {
+                                        let author_id =
+                                            vd.contacts.iter().find_map(|(id, pseudo)| {
+                                                if pseudo == &parsed_author {
+                                                    Some(id.clone())
+                                                } else {
+                                                    None
+                                                }
+                                            });
+
                                         let is_valid = if parsed_author == vd.pseudo {
                                             true
                                         } else {
                                             match author_id {
-                                                Some(id) => !parsed_sig.is_empty()
-                                                    && crate::crypto::verify_message(&id, timestamp, &parsed_content, &parsed_sig),
+                                                Some(id) => {
+                                                    !parsed_sig.is_empty()
+                                                        && crate::crypto::verify_message(
+                                                            &id,
+                                                            timestamp,
+                                                            &parsed_content,
+                                                            &parsed_sig,
+                                                        )
+                                                }
                                                 None => false,
                                             }
                                         };
@@ -356,20 +487,53 @@ signature: None,
                                             is_media,
                                             media_key: parsed_key,
                                             media_path: parsed_path,
-                                            signature: if parsed_sig.is_empty() { None } else { Some(parsed_sig) },
+                                            signature: if parsed_sig.is_empty() {
+                                                None
+                                            } else {
+                                                Some(parsed_sig)
+                                            },
                                         };
 
                                         let is_new = {
-                                            let history = vd.chat_history.entry(t_id.clone()).or_default();
+                                            let history =
+                                                vd.chat_history.entry(t_id.clone()).or_default();
                                             let is_dup = history.iter().any(|m| {
-    let t_diff = m.timestamp.max(timestamp) - m.timestamp.min(timestamp);
-    if t_diff > 5 { return false; }
-    if m.content == parsed_content { return true; }
-    if m.is_media && is_media { return true; }
-    if (m.author.starts_with(&crate::ui::i18n::t(&self.language, "system_author")) || m.author == crate::ui::i18n::t(&self.language, "me_author")) && (parsed_author.starts_with(&crate::ui::i18n::t(&self.language, "system_author")) || parsed_author == crate::ui::i18n::t(&self.language, "me_author")) && m.content.contains("APPEL") { return true; }
-    false
-});
-if !is_dup {
+                                                let t_diff = m.timestamp.max(timestamp)
+                                                    - m.timestamp.min(timestamp);
+                                                if t_diff > 5 {
+                                                    return false;
+                                                }
+                                                if m.content == parsed_content {
+                                                    return true;
+                                                }
+                                                if m.is_media && is_media {
+                                                    return true;
+                                                }
+                                                if (m.author.starts_with(&crate::ui::i18n::t(
+                                                    &self.language,
+                                                    "system_author",
+                                                )) || m.author
+                                                    == crate::ui::i18n::t(
+                                                        &self.language,
+                                                        "me_author",
+                                                    ))
+                                                    && (parsed_author.starts_with(
+                                                        &crate::ui::i18n::t(
+                                                            &self.language,
+                                                            "system_author",
+                                                        ),
+                                                    ) || parsed_author
+                                                        == crate::ui::i18n::t(
+                                                            &self.language,
+                                                            "me_author",
+                                                        ))
+                                                    && m.content.contains("APPEL")
+                                                {
+                                                    return true;
+                                                }
+                                                false
+                                            });
+                                            if !is_dup {
                                                 history.push(entry);
                                                 history.sort_by_key(|m| m.timestamp);
                                                 true
@@ -381,27 +545,47 @@ if !is_dup {
                                         if is_new {
                                             // -- EVENT SOURCING: Auto-cicatrisation des departs! --
                                             if parsed_content.starts_with("SYS:EVT:LEAVE:") {
-                                                let payload = parsed_content.trim_start_matches("SYS:EVT:LEAVE:").trim();
-                                                let parts: Vec<&str> = payload.splitn(2, ':').collect();
+                                                let payload = parsed_content
+                                                    .trim_start_matches("SYS:EVT:LEAVE:")
+                                                    .trim();
+                                                let parts: Vec<&str> =
+                                                    payload.splitn(2, ':').collect();
                                                 if parts.len() == 2 {
                                                     let left_id = parts[0];
                                                     let _ts_str = parts[1];
-                                                    if left_id.to_lowercase() == parsed_author.to_lowercase() {
-                                                        if let Some(group) = vd.groups.get_mut(&t_id) {
-                                                            group.members.retain(|m| m.trim().to_lowercase() != left_id.to_lowercase());
+                                                    if left_id.to_lowercase()
+                                                        == parsed_author.to_lowercase()
+                                                    {
+                                                        if let Some(group) =
+                                                            vd.groups.get_mut(&t_id)
+                                                        {
+                                                            group.members.retain(|m| {
+                                                                m.trim().to_lowercase()
+                                                                    != left_id.to_lowercase()
+                                                            });
                                                         }
                                                     }
                                                 }
                                             }
 
                                             self.needs_save = true;
-                                            SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_message_received();
-                                            let is_currently_viewed = self.selected_chat.as_ref() == Some(&t_id);
+                                            SOUND_MANAGER
+                                                .lock()
+                                                .unwrap_or_else(|e| e.into_inner())
+                                                .play_message_received();
+                                            let is_currently_viewed =
+                                                self.selected_chat.as_ref() == Some(&t_id);
 
                                             if is_currently_viewed {
-                                                self.chat_history.push((parsed_author.clone(), parsed_content.clone()));
+                                                self.chat_history.push((
+                                                    parsed_author.clone(),
+                                                    parsed_content.clone(),
+                                                ));
                                             } else {
-                                                *self.unread_counts.entry(t_id.clone()).or_insert(0) += 1;
+                                                *self
+                                                    .unread_counts
+                                                    .entry(t_id.clone())
+                                                    .or_insert(0) += 1;
                                             }
                                         }
                                     }
@@ -412,60 +596,87 @@ if !is_dup {
                     }
 
                     if text.starts_with("SYS:CALL_CONTEXT:") {
-    let sys_parts: Vec<&str> = text.splitn(3, ':').collect();
+                        let sys_parts: Vec<&str> = text.splitn(3, ':').collect();
 
-    if sys_parts.len() == 3 {
-        let grp_id = sys_parts[2].trim().to_string();
+                        if sys_parts.len() == 3 {
+                            let grp_id = sys_parts[2].trim().to_string();
 
-        let mut already_in_group = false;
-        if let Some((active_id, _)) = &self.active_call {
-            if active_id == &grp_id {
-                already_in_group = true;
-            }
-        }
+                            let mut already_in_group = false;
+                            if let Some((active_id, _)) = &self.active_call {
+                                if active_id == &grp_id {
+                                    already_in_group = true;
+                                }
+                            }
 
-        if !already_in_group {
-            if let Some(vd) = &self.vault_data {
-                if let Some(group) = vd.groups.get(&grp_id) {
-                    if !group.members.contains(&sender_id) { return Command::none(); }
-                    let my_id = crate::crypto::derive_public_id(&vd.private_key);
+                            if !already_in_group {
+                                if let Some(vd) = &self.vault_data {
+                                    if let Some(group) = vd.groups.get(&grp_id) {
+                                        if !group.members.contains(&sender_id) {
+                                            return Command::none();
+                                        }
+                                        let my_id =
+                                            crate::crypto::derive_public_id(&vd.private_key);
 
-                    self.active_call = Some((grp_id.clone(), group.name.clone()));
-                    self.active_call_participants.clear();
-                    self.call_start_time = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
-                    self.chat_history.clear();
+                                        self.active_call =
+                                            Some((grp_id.clone(), group.name.clone()));
+                                        self.active_call_participants.clear();
+                                        self.call_start_time = Some(
+                                            std::time::SystemTime::now()
+                                                .duration_since(std::time::UNIX_EPOCH)
+                                                .unwrap()
+                                                .as_secs(),
+                                        );
+                                        self.chat_history.clear();
 
-                    if let Some(history) = vd.chat_history.get(&grp_id) {
-                        for msg in history {
-                            self.chat_history.push((msg.author.clone(), msg.content.clone()));
-                        }
-                    }
-                    self.status_message = crate::ui::i18n::t(&self.language, "status_group_joined").replace("{name}", &group.name);
+                                        if let Some(history) = vd.chat_history.get(&grp_id) {
+                                            for msg in history {
+                                                self.chat_history.push((
+                                                    msg.author.clone(),
+                                                    msg.content.clone(),
+                                                ));
+                                            }
+                                        }
+                                        self.status_message = crate::ui::i18n::t(
+                                            &self.language,
+                                            "status_group_joined",
+                                        )
+                                        .replace("{name}", &group.name);
 
-                    let tx = self.tx_network.clone();
-                    let members = group.members.clone();
-                    let m_id = my_id.clone();
-                    let inviter = sender_id.clone();
+                                        let tx = self.tx_network.clone();
+                                        let members = group.members.clone();
+                                        let m_id = my_id.clone();
+                                        let inviter = sender_id.clone();
 
-                    // Synchronisation initiale pour l'arrivée
-                    let sync_task = self.trigger_history_sync(&grp_id);
-                    let dial_task = Command::perform(async move {
-                        for member_id in members {
-                            if member_id != m_id && member_id != inviter {
-                                if m_id > member_id {
-                                    let _ = tx.send(format!("CALL:{}", member_id));
-                                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                                        // Synchronisation initiale pour l'arrivée
+                                        let sync_task = self.trigger_history_sync(&grp_id);
+                                        let dial_task = Command::perform(
+                                            async move {
+                                                for member_id in members {
+                                                    if member_id != m_id && member_id != inviter {
+                                                        if m_id > member_id {
+                                                            let _ = tx.send(format!(
+                                                                "CALL:{}",
+                                                                member_id
+                                                            ));
+                                                            tokio::time::sleep(
+                                                                std::time::Duration::from_millis(
+                                                                    300,
+                                                                ),
+                                                            )
+                                                            .await;
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            |_| Message::ResetInactivity,
+                                        );
+
+                                        return Command::batch(vec![dial_task, sync_task]);
+                                    }
                                 }
                             }
                         }
-                    }, |_| Message::ResetInactivity);
-
-                    return Command::batch(vec![dial_task, sync_task]);
-                }
-            }
-        }
-    }
-    return Command::none();
+                        return Command::none();
                     }
 
                     if text.starts_with("SYS:GROUP_SYNC:") {
@@ -474,10 +685,18 @@ if !is_dup {
                         if sys_parts.len() == 5 {
                             let grp_id = sys_parts[2].trim().chars().take(100).collect::<String>();
                             let grp_name = sys_parts[3].trim().chars().take(50).collect::<String>();
-                            let members: Vec<String> = sys_parts[4].split(',').take(100).map(|s| s.trim().chars().take(100).collect::<String>()).collect();
+                            let members: Vec<String> = sys_parts[4]
+                                .split(',')
+                                .take(100)
+                                .map(|s| s.trim().chars().take(100).collect::<String>())
+                                .collect();
 
-                            if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
-                                if vd.tombstones.contains(&grp_id) { return Command::none(); }
+                            if let (Some(vd), Some(_pwd)) =
+                                (&mut self.vault_data, &self.master_password)
+                            {
+                                if vd.tombstones.contains(&grp_id) {
+                                    return Command::none();
+                                }
                                 let is_new = !vd.groups.contains_key(&grp_id);
                                 let mut authorized = is_new;
                                 if !is_new {
@@ -493,21 +712,29 @@ if !is_dup {
                                 if authorized {
                                     let mut changed = true;
                                     if let Some(existing) = vd.groups.get(&grp_id) {
-                                        if existing.name == grp_name && existing.members == members {
+                                        if existing.name == grp_name && existing.members == members
+                                        {
                                             changed = false;
                                         }
                                     }
-                                    
+
                                     if changed {
-                                        vd.groups.insert(grp_id.clone(), crate::crypto::GroupData {
-                                            name: grp_name.clone(),
-                                            members
-                                        });
+                                        vd.groups.insert(
+                                            grp_id.clone(),
+                                            crate::crypto::GroupData {
+                                                name: grp_name.clone(),
+                                                members,
+                                            },
+                                        );
                                         self.needs_save = true;
                                     }
 
                                     if is_new {
-                                        self.status_message = crate::ui::i18n::t(&self.language, "status_server_invited").replace("{name}", &grp_name);
+                                        self.status_message = crate::ui::i18n::t(
+                                            &self.language,
+                                            "status_server_invited",
+                                        )
+                                        .replace("{name}", &grp_name);
                                     }
                                 }
                             }
@@ -521,11 +748,14 @@ if !is_dup {
                         if sys_parts.len() == 3 {
                             let grp_id = sys_parts[2].trim().to_string();
 
-                            if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
+                            if let (Some(vd), Some(_pwd)) =
+                                (&mut self.vault_data, &self.master_password)
+                            {
                                 if let Some(group) = vd.groups.get_mut(&grp_id) {
                                     group.members.retain(|m| m.trim() != sender_id);
                                     self.needs_save = true;
-                                    self.status_message = crate::ui::i18n::t(&self.language, "status_member_left");
+                                    self.status_message =
+                                        crate::ui::i18n::t(&self.language, "status_member_left");
                                 }
                             }
                         }
@@ -540,7 +770,7 @@ if !is_dup {
 
                         if sys_parts.len() == 4 {
                             let possible_target = sys_parts[2].trim().to_string();
-                            
+
                             // [MITIGATION] HIGH-1b: Vrification stricte de l'appartenance au groupe
                             let mut authorized = false;
                             if let Some(vd) = &self.vault_data {
@@ -550,16 +780,21 @@ if !is_dup {
                                     }
                                 }
                             }
-                            
-                            if !authorized { return Command::none(); } // Ignorer le message non autoris
-                            
+
+                            if !authorized {
+                                return Command::none();
+                            } // Ignorer le message non autoris
+
                             target_chat_id = possible_target;
                             display_text = sys_parts[3].to_string();
                         }
                     }
 
                     let sender_pseudo = if let Some(vd) = &self.vault_data {
-                        vd.contacts.get(&sender_id).cloned().unwrap_or_else(|| "Inconnu".to_string())
+                        vd.contacts
+                            .get(&sender_id)
+                            .cloned()
+                            .unwrap_or_else(|| "Inconnu".to_string())
                     } else {
                         "Inconnu".to_string()
                     };
@@ -568,7 +803,10 @@ if !is_dup {
                         let entry = crypto::MessageEntry {
                             author: sender_pseudo.clone(),
                             content: display_text.clone(),
-                            timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+                            timestamp: std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap()
+                                .as_secs(),
                             is_media: false,
                             media_key: None,
                             media_path: None,
@@ -582,31 +820,47 @@ if !is_dup {
                             if parts.len() == 2 {
                                 let left_id = parts[0];
                                 let ts_str = parts[1];
-                                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
-                                let fresh = ts_str.parse::<u64>().map(|ts| ts >= now.saturating_sub(60) && ts <= now + 60).unwrap_or(false);
+                                let now = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_secs();
+                                let fresh = ts_str
+                                    .parse::<u64>()
+                                    .map(|ts| ts >= now.saturating_sub(60) && ts <= now + 60)
+                                    .unwrap_or(false);
                                 if fresh && left_id.to_lowercase() == sender_id.to_lowercase() {
                                     if let Some(group) = vd.groups.get_mut(&target_chat_id) {
-                                        group.members.retain(|m| m.trim().to_lowercase() != left_id.to_lowercase());
+                                        group.members.retain(|m| {
+                                            m.trim().to_lowercase() != left_id.to_lowercase()
+                                        });
                                     }
                                 }
                             }
                         }
 
-                        vd.chat_history.entry(target_chat_id.clone()).or_default().push(entry);
+                        vd.chat_history
+                            .entry(target_chat_id.clone())
+                            .or_default()
+                            .push(entry);
                         self.needs_save = true;
                     }
 
                     let is_currently_viewed = self.selected_chat.as_ref() == Some(&target_chat_id);
 
-                    SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_message_received();
+                    SOUND_MANAGER
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .play_message_received();
                     if is_currently_viewed {
                         self.chat_history.push((sender_pseudo, display_text));
                     } else {
-                        *self.unread_counts.entry(target_chat_id.clone()).or_insert(0) += 1;
+                        *self
+                            .unread_counts
+                            .entry(target_chat_id.clone())
+                            .or_insert(0) += 1;
                     }
                 }
-            }
-            else if msg.starts_with("CONTACT:") {
+            } else if msg.starts_with("CONTACT:") {
                 let parts: Vec<&str> = msg.splitn(3, ':').collect();
 
                 if parts.len() == 3 {
@@ -618,7 +872,8 @@ if !is_dup {
                             if !vd.pending_requests.contains_key(&c_id) {
                                 vd.pending_requests.insert(c_id, c_pseudo);
                                 self.needs_save = true;
-                                self.status_message = crate::ui::i18n::t(&self.language, "status_new_request");
+                                self.status_message =
+                                    crate::ui::i18n::t(&self.language, "status_new_request");
                             } else {
                                 // Mettre   jour le pseudo de la demande en attente
                                 vd.pending_requests.insert(c_id, c_pseudo);
@@ -630,8 +885,7 @@ if !is_dup {
                         }
                     }
                 }
-            }
-                        else if msg.starts_with("FILE_OFFER:") {
+            } else if msg.starts_with("FILE_OFFER:") {
                 let parts: Vec<&str> = msg.splitn(5, ':').collect();
                 if parts.len() == 5 {
                     let sender_id = parts[1].to_string();
@@ -640,18 +894,25 @@ if !is_dup {
                     let key_b64 = parts[4].to_string();
                     if total > 0 {
                         if filename.starts_with("SYNC|") {
-                            let _ = self.tx_network.send(format!("ACCEPT_FILE:{}:{}:{}:{}", sender_id, filename, total, key_b64));
+                            let _ = self.tx_network.send(format!(
+                                "ACCEPT_FILE:{}:{}:{}:{}",
+                                sender_id, filename, total, key_b64
+                            ));
                         } else {
-                            self.incoming_file_offers.retain(|(s, f, _, _)| s != &sender_id || f != &filename);
+                            self.incoming_file_offers
+                                .retain(|(s, f, _, _)| s != &sender_id || f != &filename);
                             if self.incoming_file_offers.len() < 10 {
-                                self.incoming_file_offers.push((sender_id, filename, total, key_b64));
-                                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_message_received();
+                                self.incoming_file_offers
+                                    .push((sender_id, filename, total, key_b64));
+                                SOUND_MANAGER
+                                    .lock()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .play_message_received();
                             }
                         }
                     }
                 }
-            }
-            else if msg.starts_with("INCOMING_CALL:") {
+            } else if msg.starts_with("INCOMING_CALL:") {
                 let parts: Vec<&str> = msg.splitn(4, ':').collect();
 
                 if parts.len() == 4 {
@@ -659,7 +920,7 @@ if !is_dup {
                     let caller_grp_id = parts[2].trim().to_string();
                     let sdp = parts[3].to_string();
 
-                                        // --- [MED-4] Anti-Spam / Ligne Occupée ---
+                    // --- [MED-4] Anti-Spam / Ligne Occupée ---
                     if let Some((active_id, _)) = &self.active_call {
                         if active_id != &caller_grp_id && active_id != &caller_id {
                             // BLOCK if we are P2P and someone else calls us, OR we are in a group and someone OUTSIDE the group calls us.
@@ -675,44 +936,60 @@ if !is_dup {
                                     tokio::time::sleep(std::time::Duration::from_millis(150)).await;
                                     let _ = tx.send(format!("REJECT:{}", cid));
                                 });
-                                if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
+                                if let (Some(vd), Some(_pwd)) =
+                                    (&mut self.vault_data, &self.master_password)
+                                {
                                     let entry = crate::crypto::MessageEntry {
                                         author: crate::ui::i18n::t(&self.language, "system_author"),
-                                        content: crate::ui::i18n::t(&self.language, "msg_missed_call"),
-                                        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+                                        content: crate::ui::i18n::t(
+                                            &self.language,
+                                            "msg_missed_call",
+                                        ),
+                                        timestamp: std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .unwrap()
+                                            .as_secs(),
                                         is_media: false,
                                         media_key: None,
                                         media_path: None,
-                            signature: None,
+                                        signature: None,
                                     };
-                                    vd.chat_history.entry(caller_id.clone()).or_default().push(entry);
+                                    vd.chat_history
+                                        .entry(caller_id.clone())
+                                        .or_default()
+                                        .push(entry);
                                     self.needs_save = true;
                                 }
                                 return iced::Task::none(); // On ignore silencieusement l'appel à l'écran
                             }
                         }
                     }
-                    
+
                     // Old flawed auto-accept logic is removed.
                     if let Some((active_id, _)) = &self.active_call {
                         if active_id.starts_with("grp_") {
                             if let Some(vd) = &self.vault_data {
                                 if let Some(group) = vd.groups.get(active_id) {
                                     if group.members.contains(&caller_id) {
-                                        let _ = self.tx_network.send(format!("ACCEPT:{}:{}", caller_id, sdp));
+                                        let _ = self
+                                            .tx_network
+                                            .send(format!("ACCEPT:{}:{}", caller_id, sdp));
                                         return Command::none();
                                     }
                                 }
                             }
-                        } 
+                        }
                     }
 
                     let mut caller_pseudo = if let Some(vd) = &self.vault_data {
-                        vd.contacts.get(&caller_id).cloned().unwrap_or_else(|| "Inconnu".to_string())
+                        vd.contacts
+                            .get(&caller_id)
+                            .cloned()
+                            .unwrap_or_else(|| "Inconnu".to_string())
                     } else {
                         "Inconnu".to_string()
                     };
-                    
+
                     if !caller_grp_id.is_empty() {
                         if let Some(vd) = &self.vault_data {
                             if let Some(grp) = vd.groups.get(&caller_grp_id) {
@@ -723,22 +1000,34 @@ if !is_dup {
 
                     if let Some((_, _, _, inc_grp)) = &self.incoming_call {
                         if !inc_grp.is_empty() && inc_grp == &caller_grp_id {
-                            self.queued_group_offers.push((caller_id.clone(), sdp.clone()));
+                            self.queued_group_offers
+                                .push((caller_id.clone(), sdp.clone()));
                             return Command::none();
                         }
                     }
-                    
+
                     self.incoming_call_timer = 0;
                     self.incoming_call = Some((caller_id, caller_pseudo, sdp, caller_grp_id));
-                    SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).start_incoming_call();
+                    SOUND_MANAGER
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .start_incoming_call();
                 }
-            }
-            else if msg.starts_with("CALL_ACTIVE:") {
+            } else if msg.starts_with("CALL_ACTIVE:") {
                 let id = msg.trim_start_matches("CALL_ACTIVE:").trim().to_string();
 
-                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).stop_outgoing_call();
-                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).stop_incoming_call();
-                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_call_connected();
+                SOUND_MANAGER
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .stop_outgoing_call();
+                SOUND_MANAGER
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .stop_incoming_call();
+                SOUND_MANAGER
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .play_call_connected();
                 if self.status_message.starts_with("LOADING:") {
                     self.status_message.clear();
                 }
@@ -746,7 +1035,10 @@ if !is_dup {
                 // Si on a pas d'appel actif, c'est nous qui avons initié l'appel P2P !
                 if self.active_call.is_none() {
                     let pseudo = if let Some(vd) = &self.vault_data {
-                        vd.contacts.get(&id).cloned().unwrap_or_else(|| "Ami".to_string())
+                        vd.contacts
+                            .get(&id)
+                            .cloned()
+                            .unwrap_or_else(|| "Ami".to_string())
                     } else {
                         "Ami".to_string()
                     };
@@ -755,14 +1047,20 @@ if !is_dup {
                     self.active_call_participants.clear(); // Vider les fantomes !
                     self.active_call_participants.insert(id.clone()); // Ajouter notre correspondant
 
-                    self.call_start_time = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
+                    self.call_start_time = Some(
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs(),
+                    );
                     self.chat_input.clear();
                     self.chat_history.clear();
 
                     if let Some(vd) = &self.vault_data {
                         if let Some(history) = vd.chat_history.get(&id) {
                             for msg in history {
-                                self.chat_history.push((msg.author.clone(), msg.content.clone()));
+                                self.chat_history
+                                    .push((msg.author.clone(), msg.content.clone()));
                             }
                         }
                     }
@@ -773,22 +1071,30 @@ if !is_dup {
                         if active_id.starts_with("grp_") || active_id == &id {
                             self.active_call_participants.insert(id.clone());
                         }
-                        
+
                         if active_id.starts_with("grp_") {
-                            let _ = self.tx_network.send(format!("CHAT_SEND:{}:SYS:CALL_CONTEXT:{}", id, active_id));
+                            let _ = self
+                                .tx_network
+                                .send(format!("CHAT_SEND:{}:SYS:CALL_CONTEXT:{}", id, active_id));
                             return Command::none();
                         }
                     }
                 }
-            }
-            else if msg.starts_with("ERROR:NOT_FOUND:") {
+            } else if msg.starts_with("ERROR:NOT_FOUND:") {
                 let tgt = msg.trim_start_matches("ERROR:NOT_FOUND:");
-                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).stop_outgoing_call();
-                self.status_message = crate::ui::i18n::t(&self.language, "status_remote_unavailable");
+                SOUND_MANAGER
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .stop_outgoing_call();
+                self.status_message =
+                    crate::ui::i18n::t(&self.language, "status_remote_unavailable");
                 let _ = self.tx_network.send(format!("HANGUP:{}", tgt));
-                
+
                 if let Some(start) = self.call_start_time.take() {
-                    let now_s = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                    let now_s = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs();
                     let duration = now_s.saturating_sub(start);
                     if let Some(vd) = &mut self.vault_data {
                         let entry = crate::crypto::MessageEntry {
@@ -800,26 +1106,33 @@ if !is_dup {
                             signature: None,
                             timestamp: now_s,
                         };
-                        vd.chat_history.entry(tgt.to_string()).or_default().push(entry);
+                        vd.chat_history
+                            .entry(tgt.to_string())
+                            .or_default()
+                            .push(entry);
                         self.needs_save = true;
                     }
                 }
                 self.active_call = None;
-            }
-            else if msg.starts_with("CALL_BUSY:") {
+            } else if msg.starts_with("CALL_BUSY:") {
                 let id = msg.trim_start_matches("CALL_BUSY:").trim().to_string();
-                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).stop_outgoing_call();
+                SOUND_MANAGER
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .stop_outgoing_call();
                 let _ = self.tx_network.send(format!("HANGUP:{}", id));
-                
+
                 let mut pseudo = "L'interlocuteur".to_string();
                 if let Some(vd) = &self.vault_data {
                     if let Some(contact_pseudo) = vd.contacts.get(&id) {
                         pseudo = contact_pseudo.clone();
                     }
                 }
-                
-                self.status_message = crate::ui::i18n::t(&self.language, "status_remote_busy_named").replace("{name}", &pseudo);
-                
+
+                self.status_message =
+                    crate::ui::i18n::t(&self.language, "status_remote_busy_named")
+                        .replace("{name}", &pseudo);
+
                 if let Some((active_id, _)) = &self.active_call {
                     if active_id == &id {
                         self.active_call = None;
@@ -829,8 +1142,7 @@ if !is_dup {
                         self.chat_history.clear();
                     }
                 }
-            }
-            else if msg.starts_with("CALL_CONNECTED:") {
+            } else if msg.starts_with("CALL_CONNECTED:") {
                 let id = msg.trim_start_matches("CALL_CONNECTED:").trim().to_string();
                 let mut allow = false;
                 if let Some((act_id, _)) = &self.active_call {
@@ -842,8 +1154,7 @@ if !is_dup {
                     self.active_call_participants.insert(id);
                 }
                 return iced::Task::none();
-            }
-            else if msg.starts_with("CALL_ENDED:") {
+            } else if msg.starts_with("CALL_ENDED:") {
                 let id = msg.trim_start_matches("CALL_ENDED:").trim().to_string();
                 self.active_call_participants.remove(&id);
                 let _ = self.tx_network.send(format!("HANGUP:{}", id));
@@ -858,59 +1169,68 @@ if !is_dup {
 
                 if should_end {
                     self.active_call = None;
-                    SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_call_disconnected();
+                    SOUND_MANAGER
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .play_call_disconnected();
                     self.is_muted = false;
                     let _ = self.tx_network.send("MUTE:off".to_string());
 
                     self.chat_input.clear();
                     self.chat_history.clear();
-                    self.status_message = crate::ui::i18n::t(&self.language, "status_remote_hangup");
+                    self.status_message =
+                        crate::ui::i18n::t(&self.language, "status_remote_hangup");
                 }
 
                 if let Some((inc_id, _, _, _)) = &self.incoming_call {
                     if inc_id == &id {
-                        SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).stop_incoming_call();
+                        SOUND_MANAGER
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .stop_incoming_call();
                         self.incoming_call = None;
                         self.incoming_call_timer = 0;
                         if !should_end {
-                            self.status_message = crate::ui::i18n::t(&self.language, "status_caller_hangup");
+                            self.status_message =
+                                crate::ui::i18n::t(&self.language, "status_caller_hangup");
                         }
                     }
                 }
-            }
-            else if msg.starts_with("TIMEOUT:") {
+            } else if msg.starts_with("TIMEOUT:") {
                 let tgt = msg.trim_start_matches("TIMEOUT:");
                 let is_current = if let Some((active_id, _)) = &self.active_call {
                     active_id == tgt
-                } else { false };
-                
+                } else {
+                    false
+                };
+
                 if is_current || self.active_call.is_none() {
-                    if self.status_message.starts_with("LOADING:") || self.status_message.contains("attente") {
-                        SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).stop_outgoing_call();
-                        self.status_message = crate::ui::i18n::t(&self.language, "status_remote_unavailable");
+                    if self.status_message.starts_with("LOADING:")
+                        || self.status_message.contains("attente")
+                    {
+                        SOUND_MANAGER
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .stop_outgoing_call();
+                        self.status_message =
+                            crate::ui::i18n::t(&self.language, "status_remote_unavailable");
                         let _ = self.tx_network.send(format!("HANGUP:{}", tgt));
                         self.active_call = None;
                     }
                 }
-            }
-            else if msg.starts_with("LOADING:") {
+            } else if msg.starts_with("LOADING:") {
                 // Ignore late loading spams if call is already connected or failed (Anti-rebond UI)
                 if self.active_call.is_none() {
-                    if self.status_message.starts_with("LOADING:") || self.status_message.contains("attente") {
+                    if self.status_message.starts_with("LOADING:")
+                        || self.status_message.contains("attente")
+                    {
                         self.status_message = msg;
                     }
                 }
-            }
-            else {
+            } else {
                 self.status_message = msg;
             }
         }
         Command::none()
     }
 }
-
-
-
-
-
-

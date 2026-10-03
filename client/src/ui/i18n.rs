@@ -1,4 +1,7 @@
-﻿use iced::{Font, font::{Family, Weight, Stretch, Style}};
+use iced::{
+    Font,
+    font::{Family, Stretch, Style, Weight},
+};
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum Language {
@@ -62,15 +65,27 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::Fr, "create_vault_title") => "Créer un coffre-fort",
         (Language::En, "create_vault_title") => "Create a Vault",
         (Language::Ar, "create_vault_title") => "إنشاء خزنة",
-        (Language::Fr, "create_vault_info") => "Votre mot de passe chiffrera votre clé privée et votre pseudo.",
-        (Language::En, "create_vault_info") => "Your password will encrypt your private key and pseudo.",
-        (Language::Ar, "create_vault_info") => "كلمة المرور الخاصة بك ستقوم بتشفير مفتاحك الخاص واسمك المستعار.",
+        (Language::Fr, "create_vault_info") => {
+            "Votre mot de passe chiffrera votre clé privée et votre pseudo."
+        }
+        (Language::En, "create_vault_info") => {
+            "Your password will encrypt your private key and pseudo."
+        }
+        (Language::Ar, "create_vault_info") => {
+            "كلمة المرور الخاصة بك ستقوم بتشفير مفتاحك الخاص واسمك المستعار."
+        }
         (Language::Fr, "pseudo_placeholder") => "Choisissez un pseudo...",
         (Language::En, "pseudo_placeholder") => "Choose a pseudo...",
         (Language::Ar, "pseudo_placeholder") => "اختر اسماً مستعاراً...",
-        (Language::Fr, "password_new_placeholder") => "Nouveau mot de passe (min. 12 car., Maj, Min, Chiffre, Spécial)...",
-        (Language::En, "password_new_placeholder") => "New password (min. 12 chars, Upper, Lower, Number, Special)...",
-        (Language::Ar, "password_new_placeholder") => "كلمة مرور جديدة (الحد الأدنى 12 حرف، كبير، صغير، رقم، خاص)...",
+        (Language::Fr, "password_new_placeholder") => {
+            "Nouveau mot de passe (min. 12 car., Maj, Min, Chiffre, Spécial)..."
+        }
+        (Language::En, "password_new_placeholder") => {
+            "New password (min. 12 chars, Upper, Lower, Number, Special)..."
+        }
+        (Language::Ar, "password_new_placeholder") => {
+            "كلمة مرور جديدة (الحد الأدنى 12 حرف، كبير، صغير، رقم، خاص)..."
+        }
         (Language::Fr, "password_confirm_placeholder") => "Confirmez le mot de passe...",
         (Language::En, "password_confirm_placeholder") => "Confirm password...",
         (Language::Ar, "password_confirm_placeholder") => "تأكيد كلمة المرور...",
@@ -79,9 +94,15 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::Ar, "btn_submit_create") => "إنشاء وتشفير",
         (Language::Fr, "error") => "Erreur",
         (Language::En, "error") => "Error",
-        (Language::Fr, "vault_path_info") => "Si vous souhaitez supprimer votre compte et vos données, le dossier se trouve dans : ",
-        (Language::En, "vault_path_info") => "If you wish to delete your account and data, the directory is located at : ",
-        (Language::Ar, "vault_path_info") => "إذا كنت ترغب في حذف حسابك وبياناتك، فإن المجلد موجود في : ",
+        (Language::Fr, "vault_path_info") => {
+            "Si vous souhaitez supprimer votre compte et vos données, le dossier se trouve dans : "
+        }
+        (Language::En, "vault_path_info") => {
+            "If you wish to delete your account and data, the directory is located at : "
+        }
+        (Language::Ar, "vault_path_info") => {
+            "إذا كنت ترغب في حذف حسابك وبياناتك، فإن المجلد موجود في : "
+        }
 
         (Language::Ar, "error") => "خطأ",
 
@@ -133,25 +154,43 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::En, "cgu_title") => "AGPLv3 License & Network",
         (Language::Ar, "cgu_title") => "رخصة AGPLv3 والشبكة",
 
-        (Language::Fr, "cgu_text") => "Kakolookiyam est distribué sous la GNU Affero General Public License v3.0 (AGPLv3). \n\nL'architecture d'échange est bâtie sur un modèle asymétrique Zéro-Trust :\n- L'établissement des tunnels (Signaling WSS) s'effectue via un relais masqué (Reverse-Proxy) sous juridiction Suisse (.ch).\n- Le trafic Voix & Fichiers, géré en P2P (WebRTC), subit un \"Forçage Relais\" (Relay Policy) strict vers l'infrastructure Cloud d'Oracle [cite: 1]. La nature même de votre adresse réseau est effacée.\n\nCréation de l'identité visuelle et du logo par Constance PERSAD.\n\nConception sonore et musiques composées par Toxare (https://open.spotify.com/intl-fr/artist/5AFESJ1lGjK6hkCJLY8iwn?si=4kiT3AwnTw6OwlfoRpUU3A | teumaaa.pro@gmail.com). Toutes les œuvres sonores sont protégées à vie sur la blockchain Tezos via le service MusicStart (URights / Sacem).",
-        (Language::En, "cgu_text") => "Kakolookiyam is distributed under the GNU AGPLv3 license. \n\nThe exchange architecture is built on a Zero-Trust asymmetric model:\n- Tunnel establishment (WSS Signaling) is managed through a masked relay (Reverse-Proxy) under Swiss jurisdiction (.ch).\n- Voice & File traffic (WebRTC P2P) undergoes strict \"Relay Policy\" enforcement through Oracle Cloud infrastructure [cite: 1]. The very nature of your network address is wiped.\n\nVisual identity and logo designed by Constance PERSAD.\n\nSound design and music composed by Toxare (https://open.spotify.com/intl-fr/artist/5AFESJ1lGjK6hkCJLY8iwn?si=4kiT3AwnTw6OwlfoRpUU3A | teumaaa.pro@gmail.com). All audio works are protected for life on the Tezos blockchain via the MusicStart service (URights / Sacem).",
-        (Language::Ar, "cgu_text") => "يتم توزيع Kakolookiyam تحت رخصة GNU AGPLv3، مما يضمن استقلالية الكود. \n\nيتم تأمين إشارات WSS بواسطة وكيل عكسي تحت الولاية القضائية السويسرية (.ch).\nيعمل مرحل P2P الأعمى على البنية التحتية لـ Oracle، ويخضع لاتفاقية خدمات Oracle السحابية[cite: 1].\n\n  الهوية البصرية والشعار من تصميم Constance PERSAD.\n\nتصميم الصوت والموسيقى من تأليف Toxare (https://open.spotify.com/intl-fr/artist/5AFESJ1lGjK6hkCJLY8iwn?si=4kiT3AwnTw6OwlfoRpUU3A | teumaaa.pro@gmail.com). جميع الأعمال الصوتية محمية مدى الحياة على بلوكشين Tezos عبر خدمة MusicStart (URights / Sacem).",
+        (Language::Fr, "cgu_text") => {
+            "Kakolookiyam est distribué sous la GNU Affero General Public License v3.0 (AGPLv3). \n\nL'architecture d'échange est bâtie sur un modèle asymétrique Zéro-Trust :\n- L'établissement des tunnels (Signaling WSS) s'effectue via un relais masqué (Reverse-Proxy) sous juridiction Suisse (.ch).\n- Le trafic Voix & Fichiers, géré en P2P (WebRTC), subit un \"Forçage Relais\" (Relay Policy) strict vers l'infrastructure Cloud d'Oracle [cite: 1]. La nature même de votre adresse réseau est effacée.\n\nCréation de l'identité visuelle et du logo par Constance PERSAD (https://www.instagram.com/draw.andco?utm_source=ig_web_button_share_sheet&stkn=ZDNlZDc0MzIxNw==).\n\nConception sonore et musiques composées par Toxare (https://open.spotify.com/intl-fr/artist/5AFESJ1lGjK6hkCJLY8iwn?si=4kiT3AwnTw6OwlfoRpUU3A | teumaaa.pro@gmail.com). Toutes les œuvres sonores sont protégées à vie sur la blockchain Tezos via le service MusicStart (URights / Sacem)."
+        }
+        (Language::En, "cgu_text") => {
+            "Kakolookiyam is distributed under the GNU AGPLv3 license. \n\nThe exchange architecture is built on a Zero-Trust asymmetric model:\n- Tunnel establishment (WSS Signaling) is managed through a masked relay (Reverse-Proxy) under Swiss jurisdiction (.ch).\n- Voice & File traffic (WebRTC P2P) undergoes strict \"Relay Policy\" enforcement through Oracle Cloud infrastructure [cite: 1]. The very nature of your network address is wiped.\n\nVisual identity and logo designed by Constance PERSAD (https://www.instagram.com/draw.andco?utm_source=ig_web_button_share_sheet&stkn=ZDNlZDc0MzIxNw==).\n\nSound design and music composed by Toxare (https://open.spotify.com/intl-fr/artist/5AFESJ1lGjK6hkCJLY8iwn?si=4kiT3AwnTw6OwlfoRpUU3A | teumaaa.pro@gmail.com). All audio works are protected for life on the Tezos blockchain via the MusicStart service (URights / Sacem)."
+        }
+        (Language::Ar, "cgu_text") => {
+            "يتم توزيع Kakolookiyam تحت رخصة GNU AGPLv3، مما يضمن استقلالية الكود. \n\nيتم تأمين إشارات WSS بواسطة وكيل عكسي تحت الولاية القضائية السويسرية (.ch).\nيعمل مرحل P2P الأعمى على البنية التحتية لـ Oracle، ويخضع لاتفاقية خدمات Oracle السحابية[cite: 1].\n\n  الهوية البصرية والشعار من تصميم Constance PERSAD (https://www.instagram.com/draw.andco?utm_source=ig_web_button_share_sheet&stkn=ZDNlZDc0MzIxNw==).\n\nتصميم الصوت والموسيقى من تأليف Toxare (https://open.spotify.com/intl-fr/artist/5AFESJ1lGjK6hkCJLY8iwn?si=4kiT3AwnTw6OwlfoRpUU3A | teumaaa.pro@gmail.com). جميع الأعمال الصوتية محمية مدى الحياة على بلوكشين Tezos عبر خدمة MusicStart (URights / Sacem)."
+        }
 
         (Language::Fr, "privacy_title") => "Philosophie Zéro-Trace",
         (Language::En, "privacy_title") => "Zero-Knowledge Philosophy",
         (Language::Ar, "privacy_title") => "فلسفة انعدام المعرفة",
 
-        (Language::Fr, "privacy_text") => "Connectés entre vous. Invisibles pour le reste. \n\n Identité chiffrée (ChaCha20Poly1305/Argon2) et traitements exclusifs en RAM, purgés au verrouillage (mlock / Zeroize). \n\nAucun serveur tiers ne stocke vos métadonnées.",
-        (Language::En, "privacy_text") => "Connected together. Invisible to the rest. \n\nIdentity is strictly encrypted locally (ChaCha20Poly1305/Argon2) and processing is RAM-only, securely wiped upon locking (mlock / Zeroize). \n\nNo third-party servers store your metadata.",
-        (Language::Ar, "privacy_text") => "متصلون ببعضكم. مخفيون عن البقية. \n\nيتم تشفير الهوية محلياً (ChaCha20Poly1305/Argon2) والمعالجة تتم في RAM فقط، وتُمسح بأمان عند القفل. \n\nلا تخزن خوادم الطرف الثالث بياناتك الوصفية.",
+        (Language::Fr, "privacy_text") => {
+            "Connectés entre vous. Invisibles pour le reste. \n\n Identité chiffrée (ChaCha20Poly1305/Argon2) et traitements exclusifs en RAM, purgés au verrouillage (mlock / Zeroize). \n\nAucun serveur tiers ne stocke vos métadonnées."
+        }
+        (Language::En, "privacy_text") => {
+            "Connected together. Invisible to the rest. \n\nIdentity is strictly encrypted locally (ChaCha20Poly1305/Argon2) and processing is RAM-only, securely wiped upon locking (mlock / Zeroize). \n\nNo third-party servers store your metadata."
+        }
+        (Language::Ar, "privacy_text") => {
+            "متصلون ببعضكم. مخفيون عن البقية. \n\nيتم تشفير الهوية محلياً (ChaCha20Poly1305/Argon2) والمعالجة تتم في RAM فقط، وتُمسح بأمان عند القفل. \n\nلا تخزن خوادم الطرف الثالث بياناتك الوصفية."
+        }
 
         (Language::Fr, "ofl_title") => "Composants Open-Source",
         (Language::En, "ofl_title") => "Open-Source Components",
         (Language::Ar, "ofl_title") => "مكونات مفتوحة المصدر",
 
-        (Language::Fr, "ofl_text") => "Application native en Rust (Iced, Tokio, WebRTC). La police 'Cinzel' est sous SIL Open Font License (OFL).\n\n  Soutenez le projet libre sur GitHub (Sponsors : Altayr).",
-        (Language::En, "ofl_text") => "Built natively in Rust (Iced, Tokio, WebRTC). 'Cinzel' font is distributed under the SIL Open Font License (OFL).\n\n  Support the independent project on GitHub (Sponsors: Altayr).",
-        (Language::Ar, "ofl_text") => "مبني بشكل أصلي في Rust (Iced, Tokio, WebRTC). توزع خطوط 'Cinzel' و 'ReemKufi' تحت رخصة SIL المفتوحة (OFL).\n\n  ادعم المشروع المستقل على GitHub (الرعاة: Altayr).",
+        (Language::Fr, "ofl_text") => {
+            "Application native en Rust (Iced, Tokio, WebRTC). La police 'Cinzel' est sous SIL Open Font License (OFL).\n\n  Soutenez le projet libre sur GitHub (Sponsors : Altayr)."
+        }
+        (Language::En, "ofl_text") => {
+            "Built natively in Rust (Iced, Tokio, WebRTC). 'Cinzel' font is distributed under the SIL Open Font License (OFL).\n\n  Support the independent project on GitHub (Sponsors: Altayr)."
+        }
+        (Language::Ar, "ofl_text") => {
+            "مبني بشكل أصلي في Rust (Iced, Tokio, WebRTC). توزع خطوط 'Cinzel' و 'ReemKufi' تحت رخصة SIL المفتوحة (OFL).\n\n  ادعم المشروع المستقل على GitHub (الرعاة: Altayr)."
+        }
 
         // Dashboard (Barre latérale)
         (Language::Fr, "my_id") => "Mon ID",
@@ -191,7 +230,9 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::Ar, "btn_add") => "+ إضافة",
         (Language::Fr, "all_contacts_in_server") => "Tous vos contacts sont déjà dans ce serveur.",
         (Language::En, "all_contacts_in_server") => "All your contacts are already in this server.",
-        (Language::Ar, "all_contacts_in_server") => "جميع جهات الاتصال الخاصة بك موجودة بالفعل في هذا الخادم.",
+        (Language::Ar, "all_contacts_in_server") => {
+            "جميع جهات الاتصال الخاصة بك موجودة بالفعل في هذا الخادم."
+        }
         (Language::Fr, "btn_delete_server") => "Supprimer le serveur",
         (Language::En, "btn_delete_server") => "Delete server",
         (Language::Ar, "btn_delete_server") => "حذف الخادم",
@@ -297,7 +338,6 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::En, "chat_placeholder_stealth") => "Write a stealth message...",
         (Language::Ar, "chat_placeholder_stealth") => "اكتب رسالة خفية...",
 
-        
         // --- NEW STATUS MESSAGES FIX ---
         (Language::Fr, "status_call_missed") => " Appel manqué.",
         (Language::En, "status_call_missed") => " Missed call.",
@@ -371,7 +411,9 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::En, "status_group_left") => "☑️ Group successfully left.",
         (Language::Ar, "status_group_left") => "☑️ تم مغادرة المجموعة بنجاح.",
 
-        (Language::Fr, "status_file_too_large") => "❌ Erreur : Le fichier dépasse la limite de 50 Mo.",
+        (Language::Fr, "status_file_too_large") => {
+            "❌ Erreur : Le fichier dépasse la limite de 50 Mo."
+        }
         (Language::En, "status_file_too_large") => "❌ Error: The file exceeds the 50 MB limit.",
         (Language::Ar, "status_file_too_large") => "❌ خطأ: يتجاوز الملف حد 50 ميغابايت.",
 
@@ -381,7 +423,9 @@ pub fn t(lang: &Language, key: &str) -> String {
 
         (Language::Fr, "status_media_ram") => "✅ Aperçu média chargé en mémoire RAM (Zéro-Trace).",
         (Language::En, "status_media_ram") => "✅ Media preview loaded into RAM (Zero-Trace).",
-        (Language::Ar, "status_media_ram") => "✅ تم تحميل معاينة الوسائط في ذاكرة الوصول العشوائي (صفر أثر).",
+        (Language::Ar, "status_media_ram") => {
+            "✅ تم تحميل معاينة الوسائط في ذاكرة الوصول العشوائي (صفر أثر)."
+        }
 
         (Language::Fr, "status_media_error") => "❌ Impossible de générer l'aperçu.",
         (Language::En, "status_media_error") => "❌ Unable to generate preview.",
@@ -405,7 +449,9 @@ pub fn t(lang: &Language, key: &str) -> String {
 
         (Language::Fr, "status_media_purged") => " Aperçu fermé (Données purgées de la RAM).",
         (Language::En, "status_media_purged") => " Preview closed (Data purged from RAM).",
-        (Language::Ar, "status_media_purged") => " تم إغلاق المعاينة (تم مسح البيانات من ذاكرة الوصول العشوائي).",
+        (Language::Ar, "status_media_purged") => {
+            " تم إغلاق المعاينة (تم مسح البيانات من ذاكرة الوصول العشوائي)."
+        }
 
         (Language::Fr, "status_remote_busy") => "L'interlocuteur est déjà en ligne (Occupé).",
         (Language::En, "status_remote_busy") => "The interlocutor is already on a call (Busy).",
@@ -455,7 +501,6 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::En, "pending_requests_title") => "PENDING REQUESTS",
         (Language::Ar, "pending_requests_title") => "الطلبات المعلقة",
 
-        
         (Language::Fr, "me_author") => "Moi",
         (Language::En, "me_author") => "Me",
         (Language::Ar, "me_author") => "أنا",
@@ -480,11 +525,10 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::En, "msg_secure_canal") => "P2P Zero-Trace Channel secured...",
         (Language::Ar, "msg_secure_canal") => "تأمين قناة P2P خالية من التتبع...",
 
-        
         (Language::Fr, "ready_to_call") => "Prêt à appeler...",
         (Language::En, "ready_to_call") => "Ready to call...",
         (Language::Ar, "ready_to_call") => "جاهز للاتصال...",
-        
+
         (Language::Fr, "msg_call_ended_duration") => "📞 Appel terminé ({duration})",
         (Language::En, "msg_call_ended_duration") => "📞 Call ended ({duration})",
         (Language::Ar, "msg_call_ended_duration") => "📞 انتهت المكالمة ({duration})",
@@ -498,15 +542,15 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::En, "blocked_contacts") => "BLOCKED",
         (Language::Ar, "blocked_contacts") => "محظور",
         _ => key,
-
-
-
-
     };
     text.to_string()
 }
 
-
-pub fn app_text<'a>(lang: &Language, content: impl iced::widget::text::IntoFragment<'a>) -> iced::widget::Text<'a> {
-    iced::widget::text(content).font(app_font(lang)).shaping(iced::widget::text::Shaping::Advanced)
+pub fn app_text<'a>(
+    lang: &Language,
+    content: impl iced::widget::text::IntoFragment<'a>,
+) -> iced::widget::Text<'a> {
+    iced::widget::text(content)
+        .font(app_font(lang))
+        .shaping(iced::widget::text::Shaping::Advanced)
 }

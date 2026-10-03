@@ -1,16 +1,25 @@
-use secrecy::ExposeSecret;
-use iced::Task as Command;
-use crate::ui::app::{KakolookiyamApp, AppState};
-use crate::ui::messages::Message;
-use zeroize::Zeroize;
 use crate::crypto;
+use crate::ui::app::{AppState, KakolookiyamApp};
+use crate::ui::messages::Message;
+use iced::Task as Command;
+use secrecy::ExposeSecret;
+use zeroize::Zeroize;
 
 impl KakolookiyamApp {
     pub(crate) fn handle_auth(&mut self, message: Message) -> Command<Message> {
         match message {
-            Message::GoToCreateAccount => { self.clear_auth_fields(); self.state = AppState::CreateAccount; }
-            Message::GoToLogin => { self.clear_auth_fields(); self.state = AppState::Login; }
-            Message::BackToWelcome => { self.clear_auth_fields(); self.state = AppState::Welcome; }
+            Message::GoToCreateAccount => {
+                self.clear_auth_fields();
+                self.state = AppState::CreateAccount;
+            }
+            Message::GoToLogin => {
+                self.clear_auth_fields();
+                self.state = AppState::Login;
+            }
+            Message::BackToWelcome => {
+                self.clear_auth_fields();
+                self.state = AppState::Welcome;
+            }
 
             Message::LockSession => {
                 if let Some(mut vd) = self.vault_data.take() {
@@ -29,7 +38,7 @@ impl KakolookiyamApp {
                 self.selected_chat = None;
                 self.chat_input.zeroize();
                 self.chat_input.clear();
-                
+
                 // [MITIGATION] Zero-Trace RAM: Wipe active chat UI history strings
                 for (author, content) in self.chat_history.iter_mut() {
                     author.zeroize();
@@ -42,9 +51,12 @@ impl KakolookiyamApp {
                 self.new_member_input.clear();
 
                 self.clear_auth_fields();
-                crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_main_theme();
+                crate::sound::SOUND_MANAGER
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .play_main_theme();
                 self.state = AppState::Login;
-                        self.status_message = crate::ui::i18n::t(&self.language, "ready_to_call");
+                self.status_message = crate::ui::i18n::t(&self.language, "ready_to_call");
                 self.idle_seconds = 0;
             }
             Message::ForceDisconnect(err_msg) => {
@@ -53,14 +65,18 @@ impl KakolookiyamApp {
             }
             Message::TickInactivity => {
                 self.heartbeat_counter = self.heartbeat_counter.wrapping_add(1);
-                
-                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs();
 
                 // 1) Cleanup old presences (15 secs window)
                 for (_, presences) in self.group_call_presences.iter_mut() {
                     presences.retain(|_, last_seen| now.saturating_sub(*last_seen) < 15);
                 }
-                self.group_call_presences.retain(|_, presences| !presences.is_empty());
+                self.group_call_presences
+                    .retain(|_, presences| !presences.is_empty());
 
                 // 2) Send our heartbeat if we are in a group call (every 5 seconds)
                 if self.heartbeat_counter % 5 == 0 {
@@ -72,7 +88,10 @@ impl KakolookiyamApp {
                                     let tx = self.tx_network.clone();
                                     for member_id in &group.members {
                                         if member_id != &my_id {
-                                            let _ = tx.send(format!("CHAT_SEND_IF_OPEN:{}:SYS:GRP_HEARTBEAT:{}", member_id, active_id));
+                                            let _ = tx.send(format!(
+                                                "CHAT_SEND_IF_OPEN:{}:SYS:GRP_HEARTBEAT:{}",
+                                                member_id, active_id
+                                            ));
                                         }
                                     }
                                 }
@@ -92,8 +111,12 @@ impl KakolookiyamApp {
                     if self.incoming_call_timer >= 15 {
                         if let Some((id, _, _, _)) = self.incoming_call.take() {
                             let _ = self.tx_network.send(format!("REJECT:{}", id));
-                            self.status_message = crate::ui::i18n::t(&self.language, "status_call_missed");
-                            crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).stop_incoming_call();
+                            self.status_message =
+                                crate::ui::i18n::t(&self.language, "status_call_missed");
+                            crate::sound::SOUND_MANAGER
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .stop_incoming_call();
                         }
                         self.incoming_call_timer = 0;
                     }
@@ -102,16 +125,28 @@ impl KakolookiyamApp {
                     if self.idle_seconds >= 300 {
                         return Command::perform(async {}, |_| Message::LockSession);
                     }
-                    
-                    
                 } else {
                     self.idle_seconds = 0;
                 }
             }
-            Message::ResetInactivity => { self.idle_seconds = 0; }
-            Message::PseudoChanged(val) => { self.idle_seconds = 0; self.pseudo_input = val; self.auth_error = None; }
-            Message::PasswordChanged(val) => { self.idle_seconds = 0; self.password_input = secrecy::Secret::new(val); self.auth_error = None; }
-            Message::PasswordConfirmChanged(val) => { self.idle_seconds = 0; self.password_confirm_input = secrecy::Secret::new(val); self.auth_error = None; }
+            Message::ResetInactivity => {
+                self.idle_seconds = 0;
+            }
+            Message::PseudoChanged(val) => {
+                self.idle_seconds = 0;
+                self.pseudo_input = val;
+                self.auth_error = None;
+            }
+            Message::PasswordChanged(val) => {
+                self.idle_seconds = 0;
+                self.password_input = secrecy::Secret::new(val);
+                self.auth_error = None;
+            }
+            Message::PasswordConfirmChanged(val) => {
+                self.idle_seconds = 0;
+                self.password_confirm_input = secrecy::Secret::new(val);
+                self.auth_error = None;
+            }
 
             Message::SubmitCreateAccount => {
                 self.idle_seconds = 0;
@@ -121,9 +156,13 @@ impl KakolookiyamApp {
                 if trimmed.is_empty() {
                     self.auth_error = Some(crate::ui::i18n::t(&self.language, "err_choose_pseudo"));
                 } else if std::path::Path::new(&potential_file).exists() {
-                    self.auth_error = Some(crate::ui::i18n::t(&self.language, "err_profile_exists")); //  déjà sur cet ordinateur.".into());
-                } else if self.password_input.expose_secret() != self.password_confirm_input.expose_secret() {
-                    self.auth_error = Some(crate::ui::i18n::t(&self.language, "err_passwords_match"));
+                    self.auth_error =
+                        Some(crate::ui::i18n::t(&self.language, "err_profile_exists")); //  déjà sur cet ordinateur.".into());
+                } else if self.password_input.expose_secret()
+                    != self.password_confirm_input.expose_secret()
+                {
+                    self.auth_error =
+                        Some(crate::ui::i18n::t(&self.language, "err_passwords_match"));
                 } else {
                     let mut v_data = crypto::VaultData {
                         private_key: crypto::generate_secure_secret(),
@@ -140,26 +179,46 @@ impl KakolookiyamApp {
 
                     match crypto::save_vault(self.password_input.expose_secret(), &mut v_data) {
                         Ok(_) => {
-                            self.master_password = Some(secrecy::Secret::new(self.password_input.expose_secret().clone()));
+                            self.master_password = Some(secrecy::Secret::new(
+                                self.password_input.expose_secret().clone(),
+                            ));
                             self.auth_error = None;
 
                             let id = crypto::derive_public_id(&v_data.private_key);
 
                             if let Some(tx) = self.tx_identity.take() {
-                                let _ = tx.send((id.clone(), v_data.pseudo.clone(), v_data.private_key));
+                                let _ = tx.send((
+                                    id.clone(),
+                                    v_data.pseudo.clone(),
+                                    v_data.private_key,
+                                ));
                                 let mut sync_str = String::from("CONTACTS_SYNC");
-                                for (c_id, _) in &v_data.contacts { sync_str.push_str(":"); sync_str.push_str(c_id); }
+                                for (c_id, _) in &v_data.contacts {
+                                    sync_str.push_str(":");
+                                    sync_str.push_str(c_id);
+                                }
                                 let _ = self.tx_network.send(sync_str);
                             } else {
-                                let _ = self.tx_network.send(format!("REGISTER:{}:{}", id, v_data.pseudo));
+                                let _ = self
+                                    .tx_network
+                                    .send(format!("REGISTER:{}:{}", id, v_data.pseudo));
                                 let _ = self.tx_secrets.send(v_data.private_key);
                                 let mut sync_str = String::from("CONTACTS_SYNC");
-                                for (c_id, _) in &v_data.contacts { sync_str.push_str(":"); sync_str.push_str(c_id); }
+                                for (c_id, _) in &v_data.contacts {
+                                    sync_str.push_str(":");
+                                    sync_str.push_str(c_id);
+                                }
                                 let _ = self.tx_network.send(sync_str);
                             }
                             self.vault_data = Some(v_data);
                         }
-                        Err(e) => { crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_error(); self.auth_error = Some(e.to_string()); },
+                        Err(e) => {
+                            crate::sound::SOUND_MANAGER
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .play_error();
+                            self.auth_error = Some(e.to_string());
+                        }
                     }
                 }
             }
@@ -170,30 +229,51 @@ impl KakolookiyamApp {
                 if trimmed.is_empty() {
                     self.auth_error = Some(crate::ui::i18n::t(&self.language, "err_enter_pseudo"));
                 } else if self.password_input.expose_secret().is_empty() {
-                    self.auth_error = Some(crate::ui::i18n::t(&self.language, "err_enter_password"));
+                    self.auth_error =
+                        Some(crate::ui::i18n::t(&self.language, "err_enter_password"));
                 } else {
                     match crypto::unlock_vault(trimmed, self.password_input.expose_secret()) {
                         Ok(v_data) => {
-                            self.master_password = Some(secrecy::Secret::new(self.password_input.expose_secret().clone()));
+                            self.master_password = Some(secrecy::Secret::new(
+                                self.password_input.expose_secret().clone(),
+                            ));
                             self.auth_error = None;
 
                             let id = crypto::derive_public_id(&v_data.private_key);
 
                             if let Some(tx) = self.tx_identity.take() {
-                                let _ = tx.send((id.clone(), v_data.pseudo.clone(), v_data.private_key));
+                                let _ = tx.send((
+                                    id.clone(),
+                                    v_data.pseudo.clone(),
+                                    v_data.private_key,
+                                ));
                                 let mut sync_str = String::from("CONTACTS_SYNC");
-                                for (c_id, _) in &v_data.contacts { sync_str.push_str(":"); sync_str.push_str(c_id); }
+                                for (c_id, _) in &v_data.contacts {
+                                    sync_str.push_str(":");
+                                    sync_str.push_str(c_id);
+                                }
                                 let _ = self.tx_network.send(sync_str);
                             } else {
-                                let _ = self.tx_network.send(format!("REGISTER:{}:{}", id, v_data.pseudo));
+                                let _ = self
+                                    .tx_network
+                                    .send(format!("REGISTER:{}:{}", id, v_data.pseudo));
                                 let _ = self.tx_secrets.send(v_data.private_key);
                                 let mut sync_str = String::from("CONTACTS_SYNC");
-                                for (c_id, _) in &v_data.contacts { sync_str.push_str(":"); sync_str.push_str(c_id); }
+                                for (c_id, _) in &v_data.contacts {
+                                    sync_str.push_str(":");
+                                    sync_str.push_str(c_id);
+                                }
                                 let _ = self.tx_network.send(sync_str);
                             }
                             self.vault_data = Some(v_data);
                         }
-                        Err(e) => { crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_error(); self.auth_error = Some(e.to_string()); },
+                        Err(e) => {
+                            crate::sound::SOUND_MANAGER
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .play_error();
+                            self.auth_error = Some(e.to_string());
+                        }
                     }
                 }
             }

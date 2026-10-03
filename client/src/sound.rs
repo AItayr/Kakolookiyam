@@ -1,13 +1,17 @@
-use std::sync::{Arc, Mutex};
+use kira::Tween;
+use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings};
+use kira::{AudioManager, AudioManagerSettings};
+use rand::Rng;
 use std::collections::HashMap;
 use std::io::Cursor;
-use kira::{AudioManager, AudioManagerSettings};
-use kira::sound::static_sound::{StaticSoundData, StaticSoundSettings, StaticSoundHandle};
-use kira::Tween;
-use rand::Rng;
+use std::sync::{Arc, Mutex};
 
 fn amp_to_db(amp: f32) -> f32 {
-    if amp <= 0.01 { -60.0 } else { 20.0 * amp.log10() }
+    if amp <= 0.01 {
+        -60.0
+    } else {
+        20.0 * amp.log10()
+    }
 }
 
 lazy_static::lazy_static! {
@@ -37,7 +41,13 @@ pub struct SoundManager {
 
 impl SoundManager {
     pub fn new() -> Self {
-        let manager = match AudioManager::new(AudioManagerSettings::default()) { Ok(m) => Some(m), Err(e) => { println!("Audio manager ERROR: {:?}", e); None } };
+        let manager = match AudioManager::new(AudioManagerSettings::default()) {
+            Ok(m) => Some(m),
+            Err(e) => {
+                println!("Audio manager ERROR: {:?}", e);
+                None
+            }
+        };
         Self {
             manager,
             app_volume: 0.5,
@@ -67,7 +77,7 @@ impl SoundManager {
             let _ = handle.set_volume(dest_db, Tween::default());
         }
     }
-    
+
     pub fn get_main_theme_volume(&self) -> f32 {
         self.main_theme_volume
     }
@@ -75,7 +85,9 @@ impl SoundManager {
     pub fn play_main_theme(&mut self) {
         if self.main_theme_handle.is_none() {
             if let Some(manager) = &mut self.manager {
-                let settings = StaticSoundSettings::new().volume(amp_to_db(self.main_theme_volume)).loop_region(..);
+                let settings = StaticSoundSettings::new()
+                    .volume(amp_to_db(self.main_theme_volume))
+                    .loop_region(..);
                 if let Ok(sound_data) = StaticSoundData::from_cursor(Cursor::new(W_MAIN_THEME)) {
                     if let Ok(handle) = manager.play(sound_data.with_settings(settings)) {
                         self.main_theme_handle = Some(handle);
@@ -95,13 +107,13 @@ impl SoundManager {
         if let Some(manager) = &mut self.manager {
             let vol = if use_app_volume { self.app_volume } else { 1.0 };
             let settings = StaticSoundSettings::new().volume(amp_to_db(vol));
-            
+
             if !self.cached_sounds.contains_key(key) {
                 if let Ok(sd) = StaticSoundData::from_cursor(Cursor::new(bytes)) {
                     self.cached_sounds.insert(key, sd);
                 }
             }
-            
+
             if let Some(sound_data) = self.cached_sounds.get(key) {
                 let _ = manager.play(sound_data.clone().with_settings(settings));
             }
@@ -122,11 +134,19 @@ impl SoundManager {
     }
     pub fn play_error(&mut self) {
         let mut rng = rand::thread_rng();
-        if rng.gen_bool(0.5) { self.play_sound_once("err1", W_ERR_1, true); } else { self.play_sound_once("err2", W_ERR_2, true); }
+        if rng.gen_bool(0.5) {
+            self.play_sound_once("err1", W_ERR_1, true);
+        } else {
+            self.play_sound_once("err2", W_ERR_2, true);
+        }
     }
     pub fn play_red_button(&mut self) {
         let mut rng = rand::thread_rng();
-        if rng.gen_bool(0.5) { self.play_sound_once("btn1", W_BTN_1, true); } else { self.play_sound_once("btn2", W_BTN_2, true); }
+        if rng.gen_bool(0.5) {
+            self.play_sound_once("btn1", W_BTN_1, true);
+        } else {
+            self.play_sound_once("btn2", W_BTN_2, true);
+        }
     }
     pub fn play_call_connected(&mut self) {}
     pub fn play_call_disconnected(&mut self) {}
@@ -142,9 +162,12 @@ impl SoundManager {
         }
         if let Some(sound_data) = self.cached_sounds.get("call_in") {
             if let Some(manager) = &mut self.manager {
-                let settings = StaticSoundSettings::new().volume(amp_to_db(self.app_volume)).loop_region(..);
+                let settings = StaticSoundSettings::new()
+                    .volume(amp_to_db(self.app_volume))
+                    .loop_region(..);
                 if let Ok(handle) = manager.play(sound_data.clone().with_settings(settings)) {
-                    self.looping_handles.insert("incoming_call".to_string(), handle);
+                    self.looping_handles
+                        .insert("incoming_call".to_string(), handle);
                 }
             }
         }
@@ -167,9 +190,12 @@ impl SoundManager {
         }
         if let Some(sound_data) = self.cached_sounds.get("call_out") {
             if let Some(manager) = &mut self.manager {
-                let settings = StaticSoundSettings::new().volume(amp_to_db(self.app_volume)).loop_region(..);
+                let settings = StaticSoundSettings::new()
+                    .volume(amp_to_db(self.app_volume))
+                    .loop_region(..);
                 if let Ok(handle) = manager.play(sound_data.clone().with_settings(settings)) {
-                    self.looping_handles.insert("outgoing_call".to_string(), handle);
+                    self.looping_handles
+                        .insert("outgoing_call".to_string(), handle);
                 }
             }
         }

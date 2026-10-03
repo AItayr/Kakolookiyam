@@ -1,20 +1,20 @@
 use argon2::{
-    password_hash::{PasswordHasher, SaltString},
     Argon2,
+    password_hash::{PasswordHasher, SaltString},
 };
 use chacha20poly1305::{
-    aead::{Aead, AeadCore, KeyInit},
     ChaCha20Poly1305, Nonce,
+    aead::{Aead, AeadCore, KeyInit},
 };
-use rand::{rngs::OsRng, RngCore};
+use dirs;
+use rand::{RngCore, rngs::OsRng};
+use ring::signature::KeyPair;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Write;
-use ring::signature::KeyPair;
 use std::fs;
 use std::path::PathBuf;
 use zeroize::{Zeroize, ZeroizeOnDrop};
-use dirs;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct MessageEntry {
@@ -70,13 +70,19 @@ impl VaultData {
             for m in msgs.iter_mut() {
                 m.author.zeroize();
                 m.content.zeroize();
-                if let Some(mut k) = m.media_key { k.zeroize(); }
-                if let Some(p) = &mut m.media_path { p.zeroize(); }
+                if let Some(mut k) = m.media_key {
+                    k.zeroize();
+                }
+                if let Some(p) = &mut m.media_path {
+                    p.zeroize();
+                }
             }
         }
         for (_, group) in self.groups.iter_mut() {
             group.name.zeroize();
-            for member in group.members.iter_mut() { member.zeroize(); }
+            for member in group.members.iter_mut() {
+                member.zeroize();
+            }
         }
         for (_, contact) in self.contacts.iter_mut() {
             // Cannot easily zeroize values directly from iterator here, but wait:
@@ -90,7 +96,7 @@ pub fn get_app_dir() -> PathBuf {
     let mut path = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
     path.push("Kakolookiyam");
     let _ = fs::create_dir_all(&path);
-    
+
     let readme_path = path.join("A_PROPOS_DE_VOS_DONNEES.txt");
     if !readme_path.exists() {
         let content = "Kakolookiyam : Dossier Coffre-Fort / Vault Folder / مجلد الخزنة
@@ -117,7 +123,7 @@ No history is recoverable online.
 لا يمكن استرجاع أي سجل عبر الإنترنت.";
         let _ = fs::write(readme_path, content);
     }
-    
+
     path
 }
 
@@ -176,7 +182,7 @@ pub fn validate_password(password: &str) -> Result<(), &'static str> {
 }
 
 fn derive_key(password: &str, salt: &SaltString) -> [u8; 32] {
-    use argon2::{Params, Algorithm, Version};
+    use argon2::{Algorithm, Params, Version};
     // [MITIGATION BRUTE-FORCE] Paramètres OWASP 2026 : 64MB RAM, 3 Itérations, 4 Parallélismes.
     let params = Params::new(65536, 3, 4, None).unwrap();
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
@@ -205,7 +211,9 @@ pub fn save_vault(password: &str, data: &mut VaultData) -> Result<(), &'static s
     let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
 
     let payload = serde_json::to_vec(data).map_err(|_| "Erreur JSON")?;
-    let ciphertext = cipher.encrypt(&nonce, payload.as_ref()).map_err(|_| "Erreur de chiffrement")?;
+    let ciphertext = cipher
+        .encrypt(&nonce, payload.as_ref())
+        .map_err(|_| "Erreur de chiffrement")?;
 
     let salt_bytes = salt_str.as_bytes();
     let mut file_data = Vec::new();
@@ -220,7 +228,7 @@ pub fn save_vault(password: &str, data: &mut VaultData) -> Result<(), &'static s
     payload_mut.zeroize();
 
     let vault_file = get_vault_file(&data.pseudo);
-    
+
     // [MITIGATION ATOMIQUE] Écriture dans un fichier temporaire puis renommage (garanti atomique sous Windows/Linux/Mac)
     let tmp_file = format!("{}.tmp", vault_file);
     fs::write(&tmp_file, file_data).map_err(|_| "Erreur IO")?;
@@ -232,7 +240,7 @@ pub fn save_vault(password: &str, data: &mut VaultData) -> Result<(), &'static s
 pub fn unlock_vault(pseudo: &str, password: &str) -> Result<VaultData, &'static str> {
     let vault_file = get_vault_file(pseudo);
 
-    // [MITIGATION ANTI-TIMING] Si le profil (fichier) n'existe pas, 
+    // [MITIGATION ANTI-TIMING] Si le profil (fichier) n'existe pas,
     // l'algorithme Argon2 tourne dans le vide sur un sel généré aléatoirement.
     // Cela rend le temps de réponse aveugle (Constant-Time) équivalent à un échec de mot de passe.
     let file_data = match std::fs::read(&vault_file) {
@@ -255,7 +263,8 @@ pub fn unlock_vault(pseudo: &str, password: &str) -> Result<VaultData, &'static 
         return Err("Fichier corrompu");
     }
 
-    let salt_str = std::str::from_utf8(&file_data[4..4 + salt_len]).map_err(|_| "Erreur de décodage du Salt")?;
+    let salt_str = std::str::from_utf8(&file_data[4..4 + salt_len])
+        .map_err(|_| "Erreur de décodage du Salt")?;
     let salt = SaltString::from_b64(salt_str).map_err(|_| "Format de Salt invalide")?;
 
     let nonce_start = 4 + salt_len;
@@ -267,15 +276,21 @@ pub fn unlock_vault(pseudo: &str, password: &str) -> Result<VaultData, &'static 
     let key = derive_key(password, &salt);
     let cipher = ChaCha20Poly1305::new(&key.into());
 
-    let payload = cipher.decrypt(nonce, ciphertext).map_err(|_| "Mot de passe erroné ou corruption de données")?;
+    let payload = cipher
+        .decrypt(nonce, ciphertext)
+        .map_err(|_| "Mot de passe erroné ou corruption de données")?;
 
-    let mut vault_data: VaultData = serde_json::from_slice(&payload).map_err(|_| "Format de fichier invalide")?;
-    
+    let mut vault_data: VaultData =
+        serde_json::from_slice(&payload).map_err(|_| "Format de fichier invalide")?;
+
     vault_data.session_key = Some(key);
     vault_data.session_salt = Some(salt_str.to_string());
 
-    // [MITIGATION SWAP/PAGEFILE] Verrouille la clé privée en RAM pure pour interdire la pagination sur le disque 
-    let _ = region::lock(vault_data.private_key.as_ptr(), vault_data.private_key.len());
+    // [MITIGATION SWAP/PAGEFILE] Verrouille la clé privée en RAM pure pour interdire la pagination sur le disque
+    let _ = region::lock(
+        vault_data.private_key.as_ptr(),
+        vault_data.private_key.len(),
+    );
 
     Ok(vault_data)
 }
@@ -285,10 +300,10 @@ pub fn delete_vault(pseudo: &str, password: &str) -> std::result::Result<(), Str
     if let Ok(_vault_data) = unlock_vault(pseudo, password) {
         let vault_file = get_vault_file(pseudo);
         let _ = std::fs::remove_file(vault_file);
-        
+
         let media_folder = get_media_dir(pseudo);
         let _ = std::fs::remove_dir_all(media_folder);
-        
+
         Ok(())
     } else {
         Err("Mot de passe incorrect".to_string())
@@ -296,17 +311,27 @@ pub fn delete_vault(pseudo: &str, password: &str) -> std::result::Result<(), Str
 }
 
 #[allow(dead_code)]
-pub fn add_message_to_vault(password: &str, vault_data: &mut VaultData, dest: &str, msg: MessageEntry) -> Result<VaultData, &'static str> {
+pub fn add_message_to_vault(
+    password: &str,
+    vault_data: &mut VaultData,
+    dest: &str,
+    msg: MessageEntry,
+) -> Result<VaultData, &'static str> {
     let _ = unlock_vault(&vault_data.pseudo, password)?;
 
     let is_group = vault_data.groups.contains_key(dest);
-    
+
     let mut modified = false;
 
     if is_group || vault_data.contacts.contains_key(dest) {
-        let history = vault_data.chat_history.entry(dest.to_string()).or_insert_with(Vec::new);
-        
-        let exists = history.iter().any(|m| m.timestamp == msg.timestamp && m.author == msg.author);
+        let history = vault_data
+            .chat_history
+            .entry(dest.to_string())
+            .or_insert_with(Vec::new);
+
+        let exists = history
+            .iter()
+            .any(|m| m.timestamp == msg.timestamp && m.author == msg.author);
         if !exists {
             history.push(msg);
             modified = true;
@@ -364,21 +389,30 @@ pub fn sign_message(secret: &[u8], timestamp: u64, content: &str) -> String {
 }
 
 #[allow(dead_code)]
-pub fn verify_message(pub_id_hex: &str, timestamp: u64, content: &str, signature_hex: &str) -> bool {
+pub fn verify_message(
+    pub_id_hex: &str,
+    timestamp: u64,
+    content: &str,
+    signature_hex: &str,
+) -> bool {
     use ring::signature::UnparsedPublicKey;
     let mut pub_key_bytes = [0u8; 32];
-    if pub_id_hex.len() != 64 { return false; }
+    if pub_id_hex.len() != 64 {
+        return false;
+    }
     for i in 0..32 {
-        if let Ok(b) = u8::from_str_radix(&pub_id_hex[i*2..i*2+2], 16) {
+        if let Ok(b) = u8::from_str_radix(&pub_id_hex[i * 2..i * 2 + 2], 16) {
             pub_key_bytes[i] = b;
         } else {
             return false;
         }
     }
     let mut sig_bytes = [0u8; 64];
-    if signature_hex.len() != 128 { return false; }
+    if signature_hex.len() != 128 {
+        return false;
+    }
     for i in 0..64 {
-        if let Ok(b) = u8::from_str_radix(&signature_hex[i*2..i*2+2], 16) {
+        if let Ok(b) = u8::from_str_radix(&signature_hex[i * 2..i * 2 + 2], 16) {
             sig_bytes[i] = b;
         } else {
             return false;
@@ -389,14 +423,18 @@ pub fn verify_message(pub_id_hex: &str, timestamp: u64, content: &str, signature
     public_key.verify(message.as_bytes(), &sig_bytes).is_ok()
 }
 
-
-
-pub fn encrypt_and_save_media(pseudo: &str, _file_name: &str, raw_data: &[u8]) -> Result<([u8; 32], String), &'static str> {
+pub fn encrypt_and_save_media(
+    pseudo: &str,
+    _file_name: &str,
+    raw_data: &[u8],
+) -> Result<([u8; 32], String), &'static str> {
     let key = generate_secure_secret();
     let cipher = ChaCha20Poly1305::new(&key.into());
     let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
 
-    let ciphertext = cipher.encrypt(&nonce, raw_data).map_err(|_| "Erreur de chiffrement du media")?;
+    let ciphertext = cipher
+        .encrypt(&nonce, raw_data)
+        .map_err(|_| "Erreur de chiffrement du media")?;
 
     let media_folder = get_media_dir(pseudo);
     let mut rnd_name = [0u8; 16];
@@ -423,17 +461,29 @@ pub fn decrypt_media(path: &str, key: &[u8; 32]) -> Result<Vec<u8>, &'static str
     let ciphertext = &file_data[12..];
 
     let cipher = ChaCha20Poly1305::new(key.into());
-    let dec = cipher.decrypt(nonce, ciphertext).map_err(|_| "Decodage impossible - Cle invalide")?;
-    
+    let dec = cipher
+        .decrypt(nonce, ciphertext)
+        .map_err(|_| "Decodage impossible - Cle invalide")?;
+
     Ok(dec)
 }
 
-
-pub fn sign_signal(secret: &[u8], kind: &str, sender: &str, target: &str, pseudo: &str, payload: &str, ts: u64) -> String {
+pub fn sign_signal(
+    secret: &[u8],
+    kind: &str,
+    sender: &str,
+    target: &str,
+    pseudo: &str,
+    payload: &str,
+    ts: u64,
+) -> String {
     if let Ok(key_pair) = ring::signature::Ed25519KeyPair::from_seed_unchecked(secret) {
         let h = ring::digest::digest(&ring::digest::SHA256, payload.as_bytes());
         let hex: String = h.as_ref().iter().map(|b| format!("{:02x}", b)).collect();
-        let message = format!("KAKO-SIG-v2|{}|{}|{}|{}|{}|{}", kind, sender, target, pseudo, ts, hex);
+        let message = format!(
+            "KAKO-SIG-v2|{}|{}|{}|{}|{}|{}",
+            kind, sender, target, pseudo, ts, hex
+        );
         let signature = key_pair.sign(message.as_bytes());
         let mut out = String::new();
         for byte in signature.as_ref() {
@@ -445,21 +495,33 @@ pub fn sign_signal(secret: &[u8], kind: &str, sender: &str, target: &str, pseudo
     }
 }
 
-pub fn verify_signal(sender_pub_hex: &str, kind: &str, my_id: &str, pseudo: &str, payload: &str, ts: u64, signature_hex: &str) -> bool {
+pub fn verify_signal(
+    sender_pub_hex: &str,
+    kind: &str,
+    my_id: &str,
+    pseudo: &str,
+    payload: &str,
+    ts: u64,
+    signature_hex: &str,
+) -> bool {
     use ring::signature::UnparsedPublicKey;
     let mut pub_key_bytes = [0u8; 32];
-    if sender_pub_hex.len() != 64 { return false; }
+    if sender_pub_hex.len() != 64 {
+        return false;
+    }
     for i in 0..32 {
-        if let Ok(b) = u8::from_str_radix(&sender_pub_hex[i*2..i*2+2], 16) {
+        if let Ok(b) = u8::from_str_radix(&sender_pub_hex[i * 2..i * 2 + 2], 16) {
             pub_key_bytes[i] = b;
         } else {
             return false;
         }
     }
     let mut sig_bytes = [0u8; 64];
-    if signature_hex.len() != 128 { return false; }
+    if signature_hex.len() != 128 {
+        return false;
+    }
     for i in 0..64 {
-        if let Ok(b) = u8::from_str_radix(&signature_hex[i*2..i*2+2], 16) {
+        if let Ok(b) = u8::from_str_radix(&signature_hex[i * 2..i * 2 + 2], 16) {
             sig_bytes[i] = b;
         } else {
             return false;
@@ -467,7 +529,10 @@ pub fn verify_signal(sender_pub_hex: &str, kind: &str, my_id: &str, pseudo: &str
     }
     let h = ring::digest::digest(&ring::digest::SHA256, payload.as_bytes());
     let hex: String = h.as_ref().iter().map(|b| format!("{:02x}", b)).collect();
-    let message = format!("KAKO-SIG-v2|{}|{}|{}|{}|{}|{}", kind, sender_pub_hex, my_id, pseudo, ts, hex);
+    let message = format!(
+        "KAKO-SIG-v2|{}|{}|{}|{}|{}|{}",
+        kind, sender_pub_hex, my_id, pseudo, ts, hex
+    );
     let public_key = UnparsedPublicKey::new(&ring::signature::ED25519, pub_key_bytes);
     public_key.verify(message.as_bytes(), &sig_bytes).is_ok()
 }

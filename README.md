@@ -1,4 +1,4 @@
-﻿<div align="center">
+<div align="center">
   <img src="client/assets/images/Kakolookiyam_logo.png" alt="Kakolookiyam Logo" width="250" />
 </div>
 
@@ -37,7 +37,7 @@ This project adopts a strict **zero-trust, zero-trace** design:
 * **Networking & P2P:** **Tokio** (async) and **WebRTC** (native P2P mesh network, audio, and NAT traversal).
 
 ## Credits
-Special thanks to **Constance Persad** for the design of the Kakolookiyam logo.
+Special thanks to **Constance Persad** (https://www.instagram.com/draw.andco?utm_source=ig_web_button_share_sheet&stkn=ZDNlZDc0MzIxNw==) for the design of the Kakolookiyam logo.
 
 A huge thank you to **Toxare** (https://open.spotify.com/intl-fr/artist/5AFESJ1lGjK6hkCJLY8iwn?si=4kiT3AwnTw6OwlfoRpUU3A | teumaaa.pro@gmail.com) for his sound design and music composition.
 All audio works in the application are protected for life on the Tezos blockchain via the **MusicStart** service (URights / Sacem).
@@ -92,7 +92,7 @@ Ce projet adopte une architecture stricte **zéro-confiance, zéro-trace** :
 * **Réseau & P2P :** **Tokio** (asynchrone) et **WebRTC** (réseau maillé P2P natif, audio et franchissement NAT).
 
 ## Crédits
-Un remerciement tout particulier à **Constance Persad** pour la création et le design du logo Kakolookiyam.
+Un remerciement tout particulier à **Constance Persad** (https://www.instagram.com/draw.andco?utm_source=ig_web_button_share_sheet&stkn=ZDNlZDc0MzIxNw==) pour la création et le design du logo Kakolookiyam.
 
 Un énorme merci à **Toxare** (https://open.spotify.com/intl-fr/artist/5AFESJ1lGjK6hkCJLY8iwn?si=4kiT3AwnTw6OwlfoRpUU3A | teumaaa.pro@gmail.com) pour sa conception sonore et la composition des musiques.
 Toutes les œuvres sonores de l'application sont protégées à vie sur la blockchain Tezos via le service **MusicStart** (URights / Sacem).
@@ -147,7 +147,7 @@ Si cet outil garantit votre liberté numérique, soutenez son développement ind
 * **الشبكات و P2P:** **Tokio** للبرمجة غير المتزامنة و **WebRTC** لاتصالات P2P والصوت وتخطي شبكات NAT.
 
 ## شكر وتقدير
-شكر خاص لـ **Constance Persad** على تصميم شعار Kakolookiyam.
+شكر خاص لـ **Constance Persad** (https://www.instagram.com/draw.andco?utm_source=ig_web_button_share_sheet&stkn=ZDNlZDc0MzIxNw==) على تصميم شعار Kakolookiyam.
 
 شكر كبير لـ **Toxare** (https://open.spotify.com/intl-fr/artist/5AFESJ1lGjK6hkCJLY8iwn?si=4kiT3AwnTw6OwlfoRpUU3A | teumaaa.pro@gmail.com) على تصميمه الصوتي الرائع وتأليفاته الموسيقية المذهلة.
 جميع الأعمال الصوتية في التطبيق محمية مدى الحياة على بلوكشين Tezos عبر خدمة **MusicStart** (URights / Sacem).
@@ -159,3 +159,4 @@ Kakolookiyam فخور بكونه مفتوح المصدر ويوزع تحت تر�
 ## 💛 ادعم المشروع
 إذا كان هذا البرنامج يضمن لك حريتك الرقمية، فكر في دعم تطويره المستقل:
 🎁 **[دعم Altayr على GitHub](https://github.com/sponsors/AItayr)**
+

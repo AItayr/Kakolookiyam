@@ -1,21 +1,24 @@
-﻿use secrecy::ExposeSecret;
-use iced::Task as Command;
-use zeroize::Zeroize;
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
+use iced::Task as Command;
+use secrecy::ExposeSecret;
+use zeroize::Zeroize;
 
-
-const AUTO_OPEN_OK: &[&str] = &["jpg","jpeg","png","gif","webp","pdf","txt"];
+const AUTO_OPEN_OK: &[&str] = &["jpg", "jpeg", "png", "gif", "webp", "pdf", "txt"];
 
 fn sanitize_display_name(name: &str) -> String {
     name.chars()
-        .filter(|c| !c.is_control() && !matches!(*c,
-            '\u{200E}'|'\u{200F}'|'\u{202A}'..='\u{202E}'|'\u{2066}'..='\u{2069}'))
+        .filter(|c| {
+            !c.is_control()
+                && !matches!(*c,
+            '\u{200E}'|'\u{200F}'|'\u{202A}'..='\u{202E}'|'\u{2066}'..='\u{2069}')
+        })
         .collect()
 }
 
 fn safe_to_open(name: &str) -> bool {
-    std::path::Path::new(name).extension()
+    std::path::Path::new(name)
+        .extension()
         .and_then(|e| e.to_str())
         .map(|e| AUTO_OPEN_OK.contains(&e.to_ascii_lowercase().as_str()))
         .unwrap_or(false)
@@ -26,36 +29,45 @@ impl KakolookiyamApp {
         match message {
             Message::OpenFileDialog => {
                 self.idle_seconds = 0;
-                return Command::perform(async {
-                    let file = rfd::AsyncFileDialog::new()
-                        .set_title("Sélectionner un fichier (Max 50 Mo)")
-                        .add_filter("Fichiers sécurisés", &["jpg", "png", "rar", "zip", "pdf", "docx", "txt"])
-                        .pick_file()
-                        .await;
-                    file.map(|f| f.path().to_string_lossy().to_string())
-                }, Message::FileSelected);
+                return Command::perform(
+                    async {
+                        let file = rfd::AsyncFileDialog::new()
+                            .set_title("Sélectionner un fichier (Max 50 Mo)")
+                            .add_filter(
+                                "Fichiers sécurisés",
+                                &["jpg", "png", "rar", "zip", "pdf", "docx", "txt"],
+                            )
+                            .pick_file()
+                            .await;
+                        file.map(|f| f.path().to_string_lossy().to_string())
+                    },
+                    Message::FileSelected,
+                );
             }
 
             Message::FileSelected(path_opt) => {
                 self.idle_seconds = 0;
                 if let Some(path) = path_opt {
-                    return Command::perform(async move {
-                        if let Ok(metadata) = tokio::fs::metadata(&path).await {
-                            if metadata.len() > 52_428_800 {
-                                return Some(("ERROR_SIZE".to_string(), vec![]));
+                    return Command::perform(
+                        async move {
+                            if let Ok(metadata) = tokio::fs::metadata(&path).await {
+                                if metadata.len() > 52_428_800 {
+                                    return Some(("ERROR_SIZE".to_string(), vec![]));
+                                }
                             }
-                        }
-                        if let Ok(raw_data) = tokio::fs::read(&path).await {
-                            let file_name = std::path::Path::new(&path)
-                                .file_name()
-                                .unwrap_or_default()
-                                .to_string_lossy()
-                                .into_owned();
-                            Some((file_name, raw_data))
-                        } else {
-                            None
-                        }
-                    }, Message::FileRead);
+                            if let Ok(raw_data) = tokio::fs::read(&path).await {
+                                let file_name = std::path::Path::new(&path)
+                                    .file_name()
+                                    .unwrap_or_default()
+                                    .to_string_lossy()
+                                    .into_owned();
+                                Some((file_name, raw_data))
+                            } else {
+                                None
+                            }
+                        },
+                        Message::FileRead,
+                    );
                 }
             }
 
@@ -63,7 +75,8 @@ impl KakolookiyamApp {
                 self.idle_seconds = 0;
                 if let Some((file_name, raw_data)) = data_opt {
                     if file_name == "ERROR_SIZE" {
-                        self.status_message = crate::ui::i18n::t(&self.language, "status_file_too_large");
+                        self.status_message =
+                            crate::ui::i18n::t(&self.language, "status_file_too_large");
                         return Command::none();
                     }
 
@@ -74,8 +87,11 @@ impl KakolookiyamApp {
                     };
 
                     if let Some(target_id) = target {
-                        if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
-                            if let Ok((key_bytes, enc_path)) = crate::crypto::encrypt_and_save_media(&vd.pseudo, &file_name, &raw_data) {
+                        if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password)
+                        {
+                            if let Ok((key_bytes, enc_path)) = crate::crypto::encrypt_and_save_media(
+                                &vd.pseudo, &file_name, &raw_data,
+                            ) {
                                 use base64::prelude::*;
                                 let key_b64 = BASE64_STANDARD.encode(key_bytes);
                                 let my_id = crate::crypto::derive_public_id(&vd.private_key);
@@ -84,14 +100,16 @@ impl KakolookiyamApp {
 
                                 if target_id.starts_with("grp_") {
                                     if let Some(group) = vd.groups.get(&target_id) {
-                                        let net_filename = format!("{}|{}", target_id, file_name.clone());
+                                        let net_filename =
+                                            format!("{}|{}", target_id, file_name.clone());
                                         let tx = self.tx_network.clone();
                                         let members = group.members.clone();
                                         let enc_path_net = enc_path.clone();
 
                                         broadcast_cmd = Command::perform(
                                             async move {
-                                                let sends = members.into_iter()
+                                                let sends = members
+                                                    .into_iter()
                                                     .filter(|m| m != &my_id)
                                                     .map(|member_id| {
                                                         let tx = tx.clone();
@@ -100,24 +118,39 @@ impl KakolookiyamApp {
                                                         let enc_path_net = enc_path_net.clone();
                                                         let msg = format!(
                                                             "FILE_SEND_INIT:{}:{}:{}:{}",
-                                                            member_id, net_filename, key_b64, enc_path_net
+                                                            member_id,
+                                                            net_filename,
+                                                            key_b64,
+                                                            enc_path_net
                                                         );
-                                                        async move { let _ = tx.send(msg); }
+                                                        async move {
+                                                            let _ = tx.send(msg);
+                                                        }
                                                     });
                                                 futures_util::future::join_all(sends).await;
                                             },
-                                            |_| Message::ResetInactivity
+                                            |_| Message::ResetInactivity,
                                         );
                                     }
                                 } else {
                                     let _ = self.tx_network.send(format!(
                                         "FILE_SEND_INIT:{}:{}:{}:{}",
-                                        target_id, file_name.clone(), key_b64, enc_path.clone()
+                                        target_id,
+                                        file_name.clone(),
+                                        key_b64,
+                                        enc_path.clone()
                                     ));
                                 }
 
-                                let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
-                                let content = format!("{} {}", crate::ui::i18n::t(&self.language, "msg_file_shared"), file_name);
+                                let timestamp = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_secs();
+                                let content = format!(
+                                    "{} {}",
+                                    crate::ui::i18n::t(&self.language, "msg_file_shared"),
+                                    file_name
+                                );
                                 let entry = crate::crypto::MessageEntry {
                                     author: crate::ui::i18n::t(&self.language, "me_author"),
                                     content: content.clone(),
@@ -125,19 +158,36 @@ impl KakolookiyamApp {
                                     is_media: true,
                                     media_key: Some(key_bytes),
                                     media_path: Some(enc_path),
-                                    signature: Some(crate::crypto::sign_message(&vd.private_key, timestamp, &content)),
+                                    signature: Some(crate::crypto::sign_message(
+                                        &vd.private_key,
+                                        timestamp,
+                                        &content,
+                                    )),
                                 };
 
-                                vd.chat_history.entry(target_id.clone()).or_default().push(entry);
+                                vd.chat_history
+                                    .entry(target_id.clone())
+                                    .or_default()
+                                    .push(entry);
                                 let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
 
                                 // [MITIGATION] Zero-Trace RAM: Wiping the plaintext file buffer
                                 let mut raw_data_mut = raw_data;
                                 raw_data_mut.zeroize();
 
-                                self.chat_history.push((crate::ui::i18n::t(&self.language, "me_author"), format!("{} {}", crate::ui::i18n::t(&self.language, "msg_file_shared"), file_name)));
+                                self.chat_history.push((
+                                    crate::ui::i18n::t(&self.language, "me_author"),
+                                    format!(
+                                        "{} {}",
+                                        crate::ui::i18n::t(&self.language, "msg_file_shared"),
+                                        file_name
+                                    ),
+                                ));
 
-                                crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_message_sent();
+                                crate::sound::SOUND_MANAGER
+                                    .lock()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .play_message_sent();
 
                                 return broadcast_cmd;
                             }
@@ -148,54 +198,74 @@ impl KakolookiyamApp {
 
             Message::OpenMedia(filename, key, path) => {
                 self.idle_seconds = 0;
-                return Command::perform(async move {
-                    let raw_clean_name = filename.replace("📎 Fichier reçu : ", "").replace("📎 File received: ", "").replace("📎 تم استلام الملف: ", "").replace("📎 Fichier partagé : ", "");
-                    let clean_name = sanitize_display_name(&raw_clean_name);
-                    let dest = rfd::AsyncFileDialog::new()
-                        .set_title("Extraction...")
-                        .set_file_name(&clean_name)
-                        .save_file()
-                        .await;
+                return Command::perform(
+                    async move {
+                        let raw_clean_name = filename
+                            .replace("📎 Fichier reçu : ", "")
+                            .replace("📎 File received: ", "")
+                            .replace("📎 تم استلام الملف: ", "")
+                            .replace("📎 Fichier partagé : ", "");
+                        let clean_name = sanitize_display_name(&raw_clean_name);
+                        let dest = rfd::AsyncFileDialog::new()
+                            .set_title("Extraction...")
+                            .set_file_name(&clean_name)
+                            .save_file()
+                            .await;
 
-                    if let Some(dest_path) = dest {
-                        let dest_path_str = dest_path.path().to_string_lossy().to_string();
+                        if let Some(dest_path) = dest {
+                            let dest_path_str = dest_path.path().to_string_lossy().to_string();
 
-                        // --- MULTITHREADING SUR L'EXTRACTION ---
-                        let decrypted_data_res = tokio::task::spawn_blocking(move || {
-                            crate::crypto::decrypt_media(&path, &key)
-                        }).await.unwrap();
+                            // --- MULTITHREADING SUR L'EXTRACTION ---
+                            let decrypted_data_res = tokio::task::spawn_blocking(move || {
+                                crate::crypto::decrypt_media(&path, &key)
+                            })
+                            .await
+                            .unwrap();
 
-                        if let Ok(decrypted_data) = decrypted_data_res {
-                            let mut decrypted_mut = decrypted_data;
-                            let _ = tokio::fs::write(&dest_path_str, &decrypted_mut).await;
-                            
-                            // [MITIGATION] Zero-Trace RAM: Wipe plaintext after extract
-                            decrypted_mut.zeroize();
+                            if let Ok(decrypted_data) = decrypted_data_res {
+                                let mut decrypted_mut = decrypted_data;
+                                let _ = tokio::fs::write(&dest_path_str, &decrypted_mut).await;
 
-                            #[cfg(target_os = "windows")]
-                            {
-                                let zone_identifier = format!("{}:Zone.Identifier", dest_path_str);
-                                let _ = tokio::fs::write(&zone_identifier, "[ZoneTransfer]\r\nZoneId=3\r\n").await;
-                            }
+                                // [MITIGATION] Zero-Trace RAM: Wipe plaintext after extract
+                                decrypted_mut.zeroize();
 
-                            if safe_to_open(&dest_path_str) {
                                 #[cfg(target_os = "windows")]
-                                let _ = std::process::Command::new("cmd").args(["/c", "start", "", &dest_path_str]).spawn();
-                                #[cfg(target_os = "macos")]
-                                let _ = std::process::Command::new("open").arg(&dest_path_str).spawn();
-                                #[cfg(target_os = "linux")]
-                                let _ = std::process::Command::new("xdg-open").arg(&dest_path_str).spawn();
-                                "✅ Fichier déchiffré et ouvert !".to_string()
+                                {
+                                    let zone_identifier =
+                                        format!("{}:Zone.Identifier", dest_path_str);
+                                    let _ = tokio::fs::write(
+                                        &zone_identifier,
+                                        "[ZoneTransfer]\r\nZoneId=3\r\n",
+                                    )
+                                    .await;
+                                }
+
+                                if safe_to_open(&dest_path_str) {
+                                    #[cfg(target_os = "windows")]
+                                    let _ = std::process::Command::new("cmd")
+                                        .args(["/c", "start", "", &dest_path_str])
+                                        .spawn();
+                                    #[cfg(target_os = "macos")]
+                                    let _ = std::process::Command::new("open")
+                                        .arg(&dest_path_str)
+                                        .spawn();
+                                    #[cfg(target_os = "linux")]
+                                    let _ = std::process::Command::new("xdg-open")
+                                        .arg(&dest_path_str)
+                                        .spawn();
+                                    "✅ Fichier déchiffré et ouvert !".to_string()
+                                } else {
+                                    "✅ Fichier enregistré — ouverture automatique désactivée pour ce type.".to_string()
+                                }
                             } else {
-                                "✅ Fichier enregistré — ouverture automatique désactivée pour ce type.".to_string()
+                                "❌ Erreur de déchiffrement.".to_string()
                             }
                         } else {
-                            "❌ Erreur de déchiffrement.".to_string()
+                            "⚠️ Extraction annulée.".to_string()
                         }
-                    } else {
-                        "⚠️ Extraction annulée.".to_string()
-                    }
-                }, Message::MediaSaved);
+                    },
+                    Message::MediaSaved,
+                );
             }
 
             Message::MediaSaved(msg) => {
@@ -208,36 +278,47 @@ impl KakolookiyamApp {
                 self.idle_seconds = 0;
                 self.status_message = crate::ui::i18n::t(&self.language, "status_pwd_loading");
 
-                return Command::perform(async move {
-                    // La cryptographie lourde est envoyée sur un autre thread pour libérer l'UI
-                    let res = tokio::task::spawn_blocking(move || {
-                        crate::crypto::decrypt_media(&path, &key)
-                    }).await.unwrap();
-                    res.ok()
-                }, Message::PreviewMediaLoaded);
+                return Command::perform(
+                    async move {
+                        // La cryptographie lourde est envoyée sur un autre thread pour libérer l'UI
+                        let res = tokio::task::spawn_blocking(move || {
+                            crate::crypto::decrypt_media(&path, &key)
+                        })
+                        .await
+                        .unwrap();
+                        res.ok()
+                    },
+                    Message::PreviewMediaLoaded,
+                );
             }
 
             Message::PreviewMediaLoaded(data_opt) => {
                 self.idle_seconds = 0;
                 if let Some(decrypted_bytes) = data_opt {
-                    self.media_preview = Some(iced::widget::image::Handle::from_bytes(decrypted_bytes));
+                    self.media_preview =
+                        Some(iced::widget::image::Handle::from_bytes(decrypted_bytes));
                     self.status_message = crate::ui::i18n::t(&self.language, "status_media_ram");
                 } else {
                     self.status_message = crate::ui::i18n::t(&self.language, "status_media_error");
                 }
             }
 
-                        Message::AcceptFileTransfer(sender_id, filename, total, key_b64) => {
-                self.incoming_file_offers.retain(|(s, f, _, _)| s != &sender_id || f != &filename);
-                let _ = self.tx_network.send(format!("ACCEPT_FILE:{}:{}:{}:{}", sender_id, filename, total, key_b64));
+            Message::AcceptFileTransfer(sender_id, filename, total, key_b64) => {
+                self.incoming_file_offers
+                    .retain(|(s, f, _, _)| s != &sender_id || f != &filename);
+                let _ = self.tx_network.send(format!(
+                    "ACCEPT_FILE:{}:{}:{}:{}",
+                    sender_id, filename, total, key_b64
+                ));
             }
             Message::RejectFileTransfer(sender_id, filename) => {
-                self.incoming_file_offers.retain(|(s, f, _, _)| s != &sender_id || f != &filename);
+                self.incoming_file_offers
+                    .retain(|(s, f, _, _)| s != &sender_id || f != &filename);
             }
             Message::ClosePreview => {
                 self.idle_seconds = 0;
                 self.media_preview = None;
-                        self.status_message = crate::ui::i18n::t(&self.language, "status_media_purged");
+                self.status_message = crate::ui::i18n::t(&self.language, "status_media_purged");
             }
 
             _ => {}

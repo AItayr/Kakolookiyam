@@ -1,17 +1,17 @@
 use std::sync::Arc;
-use tokio::sync::mpsc::UnboundedSender;
 use std::sync::Arc as StdArc;
+use tokio::sync::mpsc::UnboundedSender;
 
 static TRACK_ID_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(1);
 use webrtc::api::API;
-use webrtc::peer_connection::RTCPeerConnection;
-use webrtc::peer_connection::configuration::RTCConfiguration;
-use webrtc::peer_connection::policy::ice_transport_policy::RTCIceTransportPolicy;
-use webrtc::ice_transport::ice_server::RTCIceServer;
-use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
-use webrtc::ice_transport::ice_candidate::RTCIceCandidate;
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::data_channel::data_channel_message::DataChannelMessage;
+use webrtc::ice_transport::ice_candidate::RTCIceCandidate;
+use webrtc::ice_transport::ice_server::RTCIceServer;
+use webrtc::peer_connection::RTCPeerConnection;
+use webrtc::peer_connection::configuration::RTCConfiguration;
+use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
+use webrtc::peer_connection::policy::ice_transport_policy::RTCIceTransportPolicy;
 use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
 
 use super::router::Signal;
@@ -30,23 +30,26 @@ pub async fn create_peer_connection(
     is_call: bool,
     turn_user: String,
     turn_pass: String,
-) -> Result<(Arc<RTCPeerConnection>, std::sync::Arc<std::sync::atomic::AtomicBool>), Box<dyn std::error::Error>> {
-    
+) -> Result<
+    (
+        Arc<RTCPeerConnection>,
+        std::sync::Arc<std::sync::atomic::AtomicBool>,
+    ),
+    Box<dyn std::error::Error>,
+> {
     // 1. STRICT RELAY ZERO-TRACE CONFIGURATION
     // Core engine will literally refuse to touch your local NAT, bypassing IP leaks entirely!
     let config = RTCConfiguration {
         ice_transport_policy: RTCIceTransportPolicy::Relay,
-        ice_servers: vec![
-            RTCIceServer {
-                urls: vec!["turn:89.168.62.93:3478".to_owned()],
-                username: turn_user,
-                credential: turn_pass,
-                ..Default::default()
-            }
-        ],
+        ice_servers: vec![RTCIceServer {
+            urls: vec!["turn:89.168.62.93:3478".to_owned()],
+            username: turn_user,
+            credential: turn_pass,
+            ..Default::default()
+        }],
         ..Default::default()
     };
-    
+
     let pc = Arc::new(api.new_peer_connection(config).await?);
 
     let tx_ui_state = tx_ui.clone();
@@ -62,7 +65,9 @@ pub async fn create_peer_connection(
         let is_actual_call = ic_state;
         Box::pin(async move {
             if active.load(std::sync::atomic::Ordering::Relaxed) {
-                if state == RTCPeerConnectionState::Failed || state == RTCPeerConnectionState::Disconnected {
+                if state == RTCPeerConnectionState::Failed
+                    || state == RTCPeerConnectionState::Disconnected
+                {
                     let _ = tx.send(format!("CALL_ENDED:{}", tgt));
                 } else if state == RTCPeerConnectionState::Connected {
                     if is_actual_call {
@@ -77,23 +82,25 @@ pub async fn create_peer_connection(
     let tx_sig_ice = tx_signal.clone();
     let target_ice = target_id.clone();
     let my_id_ice = my_id.clone();
-    
+
     pc.on_ice_candidate(Box::new(move |c: Option<RTCIceCandidate>| {
         let tx_sig_ice = tx_sig_ice.clone();
         let target = target_ice.clone();
         let sender = my_id_ice.clone();
-        
+
         Box::pin(async move {
             if let Some(candidate) = c {
                 if let Ok(json) = candidate.to_json() {
-                    let _ = tx_sig_ice.send(Signal::Ice {
-                        candidate: json.candidate,
-                        sender_id: sender,
-                        target_id: target,
-                        pseudo: String::new(),
-                        timestamp: 0,
-                        signature: String::new()
-                    }).await;
+                    let _ = tx_sig_ice
+                        .send(Signal::Ice {
+                            candidate: json.candidate,
+                            sender_id: sender,
+                            target_id: target,
+                            pseudo: String::new(),
+                            timestamp: 0,
+                            signature: String::new(),
+                        })
+                        .await;
                 }
             }
         })
@@ -111,19 +118,26 @@ pub async fn create_peer_connection(
                 tokio::spawn(async move {
                     let mut decoder = audiopus::coder::Decoder::new(
                         audiopus::SampleRate::Hz48000,
-                        audiopus::Channels::Stereo
-                    ).unwrap();
+                        audiopus::Channels::Stereo,
+                    )
+                    .unwrap();
 
                     let track = track;
                     while let Ok((rtp_packet, _)) = track.read_rtp().await {
                         let tgt_id_for_audio = target_id_final.clone();
-                    let mut decoded_pcm = vec![0i16; 1920 * 2];
-                        if let Ok(len) = decoder.decode(Some(rtp_packet.payload.as_ref()), &mut decoded_pcm, false) {
+                        let mut decoded_pcm = vec![0i16; 1920 * 2];
+                        if let Ok(len) = decoder.decode(
+                            Some(rtp_packet.payload.as_ref()),
+                            &mut decoded_pcm,
+                            false,
+                        ) {
                             decoded_pcm.truncate(len * 2);
                             let vol = crate::audio::get_user_volume(&tgt_id_for_audio);
                             if vol != 1.0 {
                                 for sample in decoded_pcm.iter_mut() {
-                                    *sample = (*sample as f32 * vol).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
+                                    *sample = (*sample as f32 * vol)
+                                        .clamp(i16::MIN as f32, i16::MAX as f32)
+                                        as i16;
                                 }
                             }
                             let _ = tx_spk.send((track_id, decoded_pcm));
@@ -133,9 +147,10 @@ pub async fn create_peer_connection(
             })
         }));
 
-        let rtp_sender = pc.add_track(
-            StdArc::clone(&track) as StdArc<dyn webrtc::track::track_local::TrackLocal + Send + Sync>
-        ).await?;
+        let rtp_sender = pc
+            .add_track(StdArc::clone(&track)
+                as StdArc<dyn webrtc::track::track_local::TrackLocal + Send + Sync>)
+            .await?;
 
         tokio::spawn(async move {
             let mut rtcp_buf = vec![0u8; 1500];
@@ -171,19 +186,19 @@ pub async fn create_peer_connection(
                 let msg = format!("{{\"type\":\"pseudo\",\"value\":\"{}\"}}", p_open);
                 let _ = d_open.send_text(msg).await;
             } else {
-            d_clone.on_open(Box::new(move || {
-                let p = p_open.clone();
-                let tgt = tgt_open.clone();
-                let tx = tx_open.clone();
+                d_clone.on_open(Box::new(move || {
+                    let p = p_open.clone();
+                    let tgt = tgt_open.clone();
+                    let tx = tx_open.clone();
 
-                Box::pin(async move {
-                    if is_call {
-                        let _ = tx.send(format!("CALL_ACTIVE:{}", tgt));
-                    }
-                    let msg = format!("{{\"type\":\"pseudo\",\"value\":\"{}\"}}", p);
-                    let _ = d_open.send_text(msg).await;
-                })
-            }));
+                    Box::pin(async move {
+                        if is_call {
+                            let _ = tx.send(format!("CALL_ACTIVE:{}", tgt));
+                        }
+                        let msg = format!("{{\"type\":\"pseudo\",\"value\":\"{}\"}}", p);
+                        let _ = d_open.send_text(msg).await;
+                    })
+                }));
             }
 
             d_clone.on_message(Box::new(move |msg: DataChannelMessage| {
@@ -196,12 +211,16 @@ pub async fn create_peer_connection(
                     if text.starts_with("{\"type\":\"pseudo\"") {
                         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
                             if let Some(friend_pseudo) = json["value"].as_str() {
-                                let _ = tx_ui_msg_clone.send(format!("CONTACT:{}:{}", target_msg_clone, friend_pseudo));
+                                let _ = tx_ui_msg_clone.send(format!(
+                                    "CONTACT:{}:{}",
+                                    target_msg_clone, friend_pseudo
+                                ));
                                 return Box::pin(async move {});
                             }
                         }
                     } else {
-                        let _ = tx_ui_msg_clone.send(format!("CHAT_RECV:{}:{}", target_msg_clone, text));
+                        let _ = tx_ui_msg_clone
+                            .send(format!("CHAT_RECV:{}:{}", target_msg_clone, text));
                     }
                 }
                 Box::pin(async move {})

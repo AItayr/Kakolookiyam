@@ -1,19 +1,24 @@
-﻿use std::sync::OnceLock;
+use std::sync::OnceLock;
 
 pub fn get_logo_handle() -> iced::widget::image::Handle {
     static LOGO: OnceLock<iced::widget::image::Handle> = OnceLock::new();
     LOGO.get_or_init(|| {
-        iced::widget::image::Handle::from_bytes(include_bytes!("../../../assets/images/Kakolookiyam_logo.png").as_slice())
-    }).clone()
+        iced::widget::image::Handle::from_bytes(
+            include_bytes!("../../../assets/images/Kakolookiyam_logo.png").as_slice(),
+        )
+    })
+    .clone()
 }
 
-use secrecy::ExposeSecret;
-use iced::widget::{button, column, container, row, text_input, Container, image, slider};
-use iced::{alignment, Alignment, Color, Element, Length};
 use crate::ui::app::KakolookiyamApp;
-use crate::ui::messages::Message;
-use crate::ui::theme::{text_main, text_muted, primary_button, secondary_button, error_container_style};
 use crate::ui::i18n::t;
+use crate::ui::messages::Message;
+use crate::ui::theme::{
+    error_container_style, primary_button, secondary_button, text_main, text_muted,
+};
+use iced::widget::{Container, button, column, container, image, row, slider, text_input};
+use iced::{Alignment, Color, Element, Length, alignment};
+use secrecy::ExposeSecret;
 
 impl KakolookiyamApp {
     pub(crate) fn clear_auth_fields(&mut self) {
@@ -24,27 +29,56 @@ impl KakolookiyamApp {
     }
 
     pub(crate) fn view_welcome(&self) -> Element<'_, Message> {
-        let lang_btn = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "lang_toggle")))
-            .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
-            .on_press(Message::ToggleLanguage)
-            .padding(10);
-            
-        let vol = crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).get_main_theme_volume();
+        let lang_btn = button(crate::ui::i18n::app_text(
+            &self.language,
+            t(&self.language, "lang_toggle"),
+        ))
+        .style(
+            secondary_button
+                as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style,
+        )
+        .on_press(Message::ToggleLanguage)
+        .padding(10);
+
+        let vol = crate::sound::SOUND_MANAGER
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_main_theme_volume();
         let icon_str = if vol == 0.0 { "🔇" } else { "🔊" };
         let music_btn = button(crate::ui::i18n::app_text(&self.language, icon_str))
-            .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
+            .style(
+                secondary_button
+                    as fn(
+                        &iced::Theme,
+                        iced::widget::button::Status,
+                    ) -> iced::widget::button::Style,
+            )
             .on_press(Message::ToggleMainMusicPanel)
             .padding(10);
-            
+
         let music_section = if self.show_main_music_panel {
-            let sld = slider(0.0..=1.0, vol, Message::MainThemeVolumeChanged).step(0.01_f32).width(Length::Fixed(100.0));
-            row![container(sld).padding(10).align_y(iced::alignment::Vertical::Center), music_btn].spacing(5).align_y(Alignment::Center)
+            let sld = slider(0.0..=1.0, vol, Message::MainThemeVolumeChanged)
+                .step(0.01_f32)
+                .width(Length::Fixed(100.0));
+            row![
+                container(sld)
+                    .padding(10)
+                    .align_y(iced::alignment::Vertical::Center),
+                music_btn
+            ]
+            .spacing(5)
+            .align_y(Alignment::Center)
         } else {
             row![music_btn].align_y(Alignment::Center)
         };
 
-        let top_bar_content = row![music_section, lang_btn].spacing(10).align_y(Alignment::Start);
-        let top_bar = container(top_bar_content).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
+        let top_bar_content = row![music_section, lang_btn]
+            .spacing(10)
+            .align_y(Alignment::Start);
+        let top_bar = container(top_bar_content)
+            .width(Length::Fill)
+            .align_x(alignment::Horizontal::Right)
+            .padding(20);
 
         let logo = image(crate::ui::views::auth::get_logo_handle())
             .width(Length::Fixed(150.0))
@@ -58,15 +92,27 @@ impl KakolookiyamApp {
             .size(18)
             .color(text_muted(&self.current_theme));
 
-        let btn_create = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_create")))
-            .style(primary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
-            .on_press(Message::GoToCreateAccount)
-            .padding(15);
+        let btn_create = button(crate::ui::i18n::app_text(
+            &self.language,
+            t(&self.language, "btn_create"),
+        ))
+        .style(
+            primary_button
+                as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style,
+        )
+        .on_press(Message::GoToCreateAccount)
+        .padding(15);
 
-        let btn_login = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_login")))
-            .style(primary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
-            .on_press(Message::GoToLogin)
-            .padding(15);
+        let btn_login = button(crate::ui::i18n::app_text(
+            &self.language,
+            t(&self.language, "btn_login"),
+        ))
+        .style(
+            primary_button
+                as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style,
+        )
+        .on_press(Message::GoToLogin)
+        .padding(15);
 
         let content = column![logo, title, subtitle, btn_create, btn_login]
             .spacing(25)
@@ -74,38 +120,77 @@ impl KakolookiyamApp {
             .align_x(Alignment::Center)
             .width(Length::Fill);
 
-        let main_box = Container::new(content).width(Length::Fill).height(Length::Fill).center_x(iced::Length::Fill).center_y(iced::Length::Fill);
-        
+        let main_box = Container::new(content)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(iced::Length::Fill)
+            .center_y(iced::Length::Fill);
+
         let trademark = crate::ui::i18n::app_text(&self.language, "Kakolookiyam ™")
             .size(14)
             .color(text_muted(&self.current_theme));
-        let bottom_bar = container(trademark).width(Length::Fill).align_x(alignment::Horizontal::Center).padding(20);
+        let bottom_bar = container(trademark)
+            .width(Length::Fill)
+            .align_x(alignment::Horizontal::Center)
+            .padding(20);
 
-        column![top_bar, main_box, bottom_bar].width(Length::Fill).height(Length::Fill).into()
+        column![top_bar, main_box, bottom_bar]
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
     }
 
     pub(crate) fn view_create_account(&self) -> Element<'_, Message> {
-        let lang_btn = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "lang_toggle")))
-            .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
-            .on_press(Message::ToggleLanguage)
-            .padding(10);
-            
-        let vol = crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).get_main_theme_volume();
+        let lang_btn = button(crate::ui::i18n::app_text(
+            &self.language,
+            t(&self.language, "lang_toggle"),
+        ))
+        .style(
+            secondary_button
+                as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style,
+        )
+        .on_press(Message::ToggleLanguage)
+        .padding(10);
+
+        let vol = crate::sound::SOUND_MANAGER
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_main_theme_volume();
         let icon_str = if vol == 0.0 { "🔇" } else { "🔊" };
         let music_btn = button(crate::ui::i18n::app_text(&self.language, icon_str))
-            .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
+            .style(
+                secondary_button
+                    as fn(
+                        &iced::Theme,
+                        iced::widget::button::Status,
+                    ) -> iced::widget::button::Style,
+            )
             .on_press(Message::ToggleMainMusicPanel)
             .padding(10);
-            
+
         let music_section = if self.show_main_music_panel {
-            let sld = slider(0.0..=1.0, vol, Message::MainThemeVolumeChanged).step(0.01_f32).width(Length::Fixed(100.0));
-            row![container(sld).padding(10).align_y(iced::alignment::Vertical::Center), music_btn].spacing(5).align_y(Alignment::Center)
+            let sld = slider(0.0..=1.0, vol, Message::MainThemeVolumeChanged)
+                .step(0.01_f32)
+                .width(Length::Fixed(100.0));
+            row![
+                container(sld)
+                    .padding(10)
+                    .align_y(iced::alignment::Vertical::Center),
+                music_btn
+            ]
+            .spacing(5)
+            .align_y(Alignment::Center)
         } else {
             row![music_btn].align_y(Alignment::Center)
         };
 
-        let top_bar_content = row![music_section, lang_btn].spacing(10).align_y(Alignment::Start);
-        let top_bar = container(top_bar_content).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
+        let top_bar_content = row![music_section, lang_btn]
+            .spacing(10)
+            .align_y(Alignment::Start);
+        let top_bar = container(top_bar_content)
+            .width(Length::Fill)
+            .align_x(alignment::Horizontal::Right)
+            .padding(20);
 
         let logo = image(crate::ui::views::auth::get_logo_handle())
             .width(Length::Fixed(100.0))
@@ -119,10 +204,13 @@ impl KakolookiyamApp {
             crate::ui::i18n::app_text(&self.language, t(&self.language, "create_vault_title"))
                 .size(25)
                 .color(text_main(&self.current_theme))
-        ].spacing(10).align_x(Alignment::Center);
+        ]
+        .spacing(10)
+        .align_x(Alignment::Center);
 
-        let info = crate::ui::i18n::app_text(&self.language, t(&self.language, "create_vault_info"))
-            .color(text_muted(&self.current_theme));
+        let info =
+            crate::ui::i18n::app_text(&self.language, t(&self.language, "create_vault_info"))
+                .color(text_muted(&self.current_theme));
 
         let pseudo_input = text_input(&t(&self.language, "pseudo_placeholder"), &self.pseudo_input)
             .on_input(Message::PseudoChanged)
@@ -130,22 +218,30 @@ impl KakolookiyamApp {
 
         let pass_input = text_input(
             &t(&self.language, "password_new_placeholder"),
-            self.password_input.expose_secret()
+            self.password_input.expose_secret(),
         )
         .on_input(Message::PasswordChanged)
         .secure(true)
         .padding(15);
 
-        let pass_confirm = text_input(&t(&self.language, "password_confirm_placeholder"), self.password_confirm_input.expose_secret())
-            .on_input(Message::PasswordConfirmChanged)
-            .secure(true)
-            .padding(15);
+        let pass_confirm = text_input(
+            &t(&self.language, "password_confirm_placeholder"),
+            self.password_confirm_input.expose_secret(),
+        )
+        .on_input(Message::PasswordConfirmChanged)
+        .secure(true)
+        .padding(15);
 
         let mut col = column![title, info, pseudo_input, pass_input, pass_confirm].spacing(20);
 
         if let Some(err) = &self.auth_error {
             let error_box = container(
-                crate::ui::i18n::app_text(&self.language, format!("{} : {}", t(&self.language, "error"), err)).size(14).color(Color::from_rgb(0.9, 0.15, 0.15))
+                crate::ui::i18n::app_text(
+                    &self.language,
+                    format!("{} : {}", t(&self.language, "error"), err),
+                )
+                .size(14)
+                .color(Color::from_rgb(0.9, 0.15, 0.15)),
             )
             .padding(12)
             .width(Length::Fill)
@@ -154,56 +250,116 @@ impl KakolookiyamApp {
             col = col.push(error_box);
         }
 
-        let btn_submit = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_submit_create")))
-            .style(primary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
-            .on_press(Message::SubmitCreateAccount)
-            .padding(12);
+        let btn_submit = button(crate::ui::i18n::app_text(
+            &self.language,
+            t(&self.language, "btn_submit_create"),
+        ))
+        .style(
+            primary_button
+                as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style,
+        )
+        .on_press(Message::SubmitCreateAccount)
+        .padding(12);
 
-        let btn_back = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_back")))
-            .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
-            .on_press(Message::BackToWelcome)
-            .padding(12);
+        let btn_back = button(crate::ui::i18n::app_text(
+            &self.language,
+            t(&self.language, "btn_back"),
+        ))
+        .style(
+            secondary_button
+                as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style,
+        )
+        .on_press(Message::BackToWelcome)
+        .padding(12);
 
-        col = col.push(row![btn_back, btn_submit].spacing(15)).align_x(Alignment::Center);
+        col = col
+            .push(row![btn_back, btn_submit].spacing(15))
+            .align_x(Alignment::Center);
 
-        let info_path = crate::ui::i18n::app_text(&self.language, format!("{}{}", t(&self.language, "vault_path_info"), crate::crypto::get_app_dir().to_string_lossy()))
-            .size(12)
-            .color(text_muted(&self.current_theme));
+        let info_path = crate::ui::i18n::app_text(
+            &self.language,
+            format!(
+                "{}{}",
+                t(&self.language, "vault_path_info"),
+                crate::crypto::get_app_dir().to_string_lossy()
+            ),
+        )
+        .size(12)
+        .color(text_muted(&self.current_theme));
 
         col = col.push(info_path).align_x(Alignment::Center);
 
-        let main_box = Container::new(col).width(Length::Fill).height(Length::Fill).center_x(iced::Length::Fill).center_y(iced::Length::Fill);
-        
+        let main_box = Container::new(col)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(iced::Length::Fill)
+            .center_y(iced::Length::Fill);
+
         let trademark = crate::ui::i18n::app_text(&self.language, "Kakolookiyam ™")
             .size(14)
             .color(text_muted(&self.current_theme));
-        let bottom_bar = container(trademark).width(Length::Fill).align_x(alignment::Horizontal::Center).padding(20);
-        
-        column![top_bar, main_box, bottom_bar].width(Length::Fill).height(Length::Fill).into()
+        let bottom_bar = container(trademark)
+            .width(Length::Fill)
+            .align_x(alignment::Horizontal::Center)
+            .padding(20);
+
+        column![top_bar, main_box, bottom_bar]
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
     }
 
     pub(crate) fn view_login(&self) -> Element<'_, Message> {
-        let lang_btn = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "lang_toggle")))
-            .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
-            .on_press(Message::ToggleLanguage)
-            .padding(10);
-            
-        let vol = crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).get_main_theme_volume();
+        let lang_btn = button(crate::ui::i18n::app_text(
+            &self.language,
+            t(&self.language, "lang_toggle"),
+        ))
+        .style(
+            secondary_button
+                as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style,
+        )
+        .on_press(Message::ToggleLanguage)
+        .padding(10);
+
+        let vol = crate::sound::SOUND_MANAGER
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_main_theme_volume();
         let icon_str = if vol == 0.0 { "🔇" } else { "🔊" };
         let music_btn = button(crate::ui::i18n::app_text(&self.language, icon_str))
-            .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
+            .style(
+                secondary_button
+                    as fn(
+                        &iced::Theme,
+                        iced::widget::button::Status,
+                    ) -> iced::widget::button::Style,
+            )
             .on_press(Message::ToggleMainMusicPanel)
             .padding(10);
-            
+
         let music_section = if self.show_main_music_panel {
-            let sld = slider(0.0..=1.0, vol, Message::MainThemeVolumeChanged).step(0.01_f32).width(Length::Fixed(100.0));
-            row![container(sld).padding(10).align_y(iced::alignment::Vertical::Center), music_btn].spacing(5).align_y(Alignment::Center)
+            let sld = slider(0.0..=1.0, vol, Message::MainThemeVolumeChanged)
+                .step(0.01_f32)
+                .width(Length::Fixed(100.0));
+            row![
+                container(sld)
+                    .padding(10)
+                    .align_y(iced::alignment::Vertical::Center),
+                music_btn
+            ]
+            .spacing(5)
+            .align_y(Alignment::Center)
         } else {
             row![music_btn].align_y(Alignment::Center)
         };
 
-        let top_bar_content = row![music_section, lang_btn].spacing(10).align_y(Alignment::Start);
-        let top_bar = container(top_bar_content).width(Length::Fill).align_x(alignment::Horizontal::Right).padding(20);
+        let top_bar_content = row![music_section, lang_btn]
+            .spacing(10)
+            .align_y(Alignment::Start);
+        let top_bar = container(top_bar_content)
+            .width(Length::Fill)
+            .align_x(alignment::Horizontal::Right)
+            .padding(20);
 
         let logo = image(crate::ui::views::auth::get_logo_handle())
             .width(Length::Fixed(100.0))
@@ -217,22 +373,35 @@ impl KakolookiyamApp {
             crate::ui::i18n::app_text(&self.language, t(&self.language, "login_title"))
                 .size(25)
                 .color(text_main(&self.current_theme))
-        ].spacing(10).align_x(Alignment::Center);
+        ]
+        .spacing(10)
+        .align_x(Alignment::Center);
 
-        let pseudo_input = text_input(&t(&self.language, "login_pseudo_placeholder"), &self.pseudo_input)
-            .on_input(Message::PseudoChanged)
-            .padding(15);
+        let pseudo_input = text_input(
+            &t(&self.language, "login_pseudo_placeholder"),
+            &self.pseudo_input,
+        )
+        .on_input(Message::PseudoChanged)
+        .padding(15);
 
-        let pass_input = text_input(&t(&self.language, "login_password_placeholder"), self.password_input.expose_secret())
-            .on_input(Message::PasswordChanged)
-            .secure(true)
-            .padding(15);
+        let pass_input = text_input(
+            &t(&self.language, "login_password_placeholder"),
+            self.password_input.expose_secret(),
+        )
+        .on_input(Message::PasswordChanged)
+        .secure(true)
+        .padding(15);
 
         let mut col = column![title, pseudo_input, pass_input].spacing(20);
 
         if let Some(err) = &self.auth_error {
             let error_box = container(
-                crate::ui::i18n::app_text(&self.language, format!("{} : {}", t(&self.language, "error"), err)).size(14).color(Color::from_rgb(0.9, 0.15, 0.15))
+                crate::ui::i18n::app_text(
+                    &self.language,
+                    format!("{} : {}", t(&self.language, "error"), err),
+                )
+                .size(14)
+                .color(Color::from_rgb(0.9, 0.15, 0.15)),
             )
             .padding(12)
             .width(Length::Fill)
@@ -241,31 +410,62 @@ impl KakolookiyamApp {
             col = col.push(error_box);
         }
 
-        let btn_submit = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_submit_login")))
-            .style(primary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
-            .on_press(Message::SubmitLogin)
-            .padding(12);
+        let btn_submit = button(crate::ui::i18n::app_text(
+            &self.language,
+            t(&self.language, "btn_submit_login"),
+        ))
+        .style(
+            primary_button
+                as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style,
+        )
+        .on_press(Message::SubmitLogin)
+        .padding(12);
 
-        let btn_back = button(crate::ui::i18n::app_text(&self.language, t(&self.language, "btn_back")))
-            .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
-            .on_press(Message::BackToWelcome)
-            .padding(12);
+        let btn_back = button(crate::ui::i18n::app_text(
+            &self.language,
+            t(&self.language, "btn_back"),
+        ))
+        .style(
+            secondary_button
+                as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style,
+        )
+        .on_press(Message::BackToWelcome)
+        .padding(12);
 
-        col = col.push(row![btn_back, btn_submit].spacing(15)).align_x(Alignment::Center);
+        col = col
+            .push(row![btn_back, btn_submit].spacing(15))
+            .align_x(Alignment::Center);
 
-        let info_path = crate::ui::i18n::app_text(&self.language, format!("{}{}", t(&self.language, "vault_path_info"), crate::crypto::get_app_dir().to_string_lossy()))
-            .size(12)
-            .color(text_muted(&self.current_theme));
+        let info_path = crate::ui::i18n::app_text(
+            &self.language,
+            format!(
+                "{}{}",
+                t(&self.language, "vault_path_info"),
+                crate::crypto::get_app_dir().to_string_lossy()
+            ),
+        )
+        .size(12)
+        .color(text_muted(&self.current_theme));
 
         col = col.push(info_path).align_x(Alignment::Center);
 
-        let main_box = Container::new(col).width(Length::Fill).height(Length::Fill).center_x(iced::Length::Fill).center_y(iced::Length::Fill);
-        
+        let main_box = Container::new(col)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(iced::Length::Fill)
+            .center_y(iced::Length::Fill);
+
         let trademark = crate::ui::i18n::app_text(&self.language, "Kakolookiyam ™")
             .size(14)
             .color(text_muted(&self.current_theme));
-        let bottom_bar = container(trademark).width(Length::Fill).align_x(alignment::Horizontal::Center).padding(20);
-        
-        column![top_bar, main_box, bottom_bar].width(Length::Fill).height(Length::Fill).into()
+        let bottom_bar = container(trademark)
+            .width(Length::Fill)
+            .align_x(alignment::Horizontal::Center)
+            .padding(20);
+
+        column![top_bar, main_box, bottom_bar]
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
     }
 }
