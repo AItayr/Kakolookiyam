@@ -166,14 +166,14 @@ impl TransferManager {
                     tokio::spawn(async move {
                         let media_dir = crate::crypto::get_media_dir(&pseudo_clone);
                         // SECURITY FIX: NOUV-1 Path Traversal
-                        let safe_filename = std::path::Path::new(&filename_owned)
+                        let _safe_filename = std::path::Path::new(&filename_owned)
                             .file_name()
                             .unwrap_or_else(|| std::ffi::OsStr::new("unknown_file"))
                             .to_string_lossy()
                             .replace('|', "_");
 
                         let mut path_buf = std::path::PathBuf::from(media_dir);
-                        path_buf.push(safe_filename);
+                        path_buf.push(format!("kako_media_{}.dat", rand::random::<u64>()));
                         let save_path = path_buf.to_string_lossy().to_string();
 
                         // Move/Rename file from temp_path to save_path

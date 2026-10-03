@@ -156,6 +156,7 @@ pub async fn start_p2p(
     > = HashMap::new();
     let mut pending_outbound_offers: HashMap<String, std::time::Instant> = HashMap::new();
     let mut pending_ice: HashMap<String, Vec<String>> = HashMap::new();
+    let mut replay_cache: HashMap<String, std::time::Instant> = HashMap::new();
     let mut turn_user = String::new();
     let mut turn_pass = String::new();
     let (tx_dc, mut rx_dc) =
@@ -825,6 +826,11 @@ pub async fn start_p2p(
                                             }
                                             Signal::Answer { sdp, sender_id, pseudo, timestamp, signature, .. } => {
                                                 pending_outbound_offers.remove(&sender_id);
+                                                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                                                if timestamp < now - 60 || timestamp > now + 60 { continue; }
+                                                replay_cache.retain(|_, v| v.elapsed().as_secs() < 120);
+                                                if replay_cache.contains_key(&signature) { continue; }
+                                                replay_cache.insert(signature.clone(), std::time::Instant::now());
                                                 if !crate::crypto::verify_signal(&sender_id, "Answer", &my_local_id, &pseudo, &sdp, timestamp, &signature) { continue; }
 
                                                 if sdp == "BUSY" {
@@ -852,6 +858,11 @@ pub async fn start_p2p(
                                             }
 
                                             Signal::Ice { candidate, sender_id, pseudo, timestamp, signature, .. } => {
+                                                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                                                if timestamp < now - 60 || timestamp > now + 60 { continue; }
+                                                replay_cache.retain(|_, v| v.elapsed().as_secs() < 120);
+                                                if replay_cache.contains_key(&signature) { continue; }
+                                                replay_cache.insert(signature.clone(), std::time::Instant::now());
                                                 if !crate::crypto::verify_signal(&sender_id, "Ice", &my_local_id, &pseudo, &candidate, timestamp, &signature) { continue; }
 
                                                 let mut handled = false;
