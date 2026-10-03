@@ -43,7 +43,7 @@ pub struct KakolookiyamApp {
     pub(crate) group_call_presences:
         std::collections::HashMap<String, std::collections::HashMap<String, u64>>,
     pub(crate) incoming_call: Option<(String, String, String, String)>,
-    pub(crate) incoming_file_offers: Vec<(String, String, usize, String)>,
+        pub(crate) incoming_file_offers: Vec<(String, String, usize, String)>,
     pub(crate) incoming_call_timer: u32,
     pub(crate) queued_group_offers: Vec<(String, String)>,
     pub(crate) active_call: Option<(String, String)>,
@@ -108,7 +108,7 @@ impl KakolookiyamApp {
                 heartbeat_counter: 0,
                 group_call_presences: std::collections::HashMap::new(),
                 incoming_call: None,
-                incoming_file_offers: Vec::new(),
+                                incoming_file_offers: Vec::new(),
                 incoming_call_timer: 0,
                 queued_group_offers: Vec::new(),
                 active_call: None,

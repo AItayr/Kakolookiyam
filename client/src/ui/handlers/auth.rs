@@ -23,6 +23,12 @@ impl KakolookiyamApp {
 
             Message::LockSession => {
                 if let Some(mut vd) = self.vault_data.take() {
+                    if self.needs_save {
+                        if let Some(pwd) = &self.master_password {
+                            let _ = crate::crypto::save_vault(pwd.expose_secret(), &mut vd);
+                        }
+                        self.needs_save = false;
+                    }
                     let id = crypto::derive_public_id(&vd.private_key);
                     let _ = self.tx_network.send(format!("LOGOUT:{}", id));
                     // [MITIGATION] Zero-Trace RAM: Wiping skipped nested HashMaps in VaultData
@@ -37,6 +43,7 @@ impl KakolookiyamApp {
                 self.is_muted = false;
                 self.selected_chat = None;
                 self.chat_input.zeroize();
+                self.incoming_file_offers.clear();
                 self.chat_input.clear();
 
                 // [MITIGATION] Zero-Trace RAM: Wipe active chat UI history strings

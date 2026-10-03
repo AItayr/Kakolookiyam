@@ -145,12 +145,41 @@ pub async fn start_p2p(
         }
     });
 
+
+    let (tx_signal, mut rx_signal) = tokio::sync::mpsc::channel::<Signal>(32);
+    let mut peers: HashMap<
+        String,
+        (
+            Arc<RTCPeerConnection>,
+            std::sync::Arc<std::sync::atomic::AtomicBool>,
+        ),
+    > = HashMap::new();
+    let mut pending_outbound_offers: HashMap<String, std::time::Instant> = HashMap::new();
+    let mut pending_ice: HashMap<String, Vec<String>> = HashMap::new();
+    let mut turn_user = String::new();
+    let mut turn_pass = String::new();
+    let (tx_dc, mut rx_dc) =
+        tokio::sync::mpsc::unbounded_channel::<(String, Arc<RTCDataChannel>)>();
+    let mut data_channels: HashMap<String, Arc<RTCDataChannel>> = HashMap::new();
+
+    let (tx_chunks, mut rx_chunks) = tokio::sync::mpsc::unbounded_channel::<(String, Vec<u8>)>();
+    let mut transfer_manager = TransferManager::new();
+    let mut trusted_contacts: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut blocked_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    let mut offer_limiter = RateLimiter::new();
+    let mut global_limiter = RateLimiter::new();
+
+    let mut backoff = 1;
+    loop {
     let url = "wss://signal.kakolookiyam.ch"; // [MITIGATION] Route chiffrée par Reverse-Proxy (Suisse)
     let (ws_stream, _) = match connect_async(url).await {
-        Ok(stream) => stream,
+        Ok(stream) => { backoff = 1; stream },
         Err(_) => {
             let _ = tx_ui.send("ERROR:SERVER_OFFLINE".to_string());
-            return Ok(());
+            tokio::time::sleep(std::time::Duration::from_secs(backoff)).await;
+            if backoff < 30 { backoff *= 2; }
+            continue;
         }
     };
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
@@ -178,32 +207,18 @@ pub async fn start_p2p(
         .send(Message::Text(serde_json::to_string(&reg).unwrap().into()))
         .await;
 
-    let (tx_signal, mut rx_signal) = tokio::sync::mpsc::channel::<Signal>(32);
-    let mut peers: HashMap<
-        String,
-        (
-            Arc<RTCPeerConnection>,
-            std::sync::Arc<std::sync::atomic::AtomicBool>,
-        ),
-    > = HashMap::new();
-    let mut pending_outbound_offers: HashMap<String, std::time::Instant> = HashMap::new();
-    let mut pending_ice: HashMap<String, Vec<String>> = HashMap::new();
-    let mut turn_user = String::new();
-    let mut turn_pass = String::new();
-    let (tx_dc, mut rx_dc) =
-        tokio::sync::mpsc::unbounded_channel::<(String, Arc<RTCDataChannel>)>();
-    let mut data_channels: HashMap<String, Arc<RTCDataChannel>> = HashMap::new();
 
-    let (tx_chunks, mut rx_chunks) = tokio::sync::mpsc::unbounded_channel::<(String, Vec<u8>)>();
-    let mut transfer_manager = TransferManager::new();
-    let mut trusted_contacts: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut blocked_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
-
-    let mut offer_limiter = RateLimiter::new();
-    let mut global_limiter = RateLimiter::new();
+    let mut keepalive = tokio::time::interval(std::time::Duration::from_secs(30));
+    keepalive.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
     loop {
         tokio::select! {
+                    _ = keepalive.tick() => {
+                        if ws_sender.send(tokio_tungstenite::tungstenite::protocol::Message::Ping(bytes::Bytes::new())).await.is_err() {
+                            let _ = tx_ui.send("ERROR:SERVER_OFFLINE".to_string());
+                            break;
+                        }
+                    }
                     Some(chunk_data) = rx_chunks.recv() => {
                         let sender_id: String = chunk_data.0;
                         let raw_payload: Vec<u8> = chunk_data.1;
@@ -713,9 +728,9 @@ pub async fn start_p2p(
                             let _ = ws_sender.send(Message::Text(json.into())).await;
                         }
                     }
-                    Some(result) = ws_receiver.next() => {
+                    result = ws_receiver.next() => {
                         match result {
-                            Ok(response) => {
+                            Some(Ok(response)) => {
                                 if let Ok(text) = response.into_text() {
 
                                     if text == "ERROR:ALREADY_CONNECTED" || text == "SUCCESS:REGISTERED" || text.starts_with("ERROR:NOT_FOUND:") {
@@ -856,10 +871,13 @@ pub async fn start_p2p(
                                     }
                                 }
                             },
-                            Err(_) => break,
+                            _ => {
+                                let _ = tx_ui.send("ERROR:SERVER_OFFLINE".to_string());
+                                break;
+                            }
                         }
                     }
-                }
+        }
     }
-    Ok(())
+    }
 }

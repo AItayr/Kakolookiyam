@@ -373,10 +373,10 @@ pub fn derive_public_id(secret: &[u8]) -> String {
 }
 
 #[allow(dead_code)]
-pub fn sign_message(secret: &[u8], timestamp: u64, content: &str) -> String {
+pub fn sign_message(secret: &[u8], target_id: &str, timestamp: u64, content: &str) -> String {
     if let Ok(key_pair) = ring::signature::Ed25519KeyPair::from_seed_unchecked(secret) {
         let pub_id = derive_public_id(secret);
-        let message = format!("{}:{}:{}", pub_id, timestamp, content);
+        let message = format!("KAKO-MSG-v2|{}|{}|{}|{}", pub_id, target_id, timestamp, content);
         let signature = key_pair.sign(message.as_bytes());
         let mut hex = String::new();
         for byte in signature.as_ref() {

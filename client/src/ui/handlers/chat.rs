@@ -56,6 +56,7 @@ impl KakolookiyamApp {
                 self.chat_input = val;
             }
             Message::SendChatMessage => {
+                let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
                 let text = self.chat_input.trim().to_string();
                 if text.is_empty() {
                     return iced::Task::none();
@@ -79,6 +80,7 @@ impl KakolookiyamApp {
                                 let t_id = target_id.clone();
                                 let msg_text = text.clone();
 
+                                let sig = crypto::sign_message(&vd.private_key, &t_id, timestamp, &msg_text);
                                 broadcast_cmd = Command::perform(
                                     async move {
                                         let sends = members
@@ -87,8 +89,8 @@ impl KakolookiyamApp {
                                             .map(|member_id| {
                                                 let tx = tx.clone();
                                                 let msg = format!(
-                                                    "CHAT_SEND:{}:SYS:GRP_MSG:{}:{}",
-                                                    member_id, t_id, msg_text
+                                                    "CHAT_SEND:{}:SYS:GRP_MSG:{}:{}:{}",
+                                                    member_id, t_id, sig, msg_text
                                                 );
                                                 async move {
                                                     let _ = tx.send(msg);
@@ -105,10 +107,6 @@ impl KakolookiyamApp {
                                 .send(format!("CHAT_SEND:{}:{}", target_id, text));
                         }
 
-                        let timestamp = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap()
-                            .as_secs();
                         let entry = crypto::MessageEntry {
                             author: crate::ui::i18n::t(&self.language, "me_author"),
                             content: text.clone(),
@@ -118,6 +116,7 @@ impl KakolookiyamApp {
                             media_path: None,
                             signature: Some(crypto::sign_message(
                                 &vd.private_key,
+                                &target_id,
                                 timestamp,
                                 &text,
                             )),

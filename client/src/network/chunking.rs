@@ -82,7 +82,7 @@ impl TransferManager {
                 .unwrap_or(0);
 
             // SECURITY FIX: HARD LIMIT ON CHUNKS (1 GB max)
-            if total > 65536 {
+            if total > 3202 {
                 return;
             }
 

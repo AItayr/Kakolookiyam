@@ -19,6 +19,19 @@ impl KakolookiyamApp {
                 return self.trigger_global_sync();
             }
 
+            if msg.starts_with("ERROR:BAD_SIGNATURE") {
+                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_error();
+                return Command::perform(async {}, |_| {
+                    Message::ForceDisconnect("L\'heure de votre ordinateur est incorrecte.".to_string())
+                });
+            }
+
+            if msg.starts_with("SYS_MSG:") {
+                let text = msg.trim_start_matches("SYS_MSG:").to_string();
+                self.status_message = text;
+                return Command::none();
+            }
+
             if msg == "ERROR:ALREADY_CONNECTED" {
                 SOUND_MANAGER
                     .lock()
@@ -101,6 +114,7 @@ impl KakolookiyamApp {
                                                 }
                                             };
                                             if !is_valid {
+                                                let _ = std::fs::remove_file(&path);
                                                 return Command::none();
                                             }
                                             let mut modified = false;
@@ -889,6 +903,11 @@ impl KakolookiyamApp {
                 let parts: Vec<&str> = msg.splitn(5, ':').collect();
                 if parts.len() == 5 {
                     let sender_id = parts[1].to_string();
+                    if let Some(vd) = &self.vault_data {
+                        if !vd.contacts.contains_key(&sender_id) || vd.blocked_ids.contains(&sender_id) {
+                            return Command::none();
+                        }
+                    }
                     let filename = parts[2].to_string();
                     let total: usize = parts[3].parse().unwrap_or(0);
                     let key_b64 = parts[4].to_string();

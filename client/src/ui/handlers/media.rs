@@ -160,6 +160,7 @@ impl KakolookiyamApp {
                                     media_path: Some(enc_path),
                                     signature: Some(crate::crypto::sign_message(
                                         &vd.private_key,
+                                        &target_id,
                                         timestamp,
                                         &content,
                                     )),
@@ -242,9 +243,7 @@ impl KakolookiyamApp {
 
                                 if safe_to_open(&dest_path_str) {
                                     #[cfg(target_os = "windows")]
-                                    let _ = std::process::Command::new("cmd")
-                                        .args(["/c", "start", "", &dest_path_str])
-                                        .spawn();
+                                    let _ = open::that_detached(&dest_path_str);
                                     #[cfg(target_os = "macos")]
                                     let _ = std::process::Command::new("open")
                                         .arg(&dest_path_str)
@@ -295,9 +294,13 @@ impl KakolookiyamApp {
             Message::PreviewMediaLoaded(data_opt) => {
                 self.idle_seconds = 0;
                 if let Some(decrypted_bytes) = data_opt {
-                    self.media_preview =
-                        Some(iced::widget::image::Handle::from_bytes(decrypted_bytes));
-                    self.status_message = crate::ui::i18n::t(&self.language, "status_media_ram");
+                    if decrypted_bytes.len() < 15_000_000 {
+                        self.media_preview =
+                            Some(iced::widget::image::Handle::from_bytes(decrypted_bytes));
+                        self.status_message = crate::ui::i18n::t(&self.language, "status_media_ram");
+                    } else {
+                        self.status_message = "Image trop volumineuse pour l\'aperçu en mémoire.".to_string();
+                    }
                 } else {
                     self.status_message = crate::ui::i18n::t(&self.language, "status_media_error");
                 }

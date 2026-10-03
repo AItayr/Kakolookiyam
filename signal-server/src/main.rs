@@ -69,14 +69,16 @@ enum Signal {
     Ping { msg: String }
 }
 
-type Clients = Arc<Mutex<HashMap<String, mpsc::UnboundedSender<String>>>>;
+type Clients = Arc<Mutex<HashMap<String, (u64, mpsc::Sender<String>)>>>;
 
 #[tokio::main]
 async fn main() {
     let addr = "127.0.0.1:8080";
     let listener = TcpListener::bind(addr).await.expect("Impossible de lier le port");
     let clients: Clients = Arc::new(Mutex::new(HashMap::new()));
+    const MAX_CLIENTS: usize = 2000;
     while let Ok((stream, _)) = listener.accept().await {
+        if clients.lock().await.len() >= MAX_CLIENTS { continue; }
         let clients_clone = clients.clone();
         tokio::spawn(async move {
             let mut cfg = WebSocketConfig::default();
@@ -91,8 +93,10 @@ async fn main() {
 
 async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>, clients: Clients) {
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
-    let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+    let (tx, mut rx) = mpsc::channel::<String>(256);
     let mut client_id = String::new();
+    static NEXT_CONN_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let conn_id = NEXT_CONN_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
     let send_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
@@ -102,27 +106,44 @@ async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::
         }
     });
 
+    let mut turn_refresh_task: Option<tokio::task::JoinHandle<()>> = None;
+    let mut win = std::time::Instant::now();
+    let mut n = 0u32;
+
     loop {
         let next = tokio::time::timeout(Duration::from_secs(90), ws_receiver.next()).await;
         let Ok(Some(Ok(msg))) = next else { break };
         if let Ok(text) = msg.into_text() {
+            if win.elapsed() > Duration::from_secs(10) { win = std::time::Instant::now(); n = 0; }
+            n += 1; if n > 150 { continue; }
+
             if let Ok(signal) = serde_json::from_str::<Signal>(&text) {
                 match signal {
                     Signal::Register { id, pseudo, timestamp, signature } => {
                         if !client_id.is_empty() { continue; }
                         if !verify_signature(&id, &pseudo, timestamp, &signature) {
+                            let _ = tx.try_send(format!("ERROR:BAD_SIGNATURE:{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()));
                             continue;
                         }
                         let mut clients_guard = clients.lock().await;
-                        if clients_guard.contains_key(&id) {
-                            let _ = tx.send("ERROR:ALREADY_CONNECTED".to_string());
-                        } else {
-                            client_id = id.clone();
-                            let (turn_user, turn_pass) = generate_turn_credentials(&client_id);
-                            clients_guard.insert(id, tx.clone());
-                            let _ = tx.send("SUCCESS:REGISTERED".to_string());
-                            let _ = tx.send(format!("TURN_AUTH|{}|{}", turn_user, turn_pass));
+                        client_id = id.clone();
+                        let (turn_user, turn_pass) = generate_turn_credentials(&client_id);
+                        if let Some((_old_conn_id, old_tx)) = clients_guard.insert(id, (conn_id, tx.clone())) {
+                            let _ = old_tx.try_send("ERROR:ALREADY_CONNECTED".to_string());
                         }
+                        let _ = tx.try_send("SUCCESS:REGISTERED".to_string());
+                        let _ = tx.try_send(format!("TURN_AUTH|{}|{}", turn_user, turn_pass));
+
+                        if let Some(t) = turn_refresh_task.take() { t.abort(); }
+                        let tx2 = tx.clone();
+                        let cid = client_id.clone();
+                        turn_refresh_task = Some(tokio::spawn(async move {
+                            loop {
+                                tokio::time::sleep(Duration::from_secs(3600)).await;
+                                let (u, p) = generate_turn_credentials(&cid);
+                                if tx2.try_send(format!("TURN_AUTH|{}|{}", u, p)).is_err() { break; }
+                            }
+                        }));
                     },
                     Signal::Unregister { id } => {
                         if client_id == id {
@@ -134,11 +155,11 @@ async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::
                     Signal::Offer { target_id, sender_id, .. } => {
                         if client_id.is_empty() || client_id != sender_id { continue; }
                         let clients_guard = clients.lock().await;
-                        if let Some(target_tx) = clients_guard.get(&target_id) {
-                            let _ = target_tx.send(text.to_string());
+                        if let Some((_, target_tx)) = clients_guard.get(&target_id) {
+                            let _ = target_tx.try_send(text.to_string());
                         } else {
-                            if let Some(sender_tx) = clients_guard.get(&sender_id) {
-                                let _ = sender_tx.send(format!("ERROR:NOT_FOUND:{}", target_id));
+                            if let Some((_, sender_tx)) = clients_guard.get(&sender_id) {
+                                let _ = sender_tx.try_send(format!("ERROR:NOT_FOUND:{}", target_id));
                             }
                         }
                     },
@@ -147,8 +168,8 @@ async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::
                     Signal::Ice { target_id,  sender_id, .. } => {
                         if client_id.is_empty() || client_id != sender_id { continue; }
                         let clients_guard = clients.lock().await;
-                        if let Some(target_tx) = clients_guard.get(&target_id) {
-                            let _ = target_tx.send(text.to_string());
+                        if let Some((_, target_tx)) = clients_guard.get(&target_id) {
+                            let _ = target_tx.try_send(text.to_string());
                         }
                     },
                     _ => {}
@@ -158,7 +179,15 @@ async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::
     }
 
     if !client_id.is_empty() {
-        clients.lock().await.remove(&client_id);
+        let mut guard = clients.lock().await;
+        if let Some(&(stored_conn_id, _)) = guard.get(&client_id) {
+            if stored_conn_id == conn_id {
+                guard.remove(&client_id);
+            }
+        }
     }
+    if let Some(t) = turn_refresh_task { t.abort(); }
     send_task.abort();
 }
+
+

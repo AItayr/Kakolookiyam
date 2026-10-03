@@ -1135,14 +1135,16 @@ impl KakolookiyamApp {
 
         // --- BANDEAU D'OFFRE DE FICHIER ---
         if let Some((sender_id, filename, total, key_b64)) = self.incoming_file_offers.first() {
-            let size_mb = (total * 16384) / 1_048_576;
+            let size_mb = (total * 16384) / 1_048_576; let size_str = if size_mb == 0 { "< 1".to_string() } else { size_mb.to_string() };
+            let sender_pseudo = self.vault_data.as_ref().and_then(|vd| vd.contacts.get(sender_id)).cloned().unwrap_or_else(|| "Inconnu".to_string());
             let title = crate::ui::i18n::app_text(
                 &self.language,
                 format!(
-                    "{} : {} (~{} MB)",
+                    "{} ({}) : {} (~{} MB)",
                     t(&self.language, "file_received_prefix"),
+                    sender_pseudo,
                     filename,
-                    size_mb
+                    size_str
                 ),
             )
             .size(16)
