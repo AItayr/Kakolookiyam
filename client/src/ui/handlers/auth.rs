@@ -42,7 +42,7 @@ impl KakolookiyamApp {
                 self.new_member_input.clear();
 
                 self.clear_auth_fields();
-                crate::sound::SOUND_MANAGER.lock().unwrap().play_main_theme();
+                crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_main_theme();
                 self.state = AppState::Login;
                         self.status_message = crate::ui::i18n::t(&self.language, "ready_to_call");
                 self.idle_seconds = 0;
@@ -93,7 +93,7 @@ impl KakolookiyamApp {
                         if let Some((id, _, _, _)) = self.incoming_call.take() {
                             let _ = self.tx_network.send(format!("REJECT:{}", id));
                             self.status_message = crate::ui::i18n::t(&self.language, "status_call_missed");
-                            crate::sound::SOUND_MANAGER.lock().unwrap().stop_incoming_call();
+                            crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).stop_incoming_call();
                         }
                         self.incoming_call_timer = 0;
                     }
@@ -159,7 +159,7 @@ impl KakolookiyamApp {
                             }
                             self.vault_data = Some(v_data);
                         }
-                        Err(e) => { crate::sound::SOUND_MANAGER.lock().unwrap().play_error(); self.auth_error = Some(e.to_string()); },
+                        Err(e) => { crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_error(); self.auth_error = Some(e.to_string()); },
                     }
                 }
             }
@@ -193,7 +193,7 @@ impl KakolookiyamApp {
                             }
                             self.vault_data = Some(v_data);
                         }
-                        Err(e) => { crate::sound::SOUND_MANAGER.lock().unwrap().play_error(); self.auth_error = Some(e.to_string()); },
+                        Err(e) => { crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_error(); self.auth_error = Some(e.to_string()); },
                     }
                 }
             }

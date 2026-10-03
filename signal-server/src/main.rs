@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, Mutex};
-use tokio_tungstenite::accept_async;
+use tokio_tungstenite::accept_async_with_config;
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
+use std::time::Duration;
 use futures_util::{StreamExt, SinkExt};
 use serde::{Deserialize, Serialize};
 
@@ -15,7 +17,7 @@ type HmacSha1 = Hmac<Sha1>;
 fn generate_turn_credentials(user_id: &str) -> (String, String) {
     // Le secret est maintenant lu depuis une variable d'environnement pour l'Open Source !
     // Si la variable TURN_SECRET n'est pas définie sur le serveur, on utilise un mot de passe public par défaut.
-    let secret = std::env::var("TURN_SECRET").unwrap_or_else(|_| "DEFAULT_KAKO_SECRET_OPENSOURCE".to_string());
+    let secret = std::env::var("TURN_SECRET").expect("TURN_SECRET requis");
     let unix_time = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
     let expiration = unix_time + 7200;
     let username = format!("{}:{}", expiration, user_id);
@@ -50,7 +52,7 @@ fn verify_signature(pub_id_hex: &str, pseudo: &str, timestamp: u64, signature_he
         }
     }
     
-    let message = format!("{}:{}:{}", pub_id_hex, pseudo, timestamp);
+    let h = ring::digest::digest(&ring::digest::SHA256, b""); let hex: String = h.as_ref().iter().map(|b| format!("{:02x}", b)).collect(); let message = format!("KAKO-SIG-v2|Register|{}||{}|{}|{}", pub_id_hex, pseudo, timestamp, hex);
     let public_key = ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, &pub_key_bytes);
     public_key.verify(message.as_bytes(), &sig_bytes).is_ok()
 }
@@ -71,13 +73,16 @@ type Clients = Arc<Mutex<HashMap<String, mpsc::UnboundedSender<String>>>>;
 
 #[tokio::main]
 async fn main() {
-    let addr = "0.0.0.0:8080";
+    let addr = "127.0.0.1:8080";
     let listener = TcpListener::bind(addr).await.expect("Impossible de lier le port");
     let clients: Clients = Arc::new(Mutex::new(HashMap::new()));
     while let Ok((stream, _)) = listener.accept().await {
         let clients_clone = clients.clone();
         tokio::spawn(async move {
-            if let Ok(ws_stream) = accept_async(stream).await {
+            let mut cfg = WebSocketConfig::default();
+            cfg.max_message_size = Some(64 * 1024);
+            cfg.max_frame_size = Some(64 * 1024);
+            if let Ok(Ok(ws_stream)) = tokio::time::timeout(Duration::from_secs(10), accept_async_with_config(stream, Some(cfg))).await {
                 handle_connection(ws_stream, clients_clone).await;
             }
         });
@@ -97,11 +102,14 @@ async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::
         }
     });
 
-    while let Some(Ok(msg)) = ws_receiver.next().await {
+    loop {
+        let next = tokio::time::timeout(Duration::from_secs(90), ws_receiver.next()).await;
+        let Ok(Some(Ok(msg))) = next else { break };
         if let Ok(text) = msg.into_text() {
             if let Ok(signal) = serde_json::from_str::<Signal>(&text) {
                 match signal {
                     Signal::Register { id, pseudo, timestamp, signature } => {
+                        if !client_id.is_empty() { continue; }
                         if !verify_signature(&id, &pseudo, timestamp, &signature) {
                             continue;
                         }
@@ -123,20 +131,24 @@ async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::
                             client_id.clear();
                         }
                     },
-                    Signal::Offer { target_id, sender_id, .. } |
-                    Signal::ChatOffer { target_id, sender_id, .. } |
-                    Signal::Answer { target_id, sender_id, .. } |
-                    Signal::Ice { target_id,  sender_id, .. } => {
-                        if client_id.is_empty() || client_id != sender_id {
-                            continue;
-                        }
-let clients_guard = clients.lock().await;
+                    Signal::Offer { target_id, sender_id, .. } => {
+                        if client_id.is_empty() || client_id != sender_id { continue; }
+                        let clients_guard = clients.lock().await;
                         if let Some(target_tx) = clients_guard.get(&target_id) {
                             let _ = target_tx.send(text.to_string());
                         } else {
                             if let Some(sender_tx) = clients_guard.get(&sender_id) {
                                 let _ = sender_tx.send(format!("ERROR:NOT_FOUND:{}", target_id));
                             }
+                        }
+                    },
+                    Signal::ChatOffer { target_id, sender_id, .. } |
+                    Signal::Answer { target_id, sender_id, .. } |
+                    Signal::Ice { target_id,  sender_id, .. } => {
+                        if client_id.is_empty() || client_id != sender_id { continue; }
+                        let clients_guard = clients.lock().await;
+                        if let Some(target_tx) = clients_guard.get(&target_id) {
+                            let _ = target_tx.send(text.to_string());
                         }
                     },
                     _ => {}

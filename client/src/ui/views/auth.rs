@@ -29,7 +29,7 @@ impl KakolookiyamApp {
             .on_press(Message::ToggleLanguage)
             .padding(10);
             
-        let vol = crate::sound::SOUND_MANAGER.lock().unwrap().get_main_theme_volume();
+        let vol = crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).get_main_theme_volume();
         let icon_str = if vol == 0.0 { "🔇" } else { "🔊" };
         let music_btn = button(crate::ui::i18n::app_text(&self.language, icon_str))
             .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
@@ -90,7 +90,7 @@ impl KakolookiyamApp {
             .on_press(Message::ToggleLanguage)
             .padding(10);
             
-        let vol = crate::sound::SOUND_MANAGER.lock().unwrap().get_main_theme_volume();
+        let vol = crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).get_main_theme_volume();
         let icon_str = if vol == 0.0 { "🔇" } else { "🔊" };
         let music_btn = button(crate::ui::i18n::app_text(&self.language, icon_str))
             .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)
@@ -188,7 +188,7 @@ impl KakolookiyamApp {
             .on_press(Message::ToggleLanguage)
             .padding(10);
             
-        let vol = crate::sound::SOUND_MANAGER.lock().unwrap().get_main_theme_volume();
+        let vol = crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).get_main_theme_volume();
         let icon_str = if vol == 0.0 { "🔇" } else { "🔊" };
         let music_btn = button(crate::ui::i18n::app_text(&self.language, icon_str))
             .style(secondary_button as fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style)

@@ -26,7 +26,8 @@ pub fn main() -> iced::Result {
         let (tx_mic, rx_mic) = tokio::sync::mpsc::channel::<Vec<u8>>(500);
         let (tx_speaker, rx_speaker) = std::sync::mpsc::channel::<(usize, Vec<i16>)>();
 
-        audio::start_hardware_audio(tx_mic, rx_speaker);
+        let tx_ui_audio = tx_p2p_to_ui.clone();
+        audio::start_hardware_audio(tx_mic, rx_speaker, tx_ui_audio);
 
         let (my_id_b64, my_pseudo, my_secret) = match rx_identity.recv() {
             Ok(data) => data,
@@ -101,3 +102,4 @@ pub fn main() -> iced::Result {
 }
 
 // touch
+

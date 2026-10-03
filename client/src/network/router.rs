@@ -108,7 +108,7 @@ pub async fn start_p2p(
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
 
     let tstamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
-    let sig = crate::crypto::sign_announcement(&my_secret_arr, &my_pseudo, tstamp);
+    let sig = crate::crypto::sign_signal(&my_secret_arr, "Register", &my_local_id, "", &my_pseudo, "", tstamp);
     let reg = Signal::Register { id: my_local_id.clone(), pseudo: my_pseudo.clone(), timestamp: tstamp, signature: sig };
     let _ = ws_sender.send(Message::Text(serde_json::to_string(&reg).unwrap().into())).await;
 
@@ -125,7 +125,7 @@ pub async fn start_p2p(
     let mut transfer_manager = TransferManager::new();
     let mut trusted_contacts: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut blocked_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut pending_chat: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    
     let mut offer_limiter = RateLimiter::new();
     let mut global_limiter = RateLimiter::new();
 
@@ -139,11 +139,6 @@ pub async fn start_p2p(
 
             Some((tgt, dc)) = rx_dc.recv() => {
                 data_channels.insert(tgt.clone(), std::sync::Arc::clone(&dc));
-                if let Some(mut msgs) = pending_chat.remove(&tgt) {
-                    for msg in msgs {
-                        let _ = dc.send_text(msg).await;
-                    }
-                }
             }
             Some(cmd) = rx_ui.recv() => {
                 if cmd.starts_with("CONTACTS_SYNC") {
@@ -195,7 +190,7 @@ pub async fn start_p2p(
                         let key_b64 = parts[4].to_string();
                         
                         let file_id = format!("{}_{}_{}", my_pseudo, sender_id, filename);
-                        let temp_path = format!("{}/kako_tmp_{}", std::env::temp_dir().display(), file_id.replace(|c: char| !c.is_alphanumeric(), "_"));
+                        let temp_path = format!("{}/kako_tmp_{}_{}", std::env::temp_dir().display(), rand::random::<u64>(), file_id.replace(|c: char| !c.is_alphanumeric(), "_"));
 
                         let _ = tokio::fs::write(&temp_path, b"").await;
                         let handle = std::fs::OpenOptions::new().write(true).create(true).truncate(true).open(&temp_path).ok();
@@ -235,7 +230,7 @@ pub async fn start_p2p(
                         tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
                         let _ = tx_ui_loading.send("LOADING:Canal P2P Zéro-Trace sécurisé...".to_string());
                         
-                        tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
+                        tokio::time::sleep(tokio::time::Duration::from_secs(25)).await;
                         let _ = tx_ui_loading.send(format!("TIMEOUT:{}", timeout_target_id));
                     });
 
@@ -328,7 +323,7 @@ pub async fn start_p2p(
                                     final_sdp = format!("{}|||GRP:{}", final_sdp, grp_context_clone);
                                 }
                                 let tstamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
-                                let sig = crate::crypto::sign_announcement(&my_secret_clone, &my_pseudo_clone, tstamp);
+                                let sig = crate::crypto::sign_signal(&my_secret_clone, "Offer", &my_id, &tgt_id, &my_pseudo_clone, &final_sdp, tstamp);
                                 let _ = tx_sig.send(Signal::Offer { sdp: final_sdp, sender_id: my_id, target_id: tgt_id, pseudo: my_pseudo_clone.clone(), timestamp: tstamp, signature: sig }).await;
                             }
                         });
@@ -507,7 +502,7 @@ pub async fn start_p2p(
                         tokio::spawn(async move {
                             if pc_clone.set_local_description(offer.clone()).await.is_ok() {
                                 let tstamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
-                                let sig = crate::crypto::sign_announcement(&my_secret_clone, &my_pseudo_clone, tstamp);
+                                let sig = crate::crypto::sign_signal(&my_secret_clone, "ChatOffer", &my_id, &tgt_id, &my_pseudo_clone, &offer.sdp, tstamp);
                                 let _ = tx_sig.send(Signal::ChatOffer { sdp: offer.sdp, sender_id: my_id, target_id: tgt_id, pseudo: my_pseudo_clone.clone(), timestamp: tstamp, signature: sig }).await;
                             }
                         });
@@ -606,7 +601,7 @@ pub async fn start_p2p(
                         tokio::spawn(async move {
                             if pc_clone.set_local_description(offer.clone()).await.is_ok() {
                                 let tstamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
-                                let sig = crate::crypto::sign_announcement(&my_secret_clone, &my_pseudo_clone, tstamp);
+                                let sig = crate::crypto::sign_signal(&my_secret_clone, "ChatOffer", &my_id, &tgt_id, &my_pseudo_clone, &offer.sdp, tstamp);
                                 let _ = tx_sig.send(Signal::ChatOffer { sdp: offer.sdp, sender_id: my_id, target_id: tgt_id, pseudo: my_pseudo_clone.clone(), timestamp: tstamp, signature: sig }).await;
                             }
                         });
@@ -622,19 +617,21 @@ pub async fn start_p2p(
             }
             Some(mut signal) = rx_signal.recv() => {
                 let tstamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
-                let sig = crate::crypto::sign_announcement(&my_secret, &my_pseudo, tstamp);
                 match &mut signal {
-                    Signal::Answer { pseudo, timestamp, signature, .. } |
-                    Signal::Ice { pseudo, timestamp, signature, .. } => {
+                    Signal::Answer { sdp, sender_id, target_id, pseudo, timestamp, signature } => {
                         *pseudo = my_pseudo.clone();
                         *timestamp = tstamp;
-                        *signature = sig;
+                        *signature = crate::crypto::sign_signal(&my_secret, "Answer", sender_id, target_id, &my_pseudo, sdp, tstamp);
+                    },
+                    Signal::Ice { candidate, sender_id, target_id, pseudo, timestamp, signature } => {
+                        *pseudo = my_pseudo.clone();
+                        *timestamp = tstamp;
+                        *signature = crate::crypto::sign_signal(&my_secret, "Ice", sender_id, target_id, &my_pseudo, candidate, tstamp);
                     },
                     Signal::Register { id: _id, pseudo, timestamp, signature } => {
-                        // Normally ID is already set
                         *pseudo = my_pseudo.clone();
                         *timestamp = tstamp;
-                        *signature = crate::crypto::sign_announcement(&my_secret, &my_pseudo, tstamp);
+                        *signature = crate::crypto::sign_signal(&my_secret, "Register", _id, "", &my_pseudo, "", tstamp);
                     },
                     _ => {}
                 }
@@ -664,7 +661,7 @@ pub async fn start_p2p(
                             if let Ok(signal) = serde_json::from_str::<Signal>(&text) {
                                 match signal {
                                     Signal::Offer { mut sdp, sender_id, pseudo, timestamp, signature, .. } => {
-                                                                                if blocked_ids.contains(&sender_id) { continue; }
+                                                                                if blocked_ids.contains(&sender_id) || sender_id.to_lowercase() == my_local_id.to_lowercase() { continue; }
                                         let is_known = trusted_contacts.contains(&sender_id);
                                         let (max_hits, window) = if is_known { (10, 60) } else { (1, 30) };
                                         if !offer_limiter.check(&sender_id, max_hits, window) { continue; }
@@ -672,7 +669,7 @@ pub async fn start_p2p(
 
                                         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
                                         if timestamp < now - 60 || timestamp > now + 60 { continue; }
-                                        if !crate::crypto::verify_announcement(&sender_id, &pseudo, timestamp, &signature) { continue; }
+                                        if !crate::crypto::verify_signal(&sender_id, "Offer", &my_local_id, &pseudo, &sdp, timestamp, &signature) { continue; }
                                         
                                           if let Some(_time) = pending_outbound_offers.get(&sender_id) {
                                                 // [REMOVED GLARE REJECTION] 
@@ -703,7 +700,7 @@ if let Some((old_pc, flag)) = peers.remove(&sender_id) {
 
                                         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
                                         if timestamp < now - 60 || timestamp > now + 60 { continue; }
-                                        if !crate::crypto::verify_announcement(&sender_id, &pseudo, timestamp, &signature) { continue; }
+                                        if !crate::crypto::verify_signal(&sender_id, "ChatOffer", &my_local_id, &pseudo, &sdp, timestamp, &signature) { continue; }
                                           if let Some(_time) = pending_outbound_offers.get(&sender_id) {
                                                 // [REMOVED GLARE REJECTION] 
                                                 // Dropping incoming offers caused a 30s deadlock if the remote was offline when our initial offer was sent!
@@ -740,7 +737,7 @@ if let Some((old_pc, flag)) = peers.remove(&sender_id) {
                                     }
                                     Signal::Answer { sdp, sender_id, pseudo, timestamp, signature, .. } => {
                                         pending_outbound_offers.remove(&sender_id);
-                                        if !crate::crypto::verify_announcement(&sender_id, &pseudo, timestamp, &signature) { continue; }
+                                        if !crate::crypto::verify_signal(&sender_id, "Answer", &my_local_id, &pseudo, &sdp, timestamp, &signature) { continue; }
 
                                         if sdp == "BUSY" {
                                             let _ = tx_ui.send(format!("CALL_BUSY:{}", sender_id));
@@ -767,7 +764,7 @@ if let Some((old_pc, flag)) = peers.remove(&sender_id) {
                                     }
                                     
                                     Signal::Ice { candidate, sender_id, pseudo, timestamp, signature, .. } => {
-                                        if !crate::crypto::verify_announcement(&sender_id, &pseudo, timestamp, &signature) { continue; }
+                                        if !crate::crypto::verify_signal(&sender_id, "Ice", &my_local_id, &pseudo, &candidate, timestamp, &signature) { continue; }
 
                                         let mut handled = false;
                                         if let Some((pc, _flag)) = peers.get(&sender_id) {

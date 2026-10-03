@@ -82,7 +82,8 @@ pub fn detect_microphone() {
 
 pub fn start_hardware_audio(
     tx_mic: tokio::sync::mpsc::Sender<Vec<u8>>,
-    rx_speaker: std::sync::mpsc::Receiver<(usize, Vec<i16>)>
+    rx_speaker: std::sync::mpsc::Receiver<(usize, Vec<i16>)>,
+    tx_ui: tokio::sync::mpsc::UnboundedSender<String>
 ) {
     let handle = std::thread::spawn(move || {
         let rx_speaker_arc = std::sync::Arc::new(std::sync::Mutex::new(rx_speaker));
@@ -210,6 +211,20 @@ pub fn start_hardware_audio(
             Err(_) => { std::thread::sleep(std::time::Duration::from_millis(1000)); continue; }
         };
         let spk_format = spk_supported_config.sample_format();
+        let mut supported_48k_spk = false;
+        if let Ok(configs) = spk_device.supported_output_configs() {
+            for c in configs {
+                if c.min_sample_rate() <= 48000 && c.max_sample_rate() >= 48000 {
+                    supported_48k_spk = true;
+                    break;
+                }
+            }
+        }
+        if !supported_48k_spk {
+            let _ = tx_ui.send("SYS_MSG:Audio initialization failed: Speaker does not support 48kHz. Please select another speaker.".to_string());
+            std::thread::sleep(std::time::Duration::from_millis(5000));
+            continue;
+        }
         let mut spk_config: cpal::StreamConfig = spk_supported_config.into();
         spk_config.sample_rate = 48000;
         let spk_channels = spk_config.channels as usize;
@@ -304,4 +319,10 @@ pub fn start_hardware_audio(
         *t = Some(handle.thread().clone());
     }
 }
+
+
+
+
+
+
 

@@ -4,6 +4,23 @@ use zeroize::Zeroize;
 use crate::ui::app::KakolookiyamApp;
 use crate::ui::messages::Message;
 
+
+const AUTO_OPEN_OK: &[&str] = &["jpg","jpeg","png","gif","webp","pdf","txt"];
+
+fn sanitize_display_name(name: &str) -> String {
+    name.chars()
+        .filter(|c| !c.is_control() && !matches!(*c,
+            '\u{200E}'|'\u{200F}'|'\u{202A}'..='\u{202E}'|'\u{2066}'..='\u{2069}'))
+        .collect()
+}
+
+fn safe_to_open(name: &str) -> bool {
+    std::path::Path::new(name).extension()
+        .and_then(|e| e.to_str())
+        .map(|e| AUTO_OPEN_OK.contains(&e.to_ascii_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
 impl KakolookiyamApp {
     pub(crate) fn handle_media(&mut self, message: Message) -> Command<Message> {
         match message {
@@ -120,7 +137,7 @@ impl KakolookiyamApp {
 
                                 self.chat_history.push((crate::ui::i18n::t(&self.language, "me_author"), format!("{} {}", crate::ui::i18n::t(&self.language, "msg_file_shared"), file_name)));
 
-                                crate::sound::SOUND_MANAGER.lock().unwrap().play_message_sent();
+                                crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_message_sent();
 
                                 return broadcast_cmd;
                             }
@@ -132,7 +149,8 @@ impl KakolookiyamApp {
             Message::OpenMedia(filename, key, path) => {
                 self.idle_seconds = 0;
                 return Command::perform(async move {
-                    let clean_name = filename.replace("📎 Fichier reçu : ", "").replace("📎 File received: ", "").replace("📎 تم استلام الملف: ", "").replace("📎 Fichier partagé : ", "");
+                    let raw_clean_name = filename.replace("📎 Fichier reçu : ", "").replace("📎 File received: ", "").replace("📎 تم استلام الملف: ", "").replace("📎 Fichier partagé : ", "");
+                    let clean_name = sanitize_display_name(&raw_clean_name);
                     let dest = rfd::AsyncFileDialog::new()
                         .set_title("Extraction...")
                         .set_file_name(&clean_name)
@@ -155,13 +173,22 @@ impl KakolookiyamApp {
                             decrypted_mut.zeroize();
 
                             #[cfg(target_os = "windows")]
-                            let _ = std::process::Command::new("cmd").args(["/c", "start", "", &dest_path_str]).spawn();
-                            #[cfg(target_os = "macos")]
-                            let _ = std::process::Command::new("open").arg(&dest_path_str).spawn();
-                            #[cfg(target_os = "linux")]
-                            let _ = std::process::Command::new("xdg-open").arg(&dest_path_str).spawn();
+                            {
+                                let zone_identifier = format!("{}:Zone.Identifier", dest_path_str);
+                                let _ = tokio::fs::write(&zone_identifier, "[ZoneTransfer]\r\nZoneId=3\r\n").await;
+                            }
 
-                            "✅ Fichier déchiffré !".to_string()
+                            if safe_to_open(&dest_path_str) {
+                                #[cfg(target_os = "windows")]
+                                let _ = std::process::Command::new("cmd").args(["/c", "start", "", &dest_path_str]).spawn();
+                                #[cfg(target_os = "macos")]
+                                let _ = std::process::Command::new("open").arg(&dest_path_str).spawn();
+                                #[cfg(target_os = "linux")]
+                                let _ = std::process::Command::new("xdg-open").arg(&dest_path_str).spawn();
+                                "✅ Fichier déchiffré et ouvert !".to_string()
+                            } else {
+                                "✅ Fichier enregistré — ouverture automatique désactivée pour ce type.".to_string()
+                            }
                         } else {
                             "❌ Erreur de déchiffrement.".to_string()
                         }

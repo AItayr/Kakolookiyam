@@ -35,7 +35,7 @@ Message::ConnectClicked => {
                     }
                 }
                         self.status_message = crate::ui::i18n::t(&self.language, "status_call_waiting");
-                SOUND_MANAGER.lock().unwrap().start_outgoing_call();
+                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).start_outgoing_call();
                 let _ = self.tx_network.send(format!("CALL:{}", self.peer_id_input));
             }
             Message::CallContact(target_id) => {
@@ -62,7 +62,7 @@ Message::ConnectClicked => {
                             let members = group.members.clone();
                             let target_id_clone = target_id.clone();
 
-                            SOUND_MANAGER.lock().unwrap().start_outgoing_call();
+                            SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).start_outgoing_call();
                             self.active_call = Some((target_id.clone(), group.name.clone()));
                             self.active_call_participants.clear();
                               self.call_start_time = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
@@ -90,7 +90,7 @@ Message::ConnectClicked => {
                 } else {
                     self.peer_id_input = target_id.clone();
                         self.status_message = crate::ui::i18n::t(&self.language, "status_call_waiting");
-                    SOUND_MANAGER.lock().unwrap().start_outgoing_call();
+                    SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).start_outgoing_call();
                     let _ = self.tx_network.send(format!("CALL:{}", target_id));
                 }
             }
@@ -98,9 +98,9 @@ Message::ConnectClicked => {
                 let mut pseudo = self.incoming_call.as_ref().unwrap().1.clone();
                 let mut actual_id = id.clone();
 
-                SOUND_MANAGER.lock().unwrap().stop_incoming_call();
-                SOUND_MANAGER.lock().unwrap().stop_incoming_call();
-                SOUND_MANAGER.lock().unwrap().play_red_button();
+                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).stop_incoming_call();
+                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).stop_incoming_call();
+                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_red_button();
                 self.incoming_call = None;
                 self.incoming_call_timer = 0;
                         self.status_message = crate::ui::i18n::t(&self.language, "status_call_secure");
@@ -156,17 +156,17 @@ Message::ConnectClicked => {
                 }
             }
             Message::RejectCall(id) => {
-                SOUND_MANAGER.lock().unwrap().stop_incoming_call();
-                SOUND_MANAGER.lock().unwrap().stop_incoming_call();
-                SOUND_MANAGER.lock().unwrap().play_red_button();
+                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).stop_incoming_call();
+                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).stop_incoming_call();
+                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_red_button();
                 self.incoming_call = None;
                 self.incoming_call_timer = 0;
                 self.status_message = crate::ui::i18n::t(&self.language, "status_call_rejected");
                 let _ = self.tx_network.send(format!("REJECT:{}", id));
             }
             Message::HangUpCall => {
-                SOUND_MANAGER.lock().unwrap().stop_outgoing_call();
-                SOUND_MANAGER.lock().unwrap().play_red_button();
+                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).stop_outgoing_call();
+                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_red_button();
                 if let Some((id, _)) = self.active_call.take() {
                     if id.starts_with("grp_") {
                         if let Some(vd) = &self.vault_data {
@@ -247,10 +247,10 @@ Message::ConnectClicked => {
             Message::ToggleMute => {
                 self.is_muted = !self.is_muted;
                 if self.is_muted {
-                    SOUND_MANAGER.lock().unwrap().play_mic_muted();
+                    SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_mic_muted();
                     let _ = self.tx_network.send("MUTE:on".to_string());
                 } else {
-                    SOUND_MANAGER.lock().unwrap().play_mic_unmuted();
+                    SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_mic_unmuted();
                     let _ = self.tx_network.send("MUTE:off".to_string());
                 }
             }

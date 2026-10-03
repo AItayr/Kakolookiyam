@@ -98,7 +98,7 @@ impl KakolookiyamApp {
 
             crate::ui::i18n::app_text(&self.language, t(&self.language, "settings_audio")).size(20).color(current_accent),
             crate::ui::i18n::app_text(&self.language, "Volume des notifications (0 à 100%)").color(current_muted),
-            slider(0.0..=1.0, crate::sound::SOUND_MANAGER.lock().unwrap().get_app_volume(), Message::AppVolumeChanged).step(0.01_f32).width(Length::Fill),
+            slider(0.0..=1.0, crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).get_app_volume(), Message::AppVolumeChanged).step(0.01_f32).width(Length::Fill),
             Space::new().height(15),
             crate::ui::i18n::app_text(&self.language, t(&self.language, "settings_mic")).color(current_muted),
             mic_picker,

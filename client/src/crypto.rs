@@ -389,45 +389,7 @@ pub fn verify_message(pub_id_hex: &str, timestamp: u64, content: &str, signature
     public_key.verify(message.as_bytes(), &sig_bytes).is_ok()
 }
 
-pub fn sign_announcement(secret: &[u8], pseudo: &str, timestamp: u64) -> String {
-    if let Ok(key_pair) = ring::signature::Ed25519KeyPair::from_seed_unchecked(secret) {
-        let pub_id = derive_public_id(secret);
-        let message = format!("{}:{}:{}", pub_id, pseudo, timestamp);
-        let signature = key_pair.sign(message.as_bytes());
-        let mut hex = String::new();
-        for byte in signature.as_ref() {
-            write!(&mut hex, "{:02x}", byte).unwrap();
-        }
-        hex
-    } else {
-        String::new()
-    }
-}
 
-pub fn verify_announcement(pub_id_hex: &str, pseudo: &str, timestamp: u64, signature_hex: &str) -> bool {
-    use ring::signature::UnparsedPublicKey;
-    let mut pub_key_bytes = [0u8; 32];
-    if pub_id_hex.len() != 64 { return false; }
-    for i in 0..32 {
-        if let Ok(b) = u8::from_str_radix(&pub_id_hex[i*2..i*2+2], 16) {
-            pub_key_bytes[i] = b;
-        } else {
-            return false;
-        }
-    }
-    let mut sig_bytes = [0u8; 64];
-    if signature_hex.len() != 128 { return false; }
-    for i in 0..64 {
-        if let Ok(b) = u8::from_str_radix(&signature_hex[i*2..i*2+2], 16) {
-            sig_bytes[i] = b;
-        } else {
-            return false;
-        }
-    }
-    let message = format!("{}:{}:{}", pub_id_hex, pseudo, timestamp);
-    let public_key = UnparsedPublicKey::new(&ring::signature::ED25519, pub_key_bytes);
-    public_key.verify(message.as_bytes(), &sig_bytes).is_ok()
-}
 
 pub fn encrypt_and_save_media(pseudo: &str, _file_name: &str, raw_data: &[u8]) -> Result<([u8; 32], String), &'static str> {
     let key = generate_secure_secret();
@@ -466,3 +428,46 @@ pub fn decrypt_media(path: &str, key: &[u8; 32]) -> Result<Vec<u8>, &'static str
     Ok(dec)
 }
 
+
+pub fn sign_signal(secret: &[u8], kind: &str, sender: &str, target: &str, pseudo: &str, payload: &str, ts: u64) -> String {
+    if let Ok(key_pair) = ring::signature::Ed25519KeyPair::from_seed_unchecked(secret) {
+        let h = ring::digest::digest(&ring::digest::SHA256, payload.as_bytes());
+        let hex: String = h.as_ref().iter().map(|b| format!("{:02x}", b)).collect();
+        let message = format!("KAKO-SIG-v2|{}|{}|{}|{}|{}|{}", kind, sender, target, pseudo, ts, hex);
+        let signature = key_pair.sign(message.as_bytes());
+        let mut out = String::new();
+        for byte in signature.as_ref() {
+            std::fmt::Write::write_fmt(&mut out, format_args!("{:02x}", byte)).unwrap();
+        }
+        out
+    } else {
+        String::new()
+    }
+}
+
+pub fn verify_signal(sender_pub_hex: &str, kind: &str, my_id: &str, pseudo: &str, payload: &str, ts: u64, signature_hex: &str) -> bool {
+    use ring::signature::UnparsedPublicKey;
+    let mut pub_key_bytes = [0u8; 32];
+    if sender_pub_hex.len() != 64 { return false; }
+    for i in 0..32 {
+        if let Ok(b) = u8::from_str_radix(&sender_pub_hex[i*2..i*2+2], 16) {
+            pub_key_bytes[i] = b;
+        } else {
+            return false;
+        }
+    }
+    let mut sig_bytes = [0u8; 64];
+    if signature_hex.len() != 128 { return false; }
+    for i in 0..64 {
+        if let Ok(b) = u8::from_str_radix(&signature_hex[i*2..i*2+2], 16) {
+            sig_bytes[i] = b;
+        } else {
+            return false;
+        }
+    }
+    let h = ring::digest::digest(&ring::digest::SHA256, payload.as_bytes());
+    let hex: String = h.as_ref().iter().map(|b| format!("{:02x}", b)).collect();
+    let message = format!("KAKO-SIG-v2|{}|{}|{}|{}|{}|{}", kind, sender_pub_hex, my_id, pseudo, ts, hex);
+    let public_key = UnparsedPublicKey::new(&ring::signature::ED25519, pub_key_bytes);
+    public_key.verify(message.as_bytes(), &sig_bytes).is_ok()
+}

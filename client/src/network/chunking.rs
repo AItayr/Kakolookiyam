@@ -44,7 +44,19 @@ impl TransferManager {
     pub fn cleanup(&mut self, target_id: &str) {
         let prefix = format!("{}_", target_id);
         self.outgoing.retain(|k, _| !k.starts_with(&prefix));
-        self.incoming.retain(|k, _| !k.starts_with(&prefix));
+        
+        let mut to_remove = Vec::new();
+        let target_pattern = format!("_{}_", target_id);
+        for k in self.incoming.keys() {
+            if k.contains(&target_pattern) {
+                to_remove.push(k.clone());
+            }
+        }
+        for k in to_remove {
+            if let Some(transfer) = self.incoming.remove(&k) {
+                let _ = std::fs::remove_file(&transfer.temp_path);
+            }
+        }
     }
 
     pub async fn handle_message(
@@ -109,7 +121,8 @@ impl TransferManager {
              let mut transfer_done = false;
              
              if let Some(transfer) = self.incoming.get_mut(&file_id) {
-                 if index < transfer.total_chunks {
+                 // SECURITY FIX: Validate chunk index strictly
+                 if index < transfer.total_chunks && index == transfer.received_chunks && chunk_data.len() <= CHUNK_SIZE {
                      // SECURITY FIX: STREAM TO DISK
                      if let Some(file) = &mut transfer.file_handle {
                          use std::io::Write;

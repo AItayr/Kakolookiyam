@@ -79,7 +79,7 @@ pub struct KakolookiyamApp {
 impl KakolookiyamApp {
                 
     pub fn new(flags: Flags) -> (Self, Command<Message>) {
-        crate::sound::SOUND_MANAGER.lock().unwrap().play_main_theme();
+        crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_main_theme();
         let initial_state = if crypto::any_vault_exists() { AppState::Login } else { AppState::Welcome };
         (
             Self {
@@ -175,11 +175,11 @@ impl KakolookiyamApp {
                 return iced::Task::none();
             }
             Message::MainThemeVolumeChanged(vol) => {
-                crate::sound::SOUND_MANAGER.lock().unwrap().set_main_theme_volume(vol);
+                crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).set_main_theme_volume(vol);
                 return iced::Task::none();
             }
             Message::AppVolumeChanged(vol) => {
-                crate::sound::SOUND_MANAGER.lock().unwrap().set_app_volume(vol);
+                crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).set_app_volume(vol);
                 return Command::none();
             }
             Message::ToggleTheme => {

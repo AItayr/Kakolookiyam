@@ -124,7 +124,7 @@ impl KakolookiyamApp {
             }
 
             Message::DeleteGroup => {
-                SOUND_MANAGER.lock().unwrap().play_red_button();
+                SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_red_button();
                 self.idle_seconds = 0;
                 let target_id = self.selected_chat.clone();
 

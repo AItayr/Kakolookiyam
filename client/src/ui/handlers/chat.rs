@@ -125,7 +125,7 @@ impl KakolookiyamApp {
             }
             Message::RejectRequest(id) => {
                 if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
-                    SOUND_MANAGER.lock().unwrap().play_red_button();
+                    SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_red_button();
                     vd.pending_requests.remove(&id);
                     let _ = crate::crypto::save_vault(pwd.expose_secret(), vd);
                         self.status_message = crate::ui::i18n::t(&self.language, "status_request_rejected");
@@ -147,7 +147,7 @@ impl KakolookiyamApp {
     }
     pub(crate) fn handle_block_contact(&mut self, id: String) -> iced::Task<Message> {
         if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
-            SOUND_MANAGER.lock().unwrap().play_red_button();
+            SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_red_button();
                     vd.pending_requests.remove(&id);
             vd.contacts.remove(&id);
             if self.selected_chat.as_ref() == Some(&id) {

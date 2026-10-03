@@ -27,7 +27,7 @@ region = "3.0"
 secrecy = "0.8"
 chrono = "0.4.45"
 lazy_static = "1.5.0"
-rodio = "0.22.2"
+
 kira = "0.12.5"
 [[bin]]
 name = "Kakolookiyam"
