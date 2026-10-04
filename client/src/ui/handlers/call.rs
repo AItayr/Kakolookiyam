@@ -117,7 +117,9 @@ impl KakolookiyamApp {
                 }
             }
             Message::AcceptCall(id, sdp, grp_id) => {
-                let mut pseudo = self.incoming_call.as_ref().unwrap().1.clone();
+                let pseudo_opt = self.incoming_call.as_ref().map(|c| c.1.clone());
+                if pseudo_opt.is_none() { return iced::Task::none(); }
+                let mut pseudo = pseudo_opt.unwrap();
                 let mut actual_id = id.clone();
 
                 SOUND_MANAGER

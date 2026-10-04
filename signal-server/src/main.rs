@@ -14,12 +14,12 @@ use base64::Engine;
 
 type HmacSha1 = Hmac<Sha1>;
 
-fn generate_turn_credentials(user_id: &str) -> (String, String) {
+fn generate_turn_credentials(secret: &str, user_id: &str) -> (String, String) {
     // Le secret est maintenant lu depuis une variable d'environnement pour l'Open Source !
     // Si la variable TURN_SECRET n'est pas définie sur le serveur, on utilise un mot de passe public par défaut.
-    let secret = std::env::var("TURN_SECRET").expect("TURN_SECRET requis");
+    
     let unix_time = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
-    let expiration = unix_time + 7200;
+    let expiration = unix_time + 14400;
     let username = format!("{}:{}", expiration, user_id);
     let mut mac = HmacSha1::new_from_slice(secret.as_bytes()).expect("HMAC err");
     mac.update(username.as_bytes());
@@ -70,28 +70,38 @@ enum Signal {
 }
 
 type Clients = Arc<Mutex<HashMap<String, (u64, mpsc::Sender<String>)>>>;
+type ReplayCache = Arc<Mutex<HashMap<String, std::time::Instant>>>;
 
 #[tokio::main]
 async fn main() {
+    let turn_secret = Arc::new(std::env::var("TURN_SECRET").expect("TURN_SECRET requis"));
     let addr = "127.0.0.1:8080";
     let listener = TcpListener::bind(addr).await.expect("Impossible de lier le port");
     let clients: Clients = Arc::new(Mutex::new(HashMap::new()));
-    const MAX_CLIENTS: usize = 2000;
-    while let Ok((stream, _)) = listener.accept().await {
-        if clients.lock().await.len() >= MAX_CLIENTS { continue; }
+    let replay_cache: ReplayCache = Arc::new(Mutex::new(HashMap::new()));
+    let sem = Arc::new(tokio::sync::Semaphore::new(1500));
+    loop {
+        let (stream, _) = match listener.accept().await {
+            Ok(s) => s,
+            Err(_) => { tokio::time::sleep(Duration::from_millis(200)).await; continue; }
+        };
+        let Ok(permit) = sem.clone().try_acquire_owned() else { continue; };
         let clients_clone = clients.clone();
+        let turn_secret_clone = turn_secret.clone();
+        let replay_cache_clone = replay_cache.clone();
         tokio::spawn(async move {
+            let _permit = permit;
             let mut cfg = WebSocketConfig::default();
             cfg.max_message_size = Some(64 * 1024);
             cfg.max_frame_size = Some(64 * 1024);
             if let Ok(Ok(ws_stream)) = tokio::time::timeout(Duration::from_secs(10), accept_async_with_config(stream, Some(cfg))).await {
-                handle_connection(ws_stream, clients_clone).await;
+                handle_connection(ws_stream, clients_clone, &turn_secret_clone, replay_cache_clone).await;
             }
         });
     }
 }
 
-async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>, clients: Clients) {
+async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>, clients: Clients, turn_secret: &str, replay_cache: ReplayCache) {
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
     let (tx, mut rx) = mpsc::channel::<String>(256);
     let mut client_id = String::new();
@@ -118,16 +128,21 @@ async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::
             n += 1; if n > 150 { continue; }
 
             if let Ok(signal) = serde_json::from_str::<Signal>(&text) {
-                match signal {
-                    Signal::Register { id, pseudo, timestamp, signature } => {
+                match signal {                    Signal::Register { id, pseudo, timestamp, signature } => {
                         if !client_id.is_empty() { continue; }
                         if !verify_signature(&id, &pseudo, timestamp, &signature) {
                             let _ = tx.try_send(format!("ERROR:BAD_SIGNATURE:{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()));
                             continue;
                         }
+                        {
+                            let mut cache = replay_cache.lock().await;
+                            cache.retain(|_, v| v.elapsed().as_secs() < 120);
+                            if cache.contains_key(&signature) { continue; }
+                            cache.insert(signature.clone(), std::time::Instant::now());
+                        }
                         let mut clients_guard = clients.lock().await;
                         client_id = id.clone();
-                        let (turn_user, turn_pass) = generate_turn_credentials(&client_id);
+                        let (turn_user, turn_pass) = generate_turn_credentials(turn_secret, &client_id);
                         if let Some((_old_conn_id, old_tx)) = clients_guard.insert(id, (conn_id, tx.clone())) {
                             let _ = old_tx.try_send("ERROR:ALREADY_CONNECTED".to_string());
                         }
@@ -137,10 +152,11 @@ async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::
                         if let Some(t) = turn_refresh_task.take() { t.abort(); }
                         let tx2 = tx.clone();
                         let cid = client_id.clone();
+                        let t_secret = turn_secret.to_string();
                         turn_refresh_task = Some(tokio::spawn(async move {
                             loop {
                                 tokio::time::sleep(Duration::from_secs(3600)).await;
-                                let (u, p) = generate_turn_credentials(&cid);
+                                let (u, p) = generate_turn_credentials(&t_secret, &cid);
                                 if tx2.try_send(format!("TURN_AUTH|{}|{}", u, p)).is_err() { break; }
                             }
                         }));
@@ -189,5 +205,9 @@ async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::
     if let Some(t) = turn_refresh_task { t.abort(); }
     send_task.abort();
 }
+
+
+
+
 
 

@@ -42,24 +42,32 @@ impl KakolookiyamApp {
                 });
             }
 
-            if msg == "ERROR:SERVER_OFFLINE" {
-                SOUND_MANAGER
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .play_error();
-                return Command::perform(async {}, |_| {
-                    Message::ForceDisconnect("❌ Serveur injoignable.".to_string())
-                });
+                        if msg == "ERROR:SERVER_OFFLINE" {
+                if self.vault_data.is_some() {
+                    self.server_offline_since.get_or_insert_with(std::time::Instant::now);
+                    self.status_message = crate::ui::i18n::t(&self.language, "status_reconnecting");
+                    if self.server_offline_since.map_or(false, |t| t.elapsed().as_secs() > 300) {
+                        let msg = crate::ui::i18n::t(&self.language, "status_server_offline");
+                        return Command::perform(async {}, move |_| Message::ForceDisconnect(msg.clone()));
+                    }
+                    return Command::none();
+                } else {
+                    SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).play_error();
+                    let msg = crate::ui::i18n::t(&self.language, "status_server_offline");
+                    return Command::perform(async {}, move |_| {
+                        Message::ForceDisconnect(msg.clone())
+                    });
+                }
             }
 
             if msg.starts_with("FILE_RECV:") {
-                let parts: Vec<&str> = msg.splitn(5, ':').collect();
-
-                if parts.len() == 5 {
-                    let sender_id = parts[1].trim().to_string();
-                    let filename = parts[2].trim().to_string();
-                    let key_b64 = parts[3].trim().to_string();
-                    let path = parts[4].trim().to_string();
+                let payload = msg.trim_start_matches("FILE_RECV:");
+                let parts: Vec<&str> = payload.splitn(4, '|').collect();
+                if parts.len() == 4 {
+                    let sender_id = parts[0].trim().to_string();
+                    let key_b64 = parts[1].trim().to_string();
+                    let path = parts[2].trim().to_string();
+                    let filename = parts[3].trim().to_string();
 
                     use base64::prelude::*;
                     let mut key_bytes = [0u8; 32];
@@ -103,12 +111,7 @@ impl KakolookiyamApp {
                                                 match author_id {
                                                     Some(id) => {
                                                         !parsed_sig.is_empty()
-                                                            && crate::crypto::verify_message(
-                                                                &id,
-                                                                timestamp,
-                                                                &content_str,
-                                                                &parsed_sig,
-                                                            )
+                                                            && crate::crypto::verify_message(&id, &target_id, timestamp, &content_str, &parsed_sig)
                                                     }
                                                     None => false,
                                                 }
@@ -479,12 +482,7 @@ impl KakolookiyamApp {
                                             match author_id {
                                                 Some(id) => {
                                                     !parsed_sig.is_empty()
-                                                        && crate::crypto::verify_message(
-                                                            &id,
-                                                            timestamp,
-                                                            &parsed_content,
-                                                            &parsed_sig,
-                                                        )
+                                                        && crate::crypto::verify_message(&id, &t_id, timestamp, &parsed_content, &parsed_sig)
                                                 }
                                                 None => false,
                                             }
@@ -779,28 +777,45 @@ impl KakolookiyamApp {
                     let mut target_chat_id = sender_id.clone();
                     let mut display_text = text.clone();
 
-                    if text.starts_with("SYS:GRP_MSG:") {
-                        let sys_parts: Vec<&str> = text.splitn(4, ':').collect();
-
-                        if sys_parts.len() == 4 {
+                                        if text.starts_with("SYS:GRP_MSG:") {
+                        let sys_parts: Vec<&str> = text.splitn(6, ':').collect();
+                        if sys_parts.len() == 6 && sys_parts[3] == "v2" {
                             let possible_target = sys_parts[2].trim().to_string();
-
-                            // [MITIGATION] HIGH-1b: Vrification stricte de l'appartenance au groupe
                             let mut authorized = false;
                             if let Some(vd) = &self.vault_data {
                                 if let Some(group) = vd.groups.get(&possible_target) {
-                                    if group.members.contains(&sender_id) {
-                                        authorized = true;
-                                    }
+                                    if group.members.contains(&sender_id) { authorized = true; }
                                 }
                             }
-
-                            if !authorized {
-                                return Command::none();
-                            } // Ignorer le message non autoris
-
+                            if !authorized { return Command::none(); }
+                            let (sig, body) = sys_parts[5].split_once(':').unwrap_or(("", ""));
+                            let ts_str = sys_parts[4].trim();
+                            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                            let mut sig_valid = false;
+                            if let Ok(ts) = ts_str.parse::<u64>() {
+                                let fresh = ts.abs_diff(now) <= 60;
+                                if fresh && crate::crypto::verify_message(&sender_id, &possible_target, ts, body, sig) {
+                                    sig_valid = true;
+                                }
+                            }
+                            if !sig_valid { return Command::none(); }
                             target_chat_id = possible_target;
-                            display_text = sys_parts[3].to_string();
+                            display_text = body.to_string();
+                        } else {
+                            let p: Vec<&str> = text.splitn(4, ':').collect();
+                            if p.len() == 4 {
+                                let possible_target = p[2].trim().to_string();
+                                let mut authorized = false;
+                                if let Some(vd) = &self.vault_data {
+                                    if let Some(group) = vd.groups.get(&possible_target) {
+                                        if group.members.contains(&sender_id) { authorized = true; }
+                                    }
+                                }
+                                if !authorized { return Command::none(); }
+                                target_chat_id = possible_target;
+                                let (_, body) = p[3].split_once(':').unwrap_or(("", p[3]));
+                                display_text = body.to_string();
+                            }
                         }
                     }
 
@@ -913,10 +928,21 @@ impl KakolookiyamApp {
                     let key_b64 = parts[4].to_string();
                     if total > 0 {
                         if filename.starts_with("SYNC|") {
-                            let _ = self.tx_network.send(format!(
-                                "ACCEPT_FILE:{}:{}:{}:{}",
-                                sender_id, filename, total, key_b64
-                            ));
+                            // [LOW-1] Anti-spam d'historique
+                            let mut authorized = false;
+                            if let Some(req_time) = self.sync_requests.get(&sender_id) {
+                                if req_time.elapsed().as_secs() < 120 {
+                                    authorized = true;
+                                }
+                            }
+                            if authorized {
+                                let _ = self.tx_network.send(format!(
+                                    "ACCEPT_FILE:{}:{}:{}:{}",
+                                    sender_id, filename, total, key_b64
+                                ));
+                            } else {
+                                self.status_message = crate::ui::i18n::t(&self.language, "status_spam_rejected");
+                            }
                         } else {
                             self.incoming_file_offers
                                 .retain(|(s, f, _, _)| s != &sender_id || f != &filename);
@@ -1253,3 +1279,4 @@ impl KakolookiyamApp {
         Command::none()
     }
 }
+

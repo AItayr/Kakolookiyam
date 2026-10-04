@@ -89,8 +89,7 @@ impl KakolookiyamApp {
                                             .map(|member_id| {
                                                 let tx = tx.clone();
                                                 let msg = format!(
-                                                    "CHAT_SEND:{}:SYS:GRP_MSG:{}:{}:{}",
-                                                    member_id, t_id, sig, msg_text
+                                                    "CHAT_SEND:{}:SYS:GRP_MSG:{}:v2:{}:{}:{}", member_id, t_id, timestamp, sig, msg_text
                                                 );
                                                 async move {
                                                     let _ = tx.send(msg);

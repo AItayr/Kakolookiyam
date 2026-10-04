@@ -48,6 +48,8 @@ pub struct KakolookiyamApp {
     pub(crate) queued_group_offers: Vec<(String, String)>,
     pub(crate) active_call: Option<(String, String)>,
     pub(crate) active_call_participants: std::collections::HashSet<String>,
+    pub(crate) server_offline_since: Option<std::time::Instant>,
+    pub(crate) sync_requests: std::collections::HashMap<String, std::time::Instant>,
     pub(crate) call_start_time: Option<u64>,
     pub(crate) is_muted: bool,
 
@@ -113,6 +115,8 @@ impl KakolookiyamApp {
                 queued_group_offers: Vec::new(),
                 active_call: None,
                 active_call_participants: std::collections::HashSet::new(),
+            server_offline_since: None,
+            sync_requests: std::collections::HashMap::new(),
                 call_start_time: None,
                 is_muted: false,
                 selected_chat: None,

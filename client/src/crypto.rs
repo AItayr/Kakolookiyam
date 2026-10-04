@@ -389,12 +389,7 @@ pub fn sign_message(secret: &[u8], target_id: &str, timestamp: u64, content: &st
 }
 
 #[allow(dead_code)]
-pub fn verify_message(
-    pub_id_hex: &str,
-    timestamp: u64,
-    content: &str,
-    signature_hex: &str,
-) -> bool {
+pub fn verify_message(pub_id_hex: &str, target_id: &str, timestamp: u64, content: &str, signature_hex: &str) -> bool {
     use ring::signature::UnparsedPublicKey;
     let mut pub_key_bytes = [0u8; 32];
     if pub_id_hex.len() != 64 {
@@ -418,7 +413,7 @@ pub fn verify_message(
             return false;
         }
     }
-    let message = format!("{}:{}:{}", pub_id_hex, timestamp, content);
+    let message = format!("KAKO-MSG-v2|{}|{}|{}|{}", pub_id_hex, target_id, timestamp, content);
     let public_key = UnparsedPublicKey::new(&ring::signature::ED25519, pub_key_bytes);
     public_key.verify(message.as_bytes(), &sig_bytes).is_ok()
 }

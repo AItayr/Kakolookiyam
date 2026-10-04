@@ -166,11 +166,6 @@ impl TransferManager {
                     tokio::spawn(async move {
                         let media_dir = crate::crypto::get_media_dir(&pseudo_clone);
                         // SECURITY FIX: NOUV-1 Path Traversal
-                        let _safe_filename = std::path::Path::new(&filename_owned)
-                            .file_name()
-                            .unwrap_or_else(|| std::ffi::OsStr::new("unknown_file"))
-                            .to_string_lossy()
-                            .replace('|', "_");
 
                         let mut path_buf = std::path::PathBuf::from(media_dir);
                         path_buf.push(format!("kako_media_{}.dat", rand::random::<u64>()));
@@ -182,16 +177,16 @@ impl TransferManager {
                             .is_ok()
                         {
                             let _ = tx_ui_clone.send(format!(
-                                "FILE_RECV:{}:{}:{}:{}",
-                                sender_owned, filename_owned, key_owned, save_path
+                                "FILE_RECV:{}|{}|{}|{}",
+                                sender_owned, key_owned, save_path, filename_owned
                             ));
                         } else {
                             // Fallback to copy+remove if across file systems
                             if tokio::fs::copy(&temp_path_owned, &save_path).await.is_ok() {
                                 let _ = tokio::fs::remove_file(&temp_path_owned).await;
                                 let _ = tx_ui_clone.send(format!(
-                                    "FILE_RECV:{}:{}:{}:{}",
-                                    sender_owned, filename_owned, key_owned, save_path
+                                    "FILE_RECV:{}|{}|{}|{}",
+                                      sender_owned, key_owned, save_path, filename_owned
                                 ));
                             }
                         }

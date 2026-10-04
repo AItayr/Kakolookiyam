@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use webrtc::data_channel::RTCDataChannel;
+use zeroize::Zeroize;
 
 use std::sync::Arc as StdArc;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -109,7 +110,7 @@ pub async fn start_p2p(
     tx_ui: UnboundedSender<String>,
     mut my_local_id: String,
     mut my_pseudo: String,
-    my_secret_arr: [u8; 32],
+    mut my_secret_arr: [u8; 32],
     mut rx_secrets: tokio::sync::mpsc::UnboundedReceiver<[u8; 32]>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut my_secret: Vec<u8> = my_secret_arr.to_vec();
@@ -172,7 +173,29 @@ pub async fn start_p2p(
     let mut global_limiter = RateLimiter::new();
 
     let mut backoff = 1;
+    let mut session_active = true;
     loop {
+        while !session_active {
+            match rx_ui.recv().await {
+                Some(cmd) if cmd.starts_with("REGISTER:") => {
+                    let parts: Vec<&str> = cmd.splitn(4, ':').collect();
+                    if parts.len() == 4 || parts.len() == 3 {
+                        my_local_id = parts[1].to_string();
+                        my_pseudo = parts[2].to_string();
+                        if let Ok(new_secret) = rx_secrets.try_recv() {
+                            my_secret = new_secret.to_vec();
+                            my_secret_arr.copy_from_slice(&my_secret);
+                        }
+                        session_active = true;
+                    } else if parts.len() == 2 {
+                        my_local_id = parts[1].to_string();
+                        session_active = true;
+                    }
+                }
+                Some(_) => {}
+                None => return Ok(()),
+            }
+        }
     let url = "wss://signal.kakolookiyam.ch"; // [MITIGATION] Route chiffrée par Reverse-Proxy (Suisse)
     let (ws_stream, _) = match connect_async(url).await {
         Ok(stream) => { backoff = 1; stream },
@@ -269,6 +292,10 @@ pub async fn start_p2p(
                             data_channels.clear();
                             transfer_manager.outgoing.clear();
                             transfer_manager.incoming.clear();
+                            my_secret.zeroize();
+                            my_secret_arr.zeroize();
+                            session_active = false;
+                            break;
                         }
                                         else if cmd.starts_with("ACCEPT_FILE:") {
                             let parts: Vec<&str> = cmd.splitn(5, ':').collect();
@@ -734,7 +761,7 @@ pub async fn start_p2p(
                             Some(Ok(response)) => {
                                 if let Ok(text) = response.into_text() {
 
-                                    if text == "ERROR:ALREADY_CONNECTED" || text == "SUCCESS:REGISTERED" || text.starts_with("ERROR:NOT_FOUND:") {
+                                    if text == "ERROR:ALREADY_CONNECTED" || text == "SUCCESS:REGISTERED" || text.starts_with("ERROR:NOT_FOUND:") || text.starts_with("ERROR:BAD_SIGNATURE") {
                                         let _ = tx_ui.send(text.to_string());
                                         continue;
                                     }
@@ -892,3 +919,8 @@ pub async fn start_p2p(
     }
     }
 }
+
+
+
+
+

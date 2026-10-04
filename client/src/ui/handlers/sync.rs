@@ -68,7 +68,7 @@ impl KakolookiyamApp {
         )
     }
 
-    pub(crate) fn trigger_history_sync(&self, target_id: &str) -> Command<Message> {
+    pub(crate) fn trigger_history_sync(&mut self, target_id: &str) -> Command<Message> {
         let mut last_timestamp = 0;
         let mut peers_to_ask = Vec::new();
 
@@ -103,6 +103,12 @@ impl KakolookiyamApp {
 
         let tx = self.tx_network.clone();
         let target_id_owned = target_id.to_string();
+        
+        // [LOW-1] Record that we asked for a sync for these peers
+        let now = std::time::Instant::now();
+        for p in &peers_to_ask {
+            self.sync_requests.insert(p.clone(), now);
+        }
 
         Command::perform(
             async move {
@@ -222,8 +228,8 @@ impl KakolookiyamApp {
                                     );
 
                                     let _ = tx.send(format!(
-                                        "FILE_SEND_INIT:{}:{}:{}:{}",
-                                        requester_id, sync_filename, key_b64, path
+                                        "FILE_SEND_INIT:{}|{}|{}|{}",
+                                        requester_id, key_b64, path, sync_filename
                                     ));
                                     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
                                 }
