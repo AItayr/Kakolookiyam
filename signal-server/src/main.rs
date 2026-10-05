@@ -15,11 +15,8 @@ use base64::Engine;
 type HmacSha1 = Hmac<Sha1>;
 
 fn generate_turn_credentials(secret: &str, user_id: &str) -> (String, String) {
-    // Le secret est maintenant lu depuis une variable d'environnement pour l'Open Source !
-    // Si la variable TURN_SECRET n'est pas définie sur le serveur, on utilise un mot de passe public par défaut.
-    
     let unix_time = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
-    let expiration = unix_time + 14400;
+    let expiration = unix_time + 14400; // 4h
     let username = format!("{}:{}", expiration, user_id);
     let mut mac = HmacSha1::new_from_slice(secret.as_bytes()).expect("HMAC err");
     mac.update(username.as_bytes());
@@ -31,7 +28,7 @@ fn generate_turn_credentials(secret: &str, user_id: &str) -> (String, String) {
 fn verify_signature(pub_id_hex: &str, pseudo: &str, timestamp: u64, signature_hex: &str) -> bool {
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
     if timestamp < now - 60 || timestamp > now + 60 { return false; }
-    
+
     let mut pub_key_bytes = [0u8; 32];
     for i in 0..32 {
         if i * 2 + 2 > pub_id_hex.len() { return false; }
@@ -41,7 +38,7 @@ fn verify_signature(pub_id_hex: &str, pseudo: &str, timestamp: u64, signature_he
             return false;
         }
     }
-    
+
     let mut sig_bytes = Vec::new();
     for i in 0..(signature_hex.len() / 2) {
         if i * 2 + 2 > signature_hex.len() { return false; }
@@ -51,7 +48,7 @@ fn verify_signature(pub_id_hex: &str, pseudo: &str, timestamp: u64, signature_he
             return false;
         }
     }
-    
+
     let h = ring::digest::digest(&ring::digest::SHA256, b""); let hex: String = h.as_ref().iter().map(|b| format!("{:02x}", b)).collect(); let message = format!("KAKO-SIG-v2|Register|{}||{}|{}|{}", pub_id_hex, pseudo, timestamp, hex);
     let public_key = ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, &pub_key_bytes);
     public_key.verify(message.as_bytes(), &sig_bytes).is_ok()
@@ -80,6 +77,7 @@ async fn main() {
     let clients: Clients = Arc::new(Mutex::new(HashMap::new()));
     let replay_cache: ReplayCache = Arc::new(Mutex::new(HashMap::new()));
     let sem = Arc::new(tokio::sync::Semaphore::new(1500));
+
     loop {
         let (stream, _) = match listener.accept().await {
             Ok(s) => s,
@@ -88,14 +86,15 @@ async fn main() {
         let Ok(permit) = sem.clone().try_acquire_owned() else { continue; };
         let clients_clone = clients.clone();
         let turn_secret_clone = turn_secret.clone();
-        let replay_cache_clone = replay_cache.clone();
+        let cache_clone = replay_cache.clone();
+
         tokio::spawn(async move {
             let _permit = permit;
             let mut cfg = WebSocketConfig::default();
             cfg.max_message_size = Some(64 * 1024);
             cfg.max_frame_size = Some(64 * 1024);
             if let Ok(Ok(ws_stream)) = tokio::time::timeout(Duration::from_secs(10), accept_async_with_config(stream, Some(cfg))).await {
-                handle_connection(ws_stream, clients_clone, &turn_secret_clone, replay_cache_clone).await;
+                handle_connection(ws_stream, clients_clone, &turn_secret_clone, cache_clone).await;
             }
         });
     }
@@ -128,18 +127,24 @@ async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::
             n += 1; if n > 150 { continue; }
 
             if let Ok(signal) = serde_json::from_str::<Signal>(&text) {
-                match signal {                    Signal::Register { id, pseudo, timestamp, signature } => {
+                match signal {
+                    Signal::Register { id, pseudo, timestamp, signature } => {
                         if !client_id.is_empty() { continue; }
                         if !verify_signature(&id, &pseudo, timestamp, &signature) {
                             let _ = tx.try_send(format!("ERROR:BAD_SIGNATURE:{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()));
                             continue;
                         }
+
                         {
                             let mut cache = replay_cache.lock().await;
                             cache.retain(|_, v| v.elapsed().as_secs() < 120);
-                            if cache.contains_key(&signature) { continue; }
+                            if cache.contains_key(&signature) {
+                                let _ = tx.try_send("ERROR:ALREADY_CONNECTED".to_string());
+                                continue;
+                            }
                             cache.insert(signature.clone(), std::time::Instant::now());
                         }
+
                         let mut clients_guard = clients.lock().await;
                         client_id = id.clone();
                         let (turn_user, turn_pass) = generate_turn_credentials(turn_secret, &client_id);
@@ -164,7 +169,9 @@ async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::
                     Signal::Unregister { id } => {
                         if client_id == id {
                             let mut clients_guard = clients.lock().await;
-                            clients_guard.remove(&id);
+                            if matches!(clients_guard.get(&id), Some(&(cid, _)) if cid == conn_id) {
+                                clients_guard.remove(&id);
+                            }
                             client_id.clear();
                         }
                     },
@@ -205,9 +212,3 @@ async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::
     if let Some(t) = turn_refresh_task { t.abort(); }
     send_task.abort();
 }
-
-
-
-
-
-

@@ -857,8 +857,8 @@ pub async fn start_p2p(
                                                 if timestamp < now - 60 || timestamp > now + 60 { continue; }
                                                 replay_cache.retain(|_, v| v.elapsed().as_secs() < 120);
                                                 if replay_cache.contains_key(&signature) { continue; }
-                                                replay_cache.insert(signature.clone(), std::time::Instant::now());
                                                 if !crate::crypto::verify_signal(&sender_id, "Answer", &my_local_id, &pseudo, &sdp, timestamp, &signature) { continue; }
+                                                replay_cache.insert(signature.clone(), std::time::Instant::now());
 
                                                 if sdp == "BUSY" {
                                                     let _ = tx_ui.send(format!("CALL_BUSY:{}", sender_id));
@@ -889,8 +889,8 @@ pub async fn start_p2p(
                                                 if timestamp < now - 60 || timestamp > now + 60 { continue; }
                                                 replay_cache.retain(|_, v| v.elapsed().as_secs() < 120);
                                                 if replay_cache.contains_key(&signature) { continue; }
-                                                replay_cache.insert(signature.clone(), std::time::Instant::now());
                                                 if !crate::crypto::verify_signal(&sender_id, "Ice", &my_local_id, &pseudo, &candidate, timestamp, &signature) { continue; }
+                                                replay_cache.insert(signature.clone(), std::time::Instant::now());
 
                                                 let mut handled = false;
                                                 if let Some((pc, _flag)) = peers.get(&sender_id) {
@@ -917,6 +917,8 @@ pub async fn start_p2p(
                     }
         }
     }
+    tokio::time::sleep(tokio::time::Duration::from_secs(backoff)).await;
+    if backoff < 30 { backoff *= 2; }
     }
 }
 

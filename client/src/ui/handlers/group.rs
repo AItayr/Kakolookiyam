@@ -12,7 +12,7 @@ impl KakolookiyamApp {
             }
 
             Message::CreateGroup => {
-                let name = self.new_group_input.trim().to_string();
+                let name = self.new_group_input.trim().replace(":", "_").to_string();
                 if !name.is_empty() {
                     if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
                         use rand::RngCore;

@@ -194,6 +194,14 @@ impl KakolookiyamApp {
                 sync_str.push_str(&format!(":{}", b_id));
             }
             let _ = self.tx_network.send(sync_str);
+            let _ = self.tx_network.send(format!("HANGUP:{}", id));
+            if let Some((act_id, _)) = &self.active_call {
+                if act_id == &id {
+                    self.active_call = None;
+                    self.active_call_participants.clear();
+                    crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).stop_outgoing_call();
+                }
+            }
         }
         iced::Task::none()
     }

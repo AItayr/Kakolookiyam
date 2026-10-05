@@ -228,8 +228,8 @@ impl KakolookiyamApp {
                                     );
 
                                     let _ = tx.send(format!(
-                                        "FILE_SEND_INIT:{}|{}|{}|{}",
-                                        requester_id, key_b64, path, sync_filename
+                                        "FILE_SEND_INIT:{}:{}:{}:{}",
+                                        requester_id, sync_filename, key_b64, path
                                     ));
                                     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
                                 }

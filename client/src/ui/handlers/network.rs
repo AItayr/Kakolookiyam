@@ -47,8 +47,8 @@ impl KakolookiyamApp {
                     self.server_offline_since.get_or_insert_with(std::time::Instant::now);
                     self.status_message = crate::ui::i18n::t(&self.language, "status_reconnecting");
                     if self.server_offline_since.map_or(false, |t| t.elapsed().as_secs() > 300) {
-                        let msg = crate::ui::i18n::t(&self.language, "status_server_offline");
-                        return Command::perform(async {}, move |_| Message::ForceDisconnect(msg.clone()));
+                        self.status_message = crate::ui::i18n::t(&self.language, "status_server_offline");
+                        return Command::none();
                     }
                     return Command::none();
                 } else {
@@ -93,6 +93,22 @@ impl KakolookiyamApp {
                             if let Ok(timestamp) = ts_str.parse::<u64>() {
                                 if let Ok(decoded_bytes) = BASE64_STANDARD.decode(b64_content) {
                                     if let Ok(content_str) = String::from_utf8(decoded_bytes) {
+                                        let mut hash_valid = true;
+                                        if let Some((_, expected_hex)) = content_str.split_once('|') {
+                                            if let Ok(received_bytes) = std::fs::read(&path) {
+                                                let digest = ring::digest::digest(&ring::digest::SHA256, &received_bytes);
+                                                let hex: String = digest.as_ref().iter().map(|b| format!("{:02x}", b)).collect();
+                                                if hex != expected_hex {
+                                                    hash_valid = false;
+                                                }
+                                            } else {
+                                                hash_valid = false;
+                                            }
+                                        }
+                                        if !hash_valid {
+                                            let _ = std::fs::remove_file(&path);
+                                            return Command::none();
+                                        }
                                         if let (Some(vd), Some(_pwd)) =
                                             (&mut self.vault_data, &self.master_password)
                                         {
@@ -275,6 +291,14 @@ impl KakolookiyamApp {
                         }
                     }
                     let text = parts[2].to_string();
+
+                    let is_contact = self.vault_data.as_ref()
+                        .map_or(false, |vd| vd.contacts.contains_key(&sender_id));
+                    let in_my_group = self.vault_data.as_ref()
+                        .map_or(false, |vd| vd.groups.values().any(|g| g.members.contains(&sender_id)));
+                    if text.starts_with("SYS:") && !is_contact && !in_my_group {
+                        return Command::none();
+                    }
 
                     // --- NOUVEAU : On étouffe le signal de réveil réseau ---
                     if text.starts_with("SYS:SYNC_WAKEUP") {
@@ -626,64 +650,15 @@ impl KakolookiyamApp {
                                         if !group.members.contains(&sender_id) {
                                             return Command::none();
                                         }
-                                        let my_id =
-                                            crate::crypto::derive_public_id(&vd.private_key);
-
-                                        self.active_call =
-                                            Some((grp_id.clone(), group.name.clone()));
-                                        self.active_call_participants.clear();
-                                        self.call_start_time = Some(
-                                            std::time::SystemTime::now()
-                                                .duration_since(std::time::UNIX_EPOCH)
-                                                .unwrap()
-                                                .as_secs(),
-                                        );
-                                        self.chat_history.clear();
-
-                                        if let Some(history) = vd.chat_history.get(&grp_id) {
-                                            for msg in history {
-                                                self.chat_history.push((
-                                                    msg.author.clone(),
-                                                    msg.content.clone(),
-                                                ));
-                                            }
-                                        }
-                                        self.status_message = crate::ui::i18n::t(
-                                            &self.language,
-                                            "status_group_joined",
-                                        )
-                                        .replace("{name}", &group.name);
-
-                                        let tx = self.tx_network.clone();
-                                        let members = group.members.clone();
-                                        let m_id = my_id.clone();
-                                        let inviter = sender_id.clone();
-
-                                        // Synchronisation initiale pour l'arrivée
-                                        let sync_task = self.trigger_history_sync(&grp_id);
-                                        let dial_task = Command::perform(
-                                            async move {
-                                                for member_id in members {
-                                                    if member_id != m_id && member_id != inviter {
-                                                        if m_id > member_id {
-                                                            let _ = tx.send(format!(
-                                                                "CALL:{}",
-                                                                member_id
-                                                            ));
-                                                            tokio::time::sleep(
-                                                                std::time::Duration::from_millis(
-                                                                    300,
-                                                                ),
-                                                            )
-                                                            .await;
-                                                        }
-                                                    }
-                                                }
-                                            },
-                                            |_| Message::ResetInactivity,
-                                        );
-
-                                        return Command::batch(vec![dial_task, sync_task]);
+                                        let caller_pseudo = vd.contacts.get(&sender_id)
+                                            .cloned()
+                                            .unwrap_or_else(|| "Inconnu".to_string());
+                                        
+                                        self.incoming_call = Some((sender_id.clone(), caller_pseudo, "".to_string(), grp_id.clone()));
+                                        self.incoming_call_timer = 60;
+                                        self.status_message = crate::ui::i18n::t(&self.language, "status_incoming_call");
+                                        crate::sound::SOUND_MANAGER.lock().unwrap_or_else(|e| e.into_inner()).start_incoming_call();
+                                        return Command::none();
                                     }
                                 }
                             }
@@ -710,6 +685,13 @@ impl KakolookiyamApp {
                                     return Command::none();
                                 }
                                 let is_new = !vd.groups.contains_key(&grp_id);
+                                if is_new && !vd.contacts.contains_key(&sender_id) {
+                                    return Command::none();
+                                }
+                                const MAX_GROUPS: usize = 200;
+                                if is_new && vd.groups.len() >= MAX_GROUPS {
+                                    return Command::none();
+                                }
                                 let mut authorized = is_new;
                                 if !is_new {
                                     if let Some(existing) = vd.groups.get(&grp_id) {
@@ -899,17 +881,22 @@ impl KakolookiyamApp {
                     if let (Some(vd), Some(_pwd)) = (&mut self.vault_data, &self.master_password) {
                         if !vd.contacts.contains_key(&c_id) {
                             if !vd.pending_requests.contains_key(&c_id) {
-                                vd.pending_requests.insert(c_id, c_pseudo);
+                                const MAX_PENDING: usize = 100;
+                                let c_pseudo_clean: String = c_pseudo.chars().filter(|c| !c.is_control()).take(32).collect();
+                                if vd.pending_requests.len() >= MAX_PENDING { return Command::none(); }
+                                vd.pending_requests.insert(c_id.clone(), c_pseudo_clean.clone());
                                 self.needs_save = true;
                                 self.status_message =
                                     crate::ui::i18n::t(&self.language, "status_new_request");
                             } else {
                                 // Mettre   jour le pseudo de la demande en attente
-                                vd.pending_requests.insert(c_id, c_pseudo);
+                                let c_pseudo_clean: String = c_pseudo.chars().filter(|c| !c.is_control()).take(32).collect();
+                                vd.pending_requests.insert(c_id, c_pseudo_clean);
                             }
                         } else {
                             // C'est un de nos contacts. Mettons   jour son pseudo officiel s'il tait inconnu !
-                            vd.contacts.insert(c_id, c_pseudo);
+                            let c_pseudo_clean: String = c_pseudo.chars().filter(|c| !c.is_control()).take(32).collect();
+                            vd.contacts.insert(c_id, c_pseudo_clean);
                             self.needs_save = true;
                         }
                     }

@@ -73,7 +73,8 @@ impl KakolookiyamApp {
 
             Message::FileRead(data_opt) => {
                 self.idle_seconds = 0;
-                if let Some((file_name, raw_data)) = data_opt {
+                if let Some((mut file_name, raw_data)) = data_opt {
+                    file_name = file_name.replace(":", "_").replace("|", "_");
                     if file_name == "ERROR_SIZE" {
                         self.status_message =
                             crate::ui::i18n::t(&self.language, "status_file_too_large");
@@ -146,10 +147,14 @@ impl KakolookiyamApp {
                                     .duration_since(std::time::UNIX_EPOCH)
                                     .unwrap()
                                     .as_secs();
+                                let enc_bytes = std::fs::read(&enc_path).unwrap_or_default();
+                                let digest = ring::digest::digest(&ring::digest::SHA256, &enc_bytes);
+                                let hex: String = digest.as_ref().iter().map(|b| format!("{:02x}", b)).collect();
                                 let content = format!(
-                                    "{} {}",
+                                    "{} {}|{}",
                                     crate::ui::i18n::t(&self.language, "msg_file_shared"),
-                                    file_name
+                                    file_name,
+                                    hex
                                 );
                                 let entry = crate::crypto::MessageEntry {
                                     author: crate::ui::i18n::t(&self.language, "me_author"),
