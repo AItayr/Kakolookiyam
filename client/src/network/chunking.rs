@@ -88,8 +88,8 @@ impl TransferManager {
 
             let key_b64 = std::str::from_utf8(parts[4]).unwrap_or("").to_string();
             let _ = tx_ui.send(format!(
-                "FILE_OFFER:{}:{}:{}:{}",
-                sender_id, filename, total, key_b64
+                "FILE_OFFER|{}|{}|{}|{}",
+                sender_id, total, key_b64, filename
             ));
         } else if sys_cmd == "ACK_META" && parts.len() >= 3 {
             let filename = std::str::from_utf8(parts[2]).unwrap_or("");

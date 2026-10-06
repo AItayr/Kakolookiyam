@@ -71,6 +71,7 @@ impl KakolookiyamApp {
                 if let Some(target_id) = target {
                     if let (Some(vd), Some(pwd)) = (&mut self.vault_data, &self.master_password) {
                         let my_id = crypto::derive_public_id(&vd.private_key);
+                        let my_id_for_async = my_id.clone();
                         let mut broadcast_cmd = iced::Task::none();
 
                         if target_id.starts_with("grp_") {
@@ -80,12 +81,12 @@ impl KakolookiyamApp {
                                 let t_id = target_id.clone();
                                 let msg_text = text.clone();
 
-                                let sig = crypto::sign_message(&vd.private_key, &t_id, timestamp, &msg_text);
+                                let sig = crypto::sign_message(&vd.private_key, &crypto::conv_id(&my_id, &t_id), timestamp, &msg_text);
                                 broadcast_cmd = Command::perform(
                                     async move {
                                         let sends = members
                                             .into_iter()
-                                            .filter(|m| m != &my_id)
+                                            .filter(|m| m != &my_id_for_async)
                                             .map(|member_id| {
                                                 let tx = tx.clone();
                                                 let msg = format!(
@@ -115,7 +116,7 @@ impl KakolookiyamApp {
                             media_path: None,
                             signature: Some(crypto::sign_message(
                                 &vd.private_key,
-                                &target_id,
+                                &crypto::conv_id(&my_id, &target_id),
                                 timestamp,
                                 &text,
                             )),

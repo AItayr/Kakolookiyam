@@ -52,7 +52,7 @@ impl KakolookiyamApp {
 
             Message::AddMemberToGroup => {
                 let new_member = self.new_member_input.trim().to_string();
-                if !new_member.is_empty() {
+                if new_member.len() == 64 && new_member.chars().all(|c| c.is_ascii_hexdigit()) {
                     if let Some(grp_id) = &self.selected_chat {
                         if grp_id.starts_with("grp_") {
                             if let (Some(vd), Some(pwd)) =

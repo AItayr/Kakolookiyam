@@ -3,7 +3,7 @@ use crate::ui::messages::Message;
 use iced::Task as Command;
 
 impl KakolookiyamApp {
-    pub(crate) fn trigger_global_sync(&self) -> Command<Message> {
+    pub(crate) fn trigger_global_sync(&mut self) -> Command<Message> {
         let tx = self.tx_network.clone();
         let mut sync_tasks = Vec::new();
 
@@ -11,6 +11,7 @@ impl KakolookiyamApp {
             let my_id = crate::crypto::derive_public_id(&vd.private_key);
 
             for contact_id in vd.contacts.keys() {
+                self.sync_requests.insert(contact_id.clone(), std::time::Instant::now());
                 let mut last_ts = 0;
                 if let Some(history) = vd.chat_history.get(contact_id) {
                     let sys_author = crate::ui::i18n::t(&self.language, "system_author");

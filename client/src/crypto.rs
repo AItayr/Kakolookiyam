@@ -531,3 +531,9 @@ pub fn verify_signal(
     let public_key = UnparsedPublicKey::new(&ring::signature::ED25519, pub_key_bytes);
     public_key.verify(message.as_bytes(), &sig_bytes).is_ok()
 }
+
+pub fn conv_id(me: &str, other: &str) -> String {
+    if other.starts_with("grp_") { return other.to_string(); }
+    let (a, b) = if me <= other { (me, other) } else { (other, me) };
+    format!("dm:{}:{}", a, b)
+}

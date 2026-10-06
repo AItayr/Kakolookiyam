@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, Mutex};
-use tokio_tungstenite::accept_async_with_config;
+use tokio_tungstenite::{accept_hdr_async_with_config};
+use tokio_tungstenite::tungstenite::handshake::server::{Request, Response};
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use std::time::Duration;
 use futures_util::{StreamExt, SinkExt};
@@ -76,6 +77,7 @@ async fn main() {
     let listener = TcpListener::bind(addr).await.expect("Impossible de lier le port");
     let clients: Clients = Arc::new(Mutex::new(HashMap::new()));
     let replay_cache: ReplayCache = Arc::new(Mutex::new(HashMap::new()));
+    let ip_tracker = Arc::new(Mutex::new(HashMap::<String, usize>::new()));
     let sem = Arc::new(tokio::sync::Semaphore::new(1500));
 
     loop {
@@ -87,14 +89,45 @@ async fn main() {
         let clients_clone = clients.clone();
         let turn_secret_clone = turn_secret.clone();
         let cache_clone = replay_cache.clone();
+        let ip_tracker_clone = ip_tracker.clone();
 
         tokio::spawn(async move {
             let _permit = permit;
             let mut cfg = WebSocketConfig::default();
             cfg.max_message_size = Some(64 * 1024);
             cfg.max_frame_size = Some(64 * 1024);
-            if let Ok(Ok(ws_stream)) = tokio::time::timeout(Duration::from_secs(10), accept_async_with_config(stream, Some(cfg))).await {
+            
+            let mut ip = String::new();
+            let cb = |req: &Request, resp: Response| {
+                if let Some(v) = req.headers().get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
+                    ip = v.split(',').next().unwrap_or("").trim().to_string();
+                } else if let Some(v) = req.headers().get("x-real-ip").and_then(|v| v.to_str().ok()) {
+                    ip = v.trim().to_string();
+                }
+                Ok(resp)
+            };
+            
+            if let Ok(Ok(ws_stream)) = tokio::time::timeout(Duration::from_secs(10), accept_hdr_async_with_config(stream, cb, Some(cfg))).await {
+                if !ip.is_empty() {
+                    let mut tracker = ip_tracker_clone.lock().await;
+                    let count = tracker.entry(ip.clone()).or_insert(0);
+                    if *count >= 20 {
+                        return; // Too many connections from this IP
+                    }
+                    *count += 1;
+                }
+                
                 handle_connection(ws_stream, clients_clone, &turn_secret_clone, cache_clone).await;
+                
+                if !ip.is_empty() {
+                    let mut tracker = ip_tracker_clone.lock().await;
+                    if let Some(count) = tracker.get_mut(&ip) {
+                        *count = count.saturating_sub(1);
+                        if *count == 0 {
+                            tracker.remove(&ip);
+                        }
+                    }
+                }
             }
         });
     }
@@ -119,8 +152,14 @@ async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::
     let mut win = std::time::Instant::now();
     let mut n = 0u32;
 
+    let started = std::time::Instant::now();
     loop {
-        let next = tokio::time::timeout(Duration::from_secs(90), ws_receiver.next()).await;
+        let wait = if client_id.is_empty() {
+            Duration::from_secs(15).saturating_sub(started.elapsed())
+        } else {
+            Duration::from_secs(90)
+        };
+        let next = tokio::time::timeout(wait, ws_receiver.next()).await;
         let Ok(Some(Ok(msg))) = next else { break };
         if let Ok(text) = msg.into_text() {
             if win.elapsed() > Duration::from_secs(10) { win = std::time::Instant::now(); n = 0; }
@@ -139,7 +178,7 @@ async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::
                             let mut cache = replay_cache.lock().await;
                             cache.retain(|_, v| v.elapsed().as_secs() < 120);
                             if cache.contains_key(&signature) {
-                                let _ = tx.try_send("ERROR:ALREADY_CONNECTED".to_string());
+                                let _ = tx.try_send("ERROR:REPLAY".to_string());
                                 continue;
                             }
                             cache.insert(signature.clone(), std::time::Instant::now());
@@ -212,3 +251,4 @@ async fn handle_connection(ws_stream: tokio_tungstenite::WebSocketStream<tokio::
     if let Some(t) = turn_refresh_task { t.abort(); }
     send_task.abort();
 }
+

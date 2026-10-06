@@ -96,6 +96,7 @@ impl KakolookiyamApp {
                                 use base64::prelude::*;
                                 let key_b64 = BASE64_STANDARD.encode(key_bytes);
                                 let my_id = crate::crypto::derive_public_id(&vd.private_key);
+                                let my_id_for_async = my_id.clone();
 
                                 let mut broadcast_cmd = Command::none();
 
@@ -111,18 +112,18 @@ impl KakolookiyamApp {
                                             async move {
                                                 let sends = members
                                                     .into_iter()
-                                                    .filter(|m| m != &my_id)
+                                                    .filter(|m| m != &my_id_for_async)
                                                     .map(|member_id| {
                                                         let tx = tx.clone();
                                                         let net_filename = net_filename.clone();
                                                         let key_b64 = key_b64.clone();
                                                         let enc_path_net = enc_path_net.clone();
                                                         let msg = format!(
-                                                            "FILE_SEND_INIT:{}:{}:{}:{}",
+                                                            "FILE_SEND_INIT|{}|{}|{}|{}",
                                                             member_id,
-                                                            net_filename,
                                                             key_b64,
-                                                            enc_path_net
+                                                            enc_path_net,
+                                                            net_filename
                                                         );
                                                         async move {
                                                             let _ = tx.send(msg);
@@ -135,11 +136,11 @@ impl KakolookiyamApp {
                                     }
                                 } else {
                                     let _ = self.tx_network.send(format!(
-                                        "FILE_SEND_INIT:{}:{}:{}:{}",
+                                        "FILE_SEND_INIT|{}|{}|{}|{}",
                                         target_id,
-                                        file_name.clone(),
                                         key_b64,
-                                        enc_path.clone()
+                                        enc_path.clone(),
+                                        file_name.clone()
                                     ));
                                 }
 
@@ -165,7 +166,7 @@ impl KakolookiyamApp {
                                     media_path: Some(enc_path),
                                     signature: Some(crate::crypto::sign_message(
                                         &vd.private_key,
-                                        &target_id,
+                                        &crate::crypto::conv_id(&my_id, &target_id),
                                         timestamp,
                                         &content,
                                     )),
@@ -299,12 +300,20 @@ impl KakolookiyamApp {
             Message::PreviewMediaLoaded(data_opt) => {
                 self.idle_seconds = 0;
                 if let Some(decrypted_bytes) = data_opt {
+                    let mut valid = false;
                     if decrypted_bytes.len() < 15_000_000 {
+                        if let Ok(img) = image::load_from_memory(&decrypted_bytes) {
+                            if img.width() <= 4096 && img.height() <= 4096 {
+                                valid = true;
+                            }
+                        }
+                    }
+                    if valid {
                         self.media_preview =
                             Some(iced::widget::image::Handle::from_bytes(decrypted_bytes));
                         self.status_message = crate::ui::i18n::t(&self.language, "status_media_ram");
                     } else {
-                        self.status_message = "Image trop volumineuse pour l\'aperçu en mémoire.".to_string();
+                        self.status_message = "Image trop volumineuse ou non decodable.".to_string();
                     }
                 } else {
                     self.status_message = crate::ui::i18n::t(&self.language, "status_media_error");
@@ -315,8 +324,8 @@ impl KakolookiyamApp {
                 self.incoming_file_offers
                     .retain(|(s, f, _, _)| s != &sender_id || f != &filename);
                 let _ = self.tx_network.send(format!(
-                    "ACCEPT_FILE:{}:{}:{}:{}",
-                    sender_id, filename, total, key_b64
+                    "ACCEPT_FILE|{}|{}|{}|{}",
+                    sender_id, total, key_b64, filename
                 ));
             }
             Message::RejectFileTransfer(sender_id, filename) => {

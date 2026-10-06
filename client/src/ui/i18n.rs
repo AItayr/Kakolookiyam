@@ -541,6 +541,18 @@ pub fn t(lang: &Language, key: &str) -> String {
         (Language::Fr, "blocked_contacts") => "BLOQUÉS",
         (Language::En, "blocked_contacts") => "BLOCKED",
         (Language::Ar, "blocked_contacts") => "محظور",
+        (Language::Fr, "status_reconnecting")  => "Connexion perdue, reconnexion en cours.",
+        (Language::En, "status_reconnecting")  => "Connection lost, reconnecting.",
+        (Language::Ar, "status_reconnecting")  => "فقدان الاتصال، جاري إعادة الاتصال.",
+        (Language::Fr, "status_server_offline") => "⚠️ Serveur injoignable.",
+        (Language::En, "status_server_offline") => "⚠️ Server unreachable.",
+        (Language::Ar, "status_server_offline") => "⚠️ الخادم غير متاح.",
+        (Language::Fr, "status_spam_rejected") => "Fichier de synchronisation non sollicité ignoré.",
+        (Language::En, "status_spam_rejected") => "Unsolicited sync file ignored.",
+        (Language::Ar, "status_spam_rejected") => "تم تجاهل ملف المزامنة غير المطلوب.",
+        (Language::Fr, "status_incoming_call") => "Appel entrant.",
+        (Language::En, "status_incoming_call") => "Incoming call.",
+        (Language::Ar, "status_incoming_call") => "مكالمة واردة.",
         _ => key,
     };
     text.to_string()

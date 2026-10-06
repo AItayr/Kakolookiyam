@@ -182,7 +182,7 @@ pub async fn start_p2p(
                     if parts.len() == 4 || parts.len() == 3 {
                         my_local_id = parts[1].to_string();
                         my_pseudo = parts[2].to_string();
-                        if let Ok(new_secret) = rx_secrets.try_recv() {
+                        if let Ok(Some(new_secret)) = tokio::time::timeout(std::time::Duration::from_secs(2), rx_secrets.recv()).await {
                             my_secret = new_secret.to_vec();
                             my_secret_arr.copy_from_slice(&my_secret);
                         }
@@ -272,7 +272,7 @@ pub async fn start_p2p(
                             if parts.len() == 4 || parts.len() == 3 {
                                 my_local_id = parts[1].to_string();
                                 my_pseudo = parts[2].to_string();
-                                if let Ok(new_secret) = rx_secrets.try_recv() {
+                                if let Ok(Some(new_secret)) = tokio::time::timeout(std::time::Duration::from_secs(2), rx_secrets.recv()).await {
                                     my_secret = new_secret.to_vec();
                                 }
                                 let _ = tx_signal.send(Signal::Register { id: my_local_id.clone(), pseudo: String::new(), timestamp: 0, signature: String::new() }).await;
@@ -297,13 +297,13 @@ pub async fn start_p2p(
                             session_active = false;
                             break;
                         }
-                                        else if cmd.starts_with("ACCEPT_FILE:") {
-                            let parts: Vec<&str> = cmd.splitn(5, ':').collect();
+                                        else if cmd.starts_with("ACCEPT_FILE|") {
+                            let parts: Vec<&str> = cmd.splitn(5, '|').collect();
                             if parts.len() == 5 {
                                 let sender_id = parts[1].to_string();
-                                let filename = parts[2].to_string();
-                                let total: usize = parts[3].parse().unwrap_or(0);
-                                let key_b64 = parts[4].to_string();
+                                let total: usize = parts[2].parse().unwrap_or(0);
+                                let key_b64 = parts[3].to_string();
+                                let filename = parts[4].to_string();
 
                                 let file_id = format!("{}_{}_{}", my_pseudo, sender_id, filename);
                                 let temp_path = format!("{}/kako_tmp_{}_{}", std::env::temp_dir().display(), rand::random::<u64>(), file_id.replace(|c: char| !c.is_alphanumeric(), "_"));
@@ -547,13 +547,22 @@ pub async fn start_p2p(
                                 let target_id = parts[1].to_string();
                                 let text = parts[2].to_string();
 
+                                let mut sent = false;
                                 if let Some(dc) = data_channels.get(&target_id) {
-                                    let _ = dc.send_text(text).await;
-                                } else {
-                                    if let Some((old_pc, flag)) = peers.remove(&target_id) {
-         flag.store(false, std::sync::atomic::Ordering::Relaxed);
-                                        let _ = old_pc.close().await;
+                                    if dc.ready_state() == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open {
+                                        let _ = dc.send_text(text.clone()).await;
+                                        sent = true;
                                     }
+                                }
+                                
+                                if !sent {
+                                    let tx_ui_clone = tx_ui.clone();
+                                    let cmd_clone = cmd.clone();
+                                    tokio::spawn(async move {
+                                        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                                        let _ = tx_ui_clone.send(format!("BOUNCE:{}", cmd_clone));
+                                    });
+                                    if peers.contains_key(&target_id) { continue; }
 
                                     if let Ok((pc, flag)) = create_peer_connection(
                                         &api,
@@ -630,13 +639,13 @@ pub async fn start_p2p(
                                 }
                             }
                         }
-                        else if cmd.starts_with("FILE_SEND_INIT:") {
-                            let parts: Vec<&str> = cmd.splitn(5, ':').collect();
+                        else if cmd.starts_with("FILE_SEND_INIT|") {
+                            let parts: Vec<&str> = cmd.splitn(5, '|').collect();
                             if parts.len() == 5 {
                                 let target_id = parts[1].to_string();
-                                let filename = parts[2].to_string();
-                                let key_b64 = parts[3].to_string();
-                                let enc_path = parts[4].to_string();
+                                let key_b64 = parts[2].to_string();
+                                let enc_path = parts[3].to_string();
+                                let filename = parts[4].to_string();
 
                                 if let Ok(file_data) = tokio::fs::read(&enc_path).await {
                                     let total_chunks = (file_data.len() + super::chunking::CHUNK_SIZE - 1) / super::chunking::CHUNK_SIZE;
@@ -649,9 +658,21 @@ pub async fn start_p2p(
 
                                     let meta_msg = format!("SYS:FILE_META:{}:{}:{}", filename, total_chunks, key_b64);
 
+                                    let mut sent = false;
                                     if let Some(dc) = data_channels.get(&target_id) {
-                                        let _ = dc.send_text(meta_msg).await;
-                                    } else {
+                                        if dc.ready_state() == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open {
+                                            let _ = dc.send_text(meta_msg.clone()).await;
+                                            sent = true;
+                                        }
+                                    }
+                                    
+                                    if !sent {
+                                        let tx_ui_clone = tx_ui.clone();
+                                        let cmd_clone = cmd.clone();
+                                        tokio::spawn(async move {
+                                            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                                            let _ = tx_ui_clone.send(format!("BOUNCE:{}", cmd_clone));
+                                        });
                                         if peers.contains_key(&target_id) { continue; }
 
                                         if let Ok((pc, flag)) = create_peer_connection(
@@ -921,6 +942,9 @@ pub async fn start_p2p(
     if backoff < 30 { backoff *= 2; }
     }
 }
+
+
+
 
 
 

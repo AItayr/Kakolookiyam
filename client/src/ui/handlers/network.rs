@@ -10,6 +10,7 @@ impl KakolookiyamApp {
             self.idle_seconds = 0;
 
             if msg == "SUCCESS:REGISTERED" {
+                self.server_offline_since = None;
                 SOUND_MANAGER
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())
@@ -24,6 +25,12 @@ impl KakolookiyamApp {
                 return Command::perform(async {}, |_| {
                     Message::ForceDisconnect("L\'heure de votre ordinateur est incorrecte.".to_string())
                 });
+            }
+
+                        if msg.starts_with("BOUNCE:") {
+                let cmd = msg.trim_start_matches("BOUNCE:");
+                let _ = self.tx_network.send(cmd.to_string());
+                return Command::none();
             }
 
             if msg.starts_with("SYS_MSG:") {
@@ -93,18 +100,15 @@ impl KakolookiyamApp {
                             if let Ok(timestamp) = ts_str.parse::<u64>() {
                                 if let Ok(decoded_bytes) = BASE64_STANDARD.decode(b64_content) {
                                     if let Ok(content_str) = String::from_utf8(decoded_bytes) {
-                                        let mut hash_valid = true;
-                                        if let Some((_, expected_hex)) = content_str.split_once('|') {
-                                            if let Ok(received_bytes) = std::fs::read(&path) {
-                                                let digest = ring::digest::digest(&ring::digest::SHA256, &received_bytes);
-                                                let hex: String = digest.as_ref().iter().map(|b| format!("{:02x}", b)).collect();
-                                                if hex != expected_hex {
-                                                    hash_valid = false;
-                                                }
-                                            } else {
-                                                hash_valid = false;
-                                            }
-                                        }
+                                        let hash_valid = match content_str.rsplit_once('|') {
+                                            Some((_, h)) if h.len() == 64 && h.chars().all(|c| c.is_ascii_hexdigit()) => {
+                                                std::fs::read(&path).map(|bytes| {
+                                                    let d = ring::digest::digest(&ring::digest::SHA256, &bytes);
+                                                    d.as_ref().iter().map(|b| format!("{:02x}", b)).collect::<String>() == h
+                                                }).unwrap_or(false)
+                                            },
+                                            _ => false,
+                                        };
                                         if !hash_valid {
                                             let _ = std::fs::remove_file(&path);
                                             return Command::none();
@@ -121,16 +125,12 @@ impl KakolookiyamApp {
                                                     }
                                                 });
 
-                                            let is_valid = if author == vd.pseudo {
-                                                true
-                                            } else {
-                                                match author_id {
-                                                    Some(id) => {
-                                                        !parsed_sig.is_empty()
-                                                            && crate::crypto::verify_message(&id, &target_id, timestamp, &content_str, &parsed_sig)
-                                                    }
-                                                    None => false,
+                                            let is_valid = match author_id {
+                                                Some(id) => {
+                                                    !parsed_sig.is_empty()
+                                                        && crate::crypto::verify_message(&id, &crate::crypto::conv_id(&crate::crypto::derive_public_id(&vd.private_key), &target_id), timestamp, &content_str, &parsed_sig)
                                                 }
+                                                None => false,
                                             };
                                             if !is_valid {
                                                 let _ = std::fs::remove_file(&path);
@@ -500,16 +500,12 @@ impl KakolookiyamApp {
                                                 }
                                             });
 
-                                        let is_valid = if parsed_author == vd.pseudo {
-                                            true
-                                        } else {
-                                            match author_id {
-                                                Some(id) => {
-                                                    !parsed_sig.is_empty()
-                                                        && crate::crypto::verify_message(&id, &t_id, timestamp, &parsed_content, &parsed_sig)
-                                                }
-                                                None => false,
+                                        let is_valid = match author_id {
+                                            Some(id) => {
+                                                !parsed_sig.is_empty()
+                                                    && crate::crypto::verify_message(&id, &crate::crypto::conv_id(&crate::crypto::derive_public_id(&vd.private_key), &t_id), timestamp, &parsed_content, &parsed_sig)
                                             }
+                                            None => false,
                                         };
 
                                         if !is_valid {
@@ -764,7 +760,9 @@ impl KakolookiyamApp {
                         if sys_parts.len() == 6 && sys_parts[3] == "v2" {
                             let possible_target = sys_parts[2].trim().to_string();
                             let mut authorized = false;
+                            let mut my_id = String::new();
                             if let Some(vd) = &self.vault_data {
+                                my_id = crate::crypto::derive_public_id(&vd.private_key);
                                 if let Some(group) = vd.groups.get(&possible_target) {
                                     if group.members.contains(&sender_id) { authorized = true; }
                                 }
@@ -776,7 +774,7 @@ impl KakolookiyamApp {
                             let mut sig_valid = false;
                             if let Ok(ts) = ts_str.parse::<u64>() {
                                 let fresh = ts.abs_diff(now) <= 60;
-                                if fresh && crate::crypto::verify_message(&sender_id, &possible_target, ts, body, sig) {
+                                if fresh && crate::crypto::verify_message(&sender_id, &crate::crypto::conv_id(&my_id, &possible_target), ts, body, sig) {
                                     sig_valid = true;
                                 }
                             }
@@ -901,8 +899,8 @@ impl KakolookiyamApp {
                         }
                     }
                 }
-            } else if msg.starts_with("FILE_OFFER:") {
-                let parts: Vec<&str> = msg.splitn(5, ':').collect();
+            } else if msg.starts_with("FILE_OFFER|") {
+                let parts: Vec<&str> = msg.splitn(5, '|').collect();
                 if parts.len() == 5 {
                     let sender_id = parts[1].to_string();
                     if let Some(vd) = &self.vault_data {
@@ -910,9 +908,9 @@ impl KakolookiyamApp {
                             return Command::none();
                         }
                     }
-                    let filename = parts[2].to_string();
-                    let total: usize = parts[3].parse().unwrap_or(0);
-                    let key_b64 = parts[4].to_string();
+                    let total: usize = parts[2].parse().unwrap_or(0);
+                    let key_b64 = parts[3].to_string();
+                    let filename = parts[4].to_string();
                     if total > 0 {
                         if filename.starts_with("SYNC|") {
                             // [LOW-1] Anti-spam d'historique
@@ -924,8 +922,8 @@ impl KakolookiyamApp {
                             }
                             if authorized {
                                 let _ = self.tx_network.send(format!(
-                                    "ACCEPT_FILE:{}:{}:{}:{}",
-                                    sender_id, filename, total, key_b64
+                                    "ACCEPT_FILE|{}|{}|{}|{}",
+                                    sender_id, total, key_b64, filename
                                 ));
                             } else {
                                 self.status_message = crate::ui::i18n::t(&self.language, "status_spam_rejected");

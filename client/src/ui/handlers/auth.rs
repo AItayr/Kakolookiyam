@@ -206,10 +206,11 @@ impl KakolookiyamApp {
                                 }
                                 let _ = self.tx_network.send(sync_str);
                             } else {
-                                let _ = self
+                                let _ = self.tx_secrets.send(v_data.private_key);
+let _ = self
                                     .tx_network
                                     .send(format!("REGISTER:{}:{}", id, v_data.pseudo));
-                                let _ = self.tx_secrets.send(v_data.private_key);
+                                
                                 let mut sync_str = String::from("CONTACTS_SYNC");
                                 for (c_id, _) in &v_data.contacts {
                                     sync_str.push_str(":");
@@ -261,10 +262,11 @@ impl KakolookiyamApp {
                                 }
                                 let _ = self.tx_network.send(sync_str);
                             } else {
-                                let _ = self
+                                let _ = self.tx_secrets.send(v_data.private_key);
+let _ = self
                                     .tx_network
                                     .send(format!("REGISTER:{}:{}", id, v_data.pseudo));
-                                let _ = self.tx_secrets.send(v_data.private_key);
+                                
                                 let mut sync_str = String::from("CONTACTS_SYNC");
                                 for (c_id, _) in &v_data.contacts {
                                     sync_str.push_str(":");
