@@ -101,7 +101,7 @@ impl KakolookiyamApp {
                 master_password: None,
                 vault_data: None,
                 peer_id_input: String::new(),
-                status_message: "Prêt à appeler...".to_owned(),
+                status_message: crate::ui::i18n::t(&crate::ui::i18n::Language::Fr, "ready_to_call").to_owned(),
                 tx_network: flags.tx_network,
                 rx_network: Arc::new(Mutex::new(Some(flags.rx_network))),
                 tx_identity: Some(flags.tx_identity),
@@ -378,3 +378,4 @@ impl KakolookiyamApp {
         ])
     }
 }
+

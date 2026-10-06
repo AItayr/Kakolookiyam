@@ -15,6 +15,29 @@ use tokio::sync::mpsc;
 use ui::{Flags, KakolookiyamApp};
 
 pub fn main() -> iced::Result {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        let lock_path = std::env::temp_dir().join("kakolookiyam.lock");
+        let lock_file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .share_mode(0)
+            .open(&lock_path);
+        if lock_file.is_err() {
+            std::process::exit(0);
+        }
+        Box::leak(Box::new(lock_file.unwrap()));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let socket = std::net::TcpListener::bind("127.0.0.1:43210");
+        if socket.is_err() {
+            std::process::exit(0);
+        }
+        Box::leak(Box::new(socket.unwrap()));
+    }
     audio::detect_microphone();
 
     let (tx_ui_to_p2p, rx_ui_to_p2p) = mpsc::unbounded_channel::<String>();
@@ -107,3 +130,4 @@ pub fn main() -> iced::Result {
 }
 
 // touch
+

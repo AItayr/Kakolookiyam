@@ -1,6 +1,6 @@
 [package]
 name = "client"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 
 [dependencies]
@@ -42,5 +42,8 @@ winres = "0.1.12"
 name = "Kakolookiyam"
 identifier = "com.kakolookiyam.client"
 icon = ["assets/images/Kakolookiyam.icns", "assets/images/Kakolookiyam_logo.png"]
-version = "0.1.0"
+version = "1.0.0"
 copyright = "Copyright (c) Kakolookiyam. All rights reserved."
+
+
+
