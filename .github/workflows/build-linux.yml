@@ -27,6 +27,7 @@ jobs:
             pkg-config \
             libssl-dev \
             libasound2-dev \
+            libdbus-1-dev \
             libx11-dev \
             libx11-xcb-dev \
             libxcb1-dev \
