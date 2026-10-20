@@ -47,3 +47,17 @@ copyright = "Copyright (c) Kakolookiyam. All rights reserved."
 
 
 
+
+[package.metadata.deb]
+name = "kakolookiyam"
+maintainer = "Kakolookiyam <contact@kakolookiyam.ch>"
+copyright = "2026 Kakolookiyam"
+license-file = ["../LICENSE", "4"]
+extended-description = "Messagerie et appels P2P hautement securises et chiffres de bout en bout."
+section = "net"
+priority = "optional"
+assets = [
+    ["target/release/Kakolookiyam", "usr/bin/Kakolookiyam", "755"],
+    ["assets/images/Kakolookiyam_logo.png", "usr/share/icons/hicolor/512x512/apps/Kakolookiyam_logo.png", "644"],
+    ["assets/Kakolookiyam.desktop", "usr/share/applications/Kakolookiyam.desktop", "644"],
+]

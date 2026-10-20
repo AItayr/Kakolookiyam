@@ -1,8 +1,13 @@
 [Desktop Entry]
 Type=Application
 Name=Kakolookiyam
-Comment=Deverrouiller le coffre-fort
+GenericName=P2P Encrypted Messenger
+GenericName[fr]=Messagerie Sécurisée P2P
+Comment=Connectés entre vous. Invisibles pour le reste.
+Comment[en]=Connected together. Invisible to the rest.
 Exec=Kakolookiyam
 Icon=Kakolookiyam_logo
 Terminal=false
-Categories=Utility;Security;
+Categories=Network;InstantMessaging;AudioVideo;Security;
+Keywords=P2P;Security;Chat;Call;Encrypted;
+StartupWMClass=Kakolookiyam

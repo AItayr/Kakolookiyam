@@ -1,0 +1,99 @@
+name: Build Linux Packages
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo dependencies
+        uses: swatinem/rust-cache@v2
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            libssl-dev \
+            libasound2-dev \
+            libx11-dev \
+            libx11-xcb-dev \
+            libxcb1-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libwayland-dev \
+            wget \
+            file
+
+      - name: Compile Kakolookiyam Client (Release)
+        run: |
+          cargo build --release --bin Kakolookiyam
+
+      - name: Build AppImage (Universal Standalone with Icon)
+        run: |
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/512x512/apps
+
+          cp target/release/Kakolookiyam AppDir/usr/bin/Kakolookiyam
+          chmod +x AppDir/usr/bin/Kakolookiyam
+
+          cp client/assets/Kakolookiyam.desktop AppDir/
+          cp client/assets/Kakolookiyam.desktop AppDir/usr/share/applications/
+
+          cp client/assets/images/Kakolookiyam_logo.png AppDir/
+          cp client/assets/images/Kakolookiyam_logo.png AppDir/usr/share/icons/hicolor/512x512/apps/
+          cp client/assets/images/Kakolookiyam_logo.png AppDir/.DirIcon
+
+          cat << 'EOF' > AppDir/AppRun
+          #!/bin/sh
+          SELF=$(readlink -f "$0")
+          HERE=${SELF%/*}
+          export PATH="${HERE}/usr/bin:${PATH}"
+          export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+          exec "${HERE}/usr/bin/Kakolookiyam" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+          chmod +x appimagetool
+          ./appimagetool --appimage-extract
+          ARCH=x86_64 ./squashfs-root/AppRun AppDir Kakolookiyam-v1.0.0-linux-x86_64.AppImage
+          chmod +x Kakolookiyam-v1.0.0-linux-x86_64.AppImage
+
+      - name: Build Debian/Ubuntu Package (.deb)
+        run: |
+          cargo install cargo-deb
+          cargo deb -p client -o Kakolookiyam-v1.0.0-linux-amd64.deb
+
+      - name: Build Portable Tarball (.tar.gz with Installer)
+        run: |
+          mkdir -p Kakolookiyam-v1.0.0-linux-x86_64
+          cp target/release/Kakolookiyam Kakolookiyam-v1.0.0-linux-x86_64/
+          cp client/assets/images/Kakolookiyam_logo.png Kakolookiyam-v1.0.0-linux-x86_64/
+          cp client/assets/Kakolookiyam.desktop Kakolookiyam-v1.0.0-linux-x86_64/
+          cp client/assets/install.sh Kakolookiyam-v1.0.0-linux-x86_64/
+          chmod +x Kakolookiyam-v1.0.0-linux-x86_64/Kakolookiyam Kakolookiyam-v1.0.0-linux-x86_64/install.sh
+          tar -czvf Kakolookiyam-v1.0.0-linux-x86_64.tar.gz Kakolookiyam-v1.0.0-linux-x86_64
+
+      - name: Upload Linux Packages as Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kakolookiyam-linux-packages
+          path: |
+            Kakolookiyam-v1.0.0-linux-x86_64.AppImage
+            Kakolookiyam-v1.0.0-linux-amd64.deb
+            Kakolookiyam-v1.0.0-linux-x86_64.tar.gz
